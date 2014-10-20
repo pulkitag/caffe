@@ -99,10 +99,11 @@ TYPED_TEST(Im2colKernelTest, TestGPU) {
   int default_grid_dim = CAFFE_GET_BLOCKS(num_kernels);
 
   // Launch with different grid sizes
-  for (int grid_div = 2; grid_div <= 8; grid_div++) {
+  for (int grid_div = 2; grid_div <= 4; grid_div++) {
     for (int n = 0; n < this->blob_bottom_->num(); ++n) {
       int grid_dim = default_grid_dim/grid_div;
-      // NOLINT_NEXT_LINE(whitespace/operators)
+    	LOG(INFO) << "grid_dim: " << grid_dim;
+		  // NOLINT_NEXT_LINE(whitespace/operators)
       im2col_gpu_kernel<TypeParam><<<grid_dim, CAFFE_CUDA_NUM_THREADS>>>(
         num_kernels, bottom_data + this->blob_bottom_->offset(n),
         this->height_, this->width_, this->kernel_size_, this->kernel_size_,
