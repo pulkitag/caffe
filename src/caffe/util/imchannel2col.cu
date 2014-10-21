@@ -34,12 +34,15 @@ __global__ void imchannel2col_gpu_kernel(const int n, const Dtype* data_im,
 
     int h_in       = h_out * stride_h - pad_h;
     int w_in       = w_out * stride_w - pad_w;
-		int channel_in = ((h_in >= 0) ? h_in :0 ) * chWidth + ((w_in >=0 ) ? w_in : 0);  
     
 		//Save data pointer
 		Dtype* data_col_ptr = data_col;
-    data_col_ptr += imPosition * numPatchPerImPosition + h_out * width_col + w_out;
     
+		//Wrong format. 
+		//data_col_ptr += imPosition * numPatchPerImPosition + h_out * width_col + w_out;
+		data_col_ptr += (h_out * width_col + w_out) * imWidth * imHeight + 
+										imrow_index * imWidth + imcol_index;   
+
 		//Image data pointer
 		const Dtype* data_im_ptr = data_im;
     data_im_ptr += imrow_index * imWidth + imcol_index;

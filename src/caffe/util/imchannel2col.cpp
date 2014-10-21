@@ -27,16 +27,16 @@ void imchannel2col_cpu(const Dtype* data_im, const int channels,
 		//Offsets from the top left corner.
 		int w_offset = c % kernel_w;
 		int h_offset = c / kernel_w;
-		for (int i = 0; i < imHeight; ++i){
-			for (int j = 0; j < imWidth; ++j){
-				//Goto all image positions indexed as (i,j)
-			  //std::cout << "ImPosition: " << i << "," << j << "\n";	
-				for (int h = 0; h < height_col; ++h) {
-					for (int w = 0; w < width_col; ++w) {
-						//For a given position in the patch, find values in all patches. 
-						int h_pad = h * stride_h - pad_h + h_offset;
-						int w_pad = w * stride_w - pad_w + w_offset;
-						int c_im  = h_pad * chWidth + w_pad;
+		for (int h = 0; h < height_col; ++h) {
+			for (int w = 0; w < width_col; ++w) {
+				//For a given position in the patch, find values in all patches. 
+				int h_pad = h * stride_h - pad_h + h_offset;
+				int w_pad = w * stride_w - pad_w + w_offset;
+				int c_im  = h_pad * chWidth + w_pad;
+				for (int i = 0; i < imHeight; ++i){
+					for (int j = 0; j < imWidth; ++j){
+						//Goto all image positions indexed as (i,j)
+						//std::cout << "ImPosition: " << i << "," << j << "\n";	
 						if (h_pad >= 0 && h_pad < chHeight && w_pad >= 0 && w_pad < chWidth){
 							*data_col = 	data_im[(c_im * imHeight + i) * imWidth + j];
 							//data_col[(c * height_col + h) * width_col + w] =
@@ -87,17 +87,17 @@ void colchannel2im_cpu(const Dtype* data_col, const int channels,
 	int kernel_sz = patch_w * patch_h; 
  
 	for (int c = 0; c < kernel_sz; ++c) {
-		for (int i = 0; i < imHeight; ++i){
-			for (int j = 0; j < imWidth; ++j){
-				int w_offset = c % patch_w;
-				int h_offset = (c / patch_w) % patch_h;
-				for (int h = 0; h < height_col; ++h) {
-					for (int w = 0; w < width_col; ++w) {
-						int h_pad = h * stride_h - pad_h + h_offset;
-						int w_pad = w * stride_w - pad_w + w_offset;
-						int c_im  = h_pad * chWidth + w_pad;
+		int w_offset = c % patch_w;
+		int h_offset = (c / patch_w) % patch_h;
+		for (int h = 0; h < height_col; ++h) {
+			for (int w = 0; w < width_col; ++w) {
+				int h_pad = h * stride_h - pad_h + h_offset;
+				int w_pad = w * stride_w - pad_w + w_offset;
+				int c_im  = h_pad * chWidth + w_pad;
+				for (int i = 0; i < imHeight; ++i){
+					for (int j = 0; j < imWidth; ++j){
 						if (h_pad >= 0 && h_pad < chHeight && w_pad >= 0 && w_pad < chWidth)
-							data_im[(c_im * imHeight + i) * imWidth + j] = *data_col;
+							data_im[(c_im * imHeight + i) * imWidth + j] += *data_col;
 						data_col += 1;
 					}
 				}
