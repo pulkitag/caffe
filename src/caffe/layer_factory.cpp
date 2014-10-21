@@ -171,6 +171,37 @@ template SoftmaxLayer<float>* GetSoftmaxLayer(const string& name,
 template SoftmaxLayer<double>* GetSoftmaxLayer(const string& name,
     const LayerParameter& param);
 
+
+// Get Topography layer according to engine.
+template <typename Dtype>
+TopographyLayer<Dtype>* GetTopographyLayer(const string& name,
+    const LayerParameter& param) {
+  TopographyParameter_Engine engine = param.topography_param().engine();
+  if (engine == TopographyParameter_Engine_DEFAULT) {
+    engine = TopographyParameter_Engine_CAFFE;
+#ifdef USE_CUDNN
+    engine = TopographyParameter_Engine_CUDNN;
+#endif
+  }
+  if (engine == TopographyParameter_Engine_CAFFE) {
+    return new TopographyLayer<Dtype>(param);
+#ifdef USE_CUDNN
+  } else if (engine == TopographyParameter_Engine_CUDNN) {
+    LOG(FATAL) << "Layer " << name << " CUDNN code is not yet written.";
+    //return new CuDNNTopographyLayer<Dtype>(param);
+#endif
+  } else {
+    LOG(FATAL) << "Layer " << name << " has unknown engine.";
+  }
+}
+
+template TopographyLayer<float>* GetTopographyLayer(const string& name,
+    const LayerParameter& param);
+template TopographyLayer<double>* GetTopographyLayer(const string& name,
+    const LayerParameter& param);
+
+
+
 // A function to get a specific layer from the specification given in
 // LayerParameter. Ideally this would be replaced by a factory pattern,
 // but we will leave it this way for now.
@@ -247,6 +278,8 @@ Layer<Dtype>* GetLayer(const LayerParameter& param) {
     return new SoftmaxWithLossLayer<Dtype>(param);
   case LayerParameter_LayerType_SPLIT:
     return new SplitLayer<Dtype>(param);
+  case LayerParameter_LayerType_TOPOGRAPHY:
+    return GetTopographyLayer<Dtype>(name, param);
   case LayerParameter_LayerType_TANH:
     return GetTanHLayer<Dtype>(name, param);
   case LayerParameter_LayerType_WINDOW_DATA:

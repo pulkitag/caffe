@@ -14,7 +14,9 @@ void imchannel2col_cpu(const Dtype* data_im, const int channels,
 
 template <typename Dtype>
 void colchannel2im_cpu(const Dtype* data_col, const int channels,
-    const int height, const int width, const int patch_h, const int patch_w,
+    const int imHeight, const int imWidth, 
+    const int chHeight, const int chWidth, 
+		const int patch_h, const int patch_w,
     const int pad_h, const int pad_w, const int stride_h,
     const int stride_w, Dtype* data_im);
 
@@ -30,7 +32,9 @@ void imchannel2col_gpu(const Dtype* data_im, const int channels,
 
 template <typename Dtype>
 void colchannel2im_gpu(const Dtype* data_col, const int channels,
-    const int height, const int width, const int patch_h, const int patch_w,
+    const int imHeight, const int imWidth, 
+    const int chHeight, const int chWidth, 
+		const int patch_h, const int patch_w,
     const int pad_h, const int pad_w, const int stride_h,
     const int stride_w, Dtype* data_im);
 

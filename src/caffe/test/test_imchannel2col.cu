@@ -32,24 +32,27 @@ class ImChannel2ColKernelTest : public ::testing::Test {
  protected:
   ImChannel2ColKernelTest()
         // big so launches > 1024 threads
-      : blob_bottom_(new Blob<Dtype>(1, 4, 2, 2)),
+      : blob_bottom_(new Blob<Dtype>(5, 121, 131, 149)),
         blob_top_(new Blob<Dtype>()),
         blob_top_cpu_(new Blob<Dtype>()) {
     FillerParameter filler_param;
     SequenceFiller<Dtype> filler(filler_param);
+    //GaussianFiller<Dtype> filler(filler_param);
     filler.Fill(this->blob_bottom_);
 
+		show_cpu_output_ = false;
+		show_gpu_output_ = false;
     imHeight_ = blob_bottom_->height();
     imWidth_ = blob_bottom_->width();
     channels_ = blob_bottom_->channels();
 		chHeight_ = sqrt(channels_);
 		chWidth_  = chHeight_;
-    pad_ = 1;
-    stride_ = 1;
+    pad_ = 2;
+    stride_ = 2;
     kernel_size_ = 3;
     height_col_  = (chHeight_ + 2 * pad_ - kernel_size_) / stride_ + 1;
     width_col_   = (chWidth_  + 2 * pad_ - kernel_size_) / stride_ + 1;
- 		total_patches_ = imHeight_ * imWidth_ * chHeight_ * chWidth_;
+ 		total_patches_ = imHeight_ * imWidth_ * height_col_ * width_col_;
 	 }
 
   virtual ~ImChannel2ColKernelTest() {
@@ -72,6 +75,8 @@ class ImChannel2ColKernelTest : public ::testing::Test {
   int height_col_;
   int width_col_;
 	int total_patches_;
+	bool show_cpu_output_;
+	bool show_gpu_output_;
 };
 
 TYPED_TEST_CASE(ImChannel2ColKernelTest, TestDtypes);
@@ -120,14 +125,17 @@ TYPED_TEST(ImChannel2ColKernelTest, TestGPU) {
 		std::cout << cpu_data_bottom[count] << "\t";
 	}*/
 
-	std::cout<<"CPU Output \n";
-	std::cout << "\n" <<"\n"<<"\n";;
-	for (int count=0; count < this->blob_top_->count(); ++count){
-		if ((count % this->total_patches_)==0)
-			std::cout << " \n St: ";
-		std::cout << cpu_data[count] << " ";
+	if (this->show_cpu_output_){
+		std::cout<<"CPU Output \n";
+		std::cout << "\n" <<"\n"<<"\n";;
+		for (int count=0; count < this->blob_top_->count(); ++count){
+			if ((count % this->total_patches_)==0)
+				std::cout << " \n St: ";
+			std::cout << cpu_data[count] << " ";
+		}
+		std::cout<<"\n";
 	}
-	std::cout<<"\n";
+	//
 
 	LOG(INFO) << "CPU Version computed";
   // GPU version
@@ -135,10 +143,12 @@ TYPED_TEST(ImChannel2ColKernelTest, TestGPU) {
   int default_grid_dim = CAFFE_GET_BLOCKS(num_kernels);
 
   // Launch with different grid sizes
-  for (int grid_div = 1; grid_div <= 1; grid_div++) {
+  for (int grid_div = 1; grid_div <= 8; grid_div++) {
 	 //LOG(INFO) << "grid_div" << grid_div;	
     for (int n = 0; n < this->blob_bottom_->num(); ++n) {
       int grid_dim = default_grid_dim/grid_div;
+			if (grid_dim ==0)
+				continue;
 			//LOG(INFO)<<"Grid_dim: " << grid_dim <<" num_kernel: " <<num_kernels
 			//				 <<"Num_Threads: " << CAFFE_CUDA_NUM_THREADS;
       // NOLINT_NEXT_LINE(whitespace/operators)
@@ -153,14 +163,15 @@ TYPED_TEST(ImChannel2ColKernelTest, TestGPU) {
       CUDA_POST_KERNEL_CHECK;
     }
 
-		
-		std::cout<<"GPU Output \n";
-		for (int count=0; count < this->blob_top_->count(); ++count){
-			if ((count % this->total_patches_)==0)
-				std::cout << " \n St: ";
-			std::cout << this->blob_top_->cpu_data()[count] << " ";
+		if (this->show_gpu_output_){
+			std::cout<<"GPU Output \n";
+			for (int count=0; count < this->blob_top_->count(); ++count){
+				if ((count % this->total_patches_)==0)
+					std::cout << " \n St: ";
+				std::cout << this->blob_top_->cpu_data()[count] << " ";
+			}
+			std::cout<<"\n";
 		}
-		std::cout<<"\n";
 
     // Compare results against CPU version
     for (int i = 0; i < this->blob_top_->count(); ++i) {

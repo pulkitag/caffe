@@ -105,7 +105,8 @@ __global__ void colchannel2im_gpu_kernel(const int n, const Dtype* data_col,
     const int stride_h, const int stride_w,
     const int height_col, const int width_col,
     Dtype* data_im) {
-  CUDA_KERNEL_LOOP(index, n) {
+  
+	CUDA_KERNEL_LOOP(index, n) {
     Dtype val = 0;
     int w = index % width + pad_w;
     int h = (index / width) % height + pad_h;
