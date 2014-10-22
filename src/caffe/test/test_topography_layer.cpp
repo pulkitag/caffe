@@ -21,9 +21,9 @@ void caffe_topography(const Blob<Dtype>* in, TopographyParameter* topography_par
     Blob<Dtype>* out) {
 	
  	int kernel_h, kernel_w;
-	CHECK(topography_param.has_kernel_size())
+	CHECK(topography_param->has_kernel_size())
       << "kernel_size for topography is required.";
-	kernel_h = kernel_w = topography_param.kernel_size();
+	kernel_h = kernel_w = topography_param->kernel_size();
   CHECK_GT(kernel_h, 0) << "Topography Kernel dimensions cannot be zero.";
   CHECK_GT(kernel_w, 0) << "Topography Kernel dimensions cannot be zero.";
 	CHECK_EQ(kernel_h % 2,1) << "Topography Kernel should be odd.";
@@ -40,6 +40,11 @@ void caffe_topography(const Blob<Dtype>* in, TopographyParameter* topography_par
   int k_g = in->channels() / groups;
   int o_head, k_head;
 
+	int ch_h = sqrt(k_g);
+	int ch_w = ch_h;
+
+	int nH_steps = (ch_h + 2 * pad_h - kernel_h) / stride_h + 1;  
+	int nW_steps = (ch_w + 2 * pad_w - kernel_w) / stride_w + 1;  
   // Convolution
   const Dtype* in_data = in->cpu_data();
   const Dtype* weight_data = weights[0]->cpu_data();
@@ -48,19 +53,22 @@ void caffe_topography(const Blob<Dtype>* in, TopographyParameter* topography_par
     for (int g = 0; g < groups; g++) {
       o_head = o_g * g;
       k_head = k_g * g;
-      for (int o = 0; o < o_g; o++) {
-        for (int k = 0; k < k_g; k++) {
+			int out_ch = 0;
+      for (int h = 0; h < nH_steps; h++) {
+        for (int w = 0; w < nW_steps; w++) {
+					out_ch = out_ch + 1;
           for (int y = 0; y < out->height(); y++) {
             for (int x = 0; x < out->width(); x++) {
               for (int p = 0; p < kernel_h; p++) {
                 for (int q = 0; q < kernel_w; q++) {
-                  int in_y = y * stride_h - pad_h + p;
-                  int in_x = x * stride_w - pad_w + q;
-                  if (in_y >= 0 && in_y < in->height()
-                    && in_x >= 0 && in_x < in->width()) {
-                    out_data[out->offset(n, o + o_head, y, x)] +=
-                        in_data[in->offset(n, k + k_head, in_y, in_x)]
-                        * weight_data[weights[0]->offset(o + o_head, k, p, q)];
+               		int h_pad = h * stride_h + p - pad_h;
+									int w_pad = w * stride_w + q - pad_w;
+									int ch    = h_pad * ch_w + w_pad;
+                  if (h_pad >= 0 && h_pad < ch_h
+                    && w_pad >= 0 && w_pad < ch_w) {
+                    out_data[out->offset(n, out_ch - 1 + o_head, y, x)] +=
+                        in_data[in->offset(n, ch, y, x)]
+                        * weight_data[weights[0]->offset(0, 0, p, q)];
                   }
                 }
               }
@@ -84,13 +92,19 @@ template void caffe_topography(const Blob<double>* in,
 template <typename TypeParam>
 class TopographyLayerTest : public MultiDeviceTest<TypeParam> {
   typedef typename TypeParam::Dtype Dtype;
-
+/*
+template <typename Dtype>
+class TopographyLayerTest : public ::testing::Test {
+*/
  protected:
   TopographyLayerTest()
-      : blob_bottom_(new Blob<Dtype>(2, 3, 6, 4)),
-        blob_bottom_2_(new Blob<Dtype>(2, 3, 6, 4)),
+      : blob_bottom_(new Blob<Dtype>(2, 9, 6, 4)),
+        blob_bottom_2_(new Blob<Dtype>(2, 9, 6, 4)),
+        blob_bottom_3_(new Blob<Dtype>(2, 12, 1, 1)),
         blob_top_(new Blob<Dtype>()),
-        blob_top_2_(new Blob<Dtype>()) {}
+        blob_top_2_(new Blob<Dtype>()),
+        blob_top_3_(new Blob<Dtype>()) {}
+
   virtual void SetUp() {
     // fill the values
     FillerParameter filler_param;
@@ -102,12 +116,22 @@ class TopographyLayerTest : public MultiDeviceTest<TypeParam> {
     blob_top_vec_.push_back(blob_top_);
   }
 
+	virtual void ResetVecs() {
+		int sz = blob_bottom_vec_.size();
+		for (int i=0; i < sz; ++i){
+			blob_bottom_vec_.pop_back();
+			blob_top_vec_.pop_back();
+		}
+	}
+
   virtual ~TopographyLayerTest() {
     delete blob_bottom_;
     delete blob_bottom_2_;
+		delete blob_bottom_3_;
     delete blob_top_;
     delete blob_top_2_;
-  }
+ 		delete blob_top_3_;
+	}
 
   virtual Blob<Dtype>* MakeReferenceTop(Blob<Dtype>* top) {
     this->ref_blob_top_.reset(new Blob<Dtype>());
@@ -117,23 +141,28 @@ class TopographyLayerTest : public MultiDeviceTest<TypeParam> {
 
   Blob<Dtype>* const blob_bottom_;
   Blob<Dtype>* const blob_bottom_2_;
+  Blob<Dtype>* const blob_bottom_3_;
   Blob<Dtype>* const blob_top_;
   Blob<Dtype>* const blob_top_2_;
+  Blob<Dtype>* const blob_top_3_;
   shared_ptr<Blob<Dtype> > ref_blob_top_;
   vector<Blob<Dtype>*> blob_bottom_vec_;
   vector<Blob<Dtype>*> blob_top_vec_;
 };
 
 TYPED_TEST_CASE(TopographyLayerTest, TestDtypesAndDevices);
+//TYPED_TEST_CASE(TopographyLayerTest, TestDtypes);
 
+/*
 TYPED_TEST(TopographyLayerTest, TestSetup) {
   typedef typename TypeParam::Dtype Dtype;
+  //typedef TypeParam Dtype;
   LayerParameter layer_param;
   TopographyParameter* topography_param =
       layer_param.mutable_topography_param();
   topography_param->set_kernel_size(3);
   topography_param->set_stride(2);
-  topography_param->set_num_output(4);
+  topography_param->set_group(1);
   this->blob_bottom_vec_.push_back(this->blob_bottom_2_);
   this->blob_top_vec_.push_back(this->blob_top_2_);
   shared_ptr<Layer<Dtype> > layer(
@@ -141,56 +170,59 @@ TYPED_TEST(TopographyLayerTest, TestSetup) {
   layer->SetUp(this->blob_bottom_vec_, &(this->blob_top_vec_));
   EXPECT_EQ(this->blob_top_->num(), 2);
   EXPECT_EQ(this->blob_top_->channels(), 4);
-  EXPECT_EQ(this->blob_top_->height(), 2);
-  EXPECT_EQ(this->blob_top_->width(), 1);
+  EXPECT_EQ(this->blob_top_->height(), 6);
+  EXPECT_EQ(this->blob_top_->width(), 4);
   EXPECT_EQ(this->blob_top_2_->num(), 2);
   EXPECT_EQ(this->blob_top_2_->channels(), 4);
-  EXPECT_EQ(this->blob_top_2_->height(), 2);
-  EXPECT_EQ(this->blob_top_2_->width(), 1);
+  EXPECT_EQ(this->blob_top_2_->height(), 6);
+  EXPECT_EQ(this->blob_top_2_->width(), 4);
+
   // setting group should not change the shape
-  topography_param->set_num_output(3);
   topography_param->set_group(3);
+  this->ResetVecs();
+  this->blob_bottom_vec_.push_back(this->blob_bottom_3_);
+  this->blob_top_vec_.push_back(this->blob_top_3_);
+ 
   layer.reset(new TopographyLayer<Dtype>(layer_param));
   layer->SetUp(this->blob_bottom_vec_, &(this->blob_top_vec_));
-  EXPECT_EQ(this->blob_top_->num(), 2);
-  EXPECT_EQ(this->blob_top_->channels(), 3);
-  EXPECT_EQ(this->blob_top_->height(), 2);
-  EXPECT_EQ(this->blob_top_->width(), 1);
-  EXPECT_EQ(this->blob_top_2_->num(), 2);
-  EXPECT_EQ(this->blob_top_2_->channels(), 3);
-  EXPECT_EQ(this->blob_top_2_->height(), 2);
-  EXPECT_EQ(this->blob_top_2_->width(), 1);
+	EXPECT_EQ(this->blob_top_3_->num(), 2);
+  EXPECT_EQ(this->blob_top_3_->channels(), 12);
+  EXPECT_EQ(this->blob_top_3_->height(), 6);
+  EXPECT_EQ(this->blob_top_3_->width(), 4);
 }
-
+*/
 TYPED_TEST(TopographyLayerTest, TestSimpleConvolution) {
   // We will simply see if the convolution layer carries out averaging well.
   typedef typename TypeParam::Dtype Dtype;
+  //typedef TypeParam Dtype;
   this->blob_bottom_vec_.push_back(this->blob_bottom_2_);
   this->blob_top_vec_.push_back(this->blob_top_2_);
   LayerParameter layer_param;
   TopographyParameter* topography_param =
       layer_param.mutable_topography_param();
   topography_param->set_kernel_size(3);
-  topography_param->set_stride(2);
-  topography_param->set_num_output(4);
+  topography_param->set_stride(1);
   topography_param->mutable_weight_filler()->set_type("gaussian");
-  topography_param->mutable_bias_filler()->set_type("constant");
-  topography_param->mutable_bias_filler()->set_value(0.1);
   shared_ptr<Layer<Dtype> > layer(
       new TopographyLayer<Dtype>(layer_param));
   layer->SetUp(this->blob_bottom_vec_, &(this->blob_top_vec_));
-  layer->Forward(this->blob_bottom_vec_, &(this->blob_top_vec_));
+
+	layer->Forward(this->blob_bottom_vec_, &(this->blob_top_vec_));
+ 	
   // Check against reference convolution.
   const Dtype* top_data;
   const Dtype* ref_top_data;
-  caffe_topography(this->blob_bottom_, topography_param, layer->blobs(),
+  caffe_topography(this->blob_bottom_, 
+			topography_param, layer->blobs(),
       this->MakeReferenceTop(this->blob_top_));
   top_data = this->blob_top_->cpu_data();
   ref_top_data = this->ref_blob_top_->cpu_data();
-  for (int i = 0; i < this->blob_top_->count(); ++i) {
+	for (int i = 0; i < this->blob_top_->count(); ++i) {
     EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-4);
   }
-  caffe_topography(this->blob_bottom_2_, topography_param, layer->blobs(),
+
+  caffe_topography(this->blob_bottom_2_, topography_param,
+		   layer->blobs(),
       this->MakeReferenceTop(this->blob_top_2_));
   top_data = this->blob_top_2_->cpu_data();
   ref_top_data = this->ref_blob_top_->cpu_data();
@@ -210,8 +242,6 @@ TYPED_TEST(TopographyLayerTest, TestSimpleConvolutionGroup) {
   topography_param->set_num_output(3);
   topography_param->set_group(3);
   topography_param->mutable_weight_filler()->set_type("gaussian");
-  topography_param->mutable_bias_filler()->set_type("constant");
-  topography_param->mutable_bias_filler()->set_value(0.1);
   shared_ptr<Layer<Dtype> > layer(
       new TopographyLayer<Dtype>(layer_param));
   layer->SetUp(this->blob_bottom_vec_, &(this->blob_top_vec_));
@@ -227,7 +257,10 @@ TYPED_TEST(TopographyLayerTest, TestSimpleConvolutionGroup) {
     EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-4);
   }
 }
+*/
 
+
+/*
 TYPED_TEST(TopographyLayerTest, TestSobelConvolution) {
   // Test separable convolution by computing the Sobel operator
   // as a single filter then comparing the result
@@ -323,6 +356,8 @@ TYPED_TEST(TopographyLayerTest, TestSobelConvolution) {
     EXPECT_NEAR(top_data[i], sep_top_data[i], 1e-4);
   }
 }
+*/
+
 
 TYPED_TEST(TopographyLayerTest, TestGradient) {
   typedef typename TypeParam::Dtype Dtype;
@@ -332,16 +367,15 @@ TYPED_TEST(TopographyLayerTest, TestGradient) {
   this->blob_bottom_vec_.push_back(this->blob_bottom_2_);
   this->blob_top_vec_.push_back(this->blob_top_2_);
   topography_param->set_kernel_size(3);
-  topography_param->set_stride(2);
-  topography_param->set_num_output(2);
+  topography_param->set_stride(1);
   topography_param->mutable_weight_filler()->set_type("gaussian");
-  topography_param->mutable_bias_filler()->set_type("gaussian");
   TopographyLayer<Dtype> layer(layer_param);
   GradientChecker<Dtype> checker(1e-2, 1e-3);
   checker.CheckGradientExhaustive(&layer, &(this->blob_bottom_vec_),
       &(this->blob_top_vec_));
 }
 
+/*
 TYPED_TEST(TopographyLayerTest, TestGradientGroup) {
   typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;

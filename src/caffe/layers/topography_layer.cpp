@@ -33,7 +33,7 @@ void TopographyLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
 	chHeight_ = sqrt(channels_ / group_);
 	chWidth_ 	= chHeight_;
 	//Ensure that channels can form a square grid.
-	CHECK_EQ(chHeight_ * chWidth_, channels_)
+	CHECK_EQ(chHeight_ * chWidth_, channels_ / group_)
 			<< "Number of groups or channels is inappropriate";
 
   // Handle the parameters: weights and biases.
@@ -73,17 +73,21 @@ void TopographyLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
   // Shape the tops.
   height_out_ = height_;
   width_out_  = width_;
-  for (int top_id = 0; top_id < top->size(); ++top_id) {
-    (*top)[top_id]->Reshape(num_, channels_, height_out_, width_out_);
-  }
-
 	//The size of channel grid.
+	std::cout << "groups: " << group_ << " pad_w: " << pad_w_ 
+						<< " stride_w_: " << stride_w_ << " \n "; 
 	width_col_  = (chWidth_ + 2 * pad_w_ - kernel_w_)/stride_w_ + 1;
 	height_col_ = (chHeight_ + 2 * pad_h_ - kernel_h_)/stride_h_ + 1;
+ 	std::cout << "width_col: " << width_col_ << " height_col: " <<
+		height_col_ << "\n"; 
+	for (int top_id = 0; top_id < top->size(); ++top_id) {
+    (*top)[top_id]->Reshape(num_, width_col_ * height_col_ * group_ , 
+						height_out_, width_out_);
+  }
 
   // Prepare the matrix multiplication computation.
   // Each input will be convolved as a single GEMM.
-  M_ = channels_ / group_;
+  M_ = 1;
   K_ = kernel_h_ * kernel_w_;
   N_ = height_out_ * width_out_ * width_col_ * height_col_;
   // The im2col result buffer will only hold one image at a time to avoid
@@ -114,11 +118,12 @@ void TopographyLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
            // Take inner products for groups.
       for (int g = 0; g < group_; ++g) {
          imchannel2col_cpu(bottom_data + bottom[i]->offset(n) + 
-					 g * height_ *  width_ * M_, channels_/group_,
+					 g * height_ *  width_ * channels_ / group_ , 
+			     channels_/group_,
 					 height_, width_, chHeight_, chWidth_, 
            kernel_h_, kernel_w_, pad_h_, pad_w_, stride_h_, stride_w_,
            col_data);
-
+				
 				caffe_cpu_gemm<Dtype>(CblasNoTrans, CblasNoTrans, M_, N_, K_,
           (Dtype)1., weight, col_data,
           (Dtype)0., top_data + (*top)[i]->offset(n) + top_offset * g);
@@ -151,12 +156,28 @@ void TopographyLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
       const Dtype* bottom_data = (*bottom)[i]->cpu_data();
       Dtype* bottom_diff = (*bottom)[i]->mutable_cpu_diff();
       for (int n = 0; n < num_; ++n) {
-        // gradient w.r.t. bottom data, if necessary.
-        if (propagate_down[i]) {
+				for (int g = 0; g < group_; ++g) {
+					imchannel2col_cpu(bottom_data + (*bottom)[i]->offset(n) 
+							+ g * height_ * width_ * channels_ / group_, 
+							channels_ / group_, height_, width_, chHeight_, chWidth_,
+							kernel_h_, kernel_w_, pad_h_, pad_w_, stride_h_, stride_w_,
+							col_data);
+					// gradient w.r.t. weight. Note that we will accumulate diffs.
+					if (this->param_propagate_down_[0]) {
+						caffe_cpu_gemm<Dtype>(CblasNoTrans, CblasTrans, M_, K_, N_,
+								(Dtype)1., top_diff + top[i]->offset(n) + top_offset * g,
+								col_data, (Dtype)1.,
+								weight_diff);
+					}
+				
+				}
+
+				// gradient w.r.t. bottom data, if necessary.
+				if (propagate_down[i]) {
           if (weight == NULL) {
             weight = this->blobs_[0]->cpu_data();
           }
-          for (int g = 0; g < group_; ++g) {
+					for (int g = 0; g < group_; ++g) {
             caffe_cpu_gemm<Dtype>(CblasTrans, CblasNoTrans, K_, N_, M_,
                 (Dtype)1., weight,
                 top_diff + top[i]->offset(n) + top_offset * g,
@@ -164,9 +185,9 @@ void TopographyLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
           
 						// col2im back to the data
 						colchannel2im_cpu(col_diff, channels_ / group_, height_, width_,
-								chHeight_, chWidth_,1, 1, 0, 0,
-								1, 1, bottom_diff + (*bottom)[i]->offset(n) +
-											g * M_ * height_ * width_);
+								chHeight_, chWidth_,kernel_h_, kernel_w_, pad_h_, pad_w_,
+								stride_h_, stride_w_, bottom_diff + (*bottom)[i]->offset(n) +
+								g * (channels_ / group_) * height_ * width_);
 					}
         }
       }
