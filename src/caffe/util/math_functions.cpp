@@ -387,4 +387,12 @@ void caffe_cpu_scale<double>(const int n, const double alpha, const double *x,
   cblas_dscal(n, alpha, y, 1);
 }
 
+int caffe_cpu_modulus(int a, int b){
+	if (a < 0){
+		int q = (-a/b) + 1;
+		return (a + b*q) % b;
+	}else
+		return a % b;	
+}
+
 }  // namespace caffe

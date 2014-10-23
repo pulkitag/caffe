@@ -33,8 +33,8 @@ void imchannel2col_cpu(const Dtype* data_im, const int channels,
 				int h_pad = h * stride_h - pad_h + h_offset;
 				int w_pad = w * stride_w - pad_w + w_offset;
 				//Introudcing wrapping to get toroidal topography
-				h_pad = h_pad % chHeight;
-				w_pad = w_pad % chWidth;
+				h_pad = caffe_cpu_modulus(h_pad, chHeight);
+				w_pad = caffe_cpu_modulus(w_pad, chWidth);
 				//
 				int c_im  = h_pad * chWidth + w_pad;
 				for (int i = 0; i < imHeight; ++i){
@@ -98,8 +98,8 @@ void colchannel2im_cpu(const Dtype* data_col, const int channels,
 				int h_pad = h * stride_h - pad_h + h_offset;
 				int w_pad = w * stride_w - pad_w + w_offset;
 				//Introudcing wrapping to get toroidal topography
-				h_pad = h_pad % chHeight;
-				w_pad = w_pad % chWidth;
+				h_pad = caffe_cpu_modulus(h_pad, chHeight);
+				w_pad = caffe_cpu_modulus(w_pad, chWidth);
 				//
 				int c_im  = h_pad * chWidth + w_pad;
 				for (int i = 0; i < imHeight; ++i){

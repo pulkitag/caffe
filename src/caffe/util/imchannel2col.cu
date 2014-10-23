@@ -1,12 +1,22 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <cstdio>
 #include <cstring>
 
 #include "caffe/common.hpp"
 #include "caffe/util/imchannel2col.hpp"
+#include "caffe/util/math_functions.hpp"
 
 namespace caffe {
+
+__device__ int my_modulus(int a, int b){
+	if (a < 0){
+		int q = (-a/b) + 1;
+		return (a + b*q) % b;
+	}else
+		return a % b;	
+}
 
 template <typename Dtype>
 __global__ void imchannel2col_gpu_kernel(const int n, const Dtype* data_im,
@@ -53,8 +63,8 @@ __global__ void imchannel2col_gpu_kernel(const int n, const Dtype* data_im,
         int h = h_in + i;
         int w = w_in + j;
 				//Introducing topography
-				h = h % chHeight;
-				w = w % chWidth;
+				h = my_modulus(h, chHeight);
+				w = my_modulus(w, chWidth);
 				//
         *data_col_ptr = (h >= 0 && w >= 0 && h < chHeight && w < chWidth) ?
             data_im_ptr[(h * chWidth + w) * imWidth * imHeight] : 0;
@@ -145,6 +155,7 @@ __global__ void colchannel2im_gpu_kernel(const int n, const Dtype* data_col,
     int h_col_start = (ch_h - patch_h) / stride_h + 1;
     int h_col_end   = ch_h / stride_h + 1;
 	  
+		int q;
 		for (int h_col = h_col_start; h_col < h_col_end; ++h_col) {
       for (int w_col = w_col_start; w_col < w_col_end; ++w_col) {
 				int offset = 0;
@@ -154,15 +165,16 @@ __global__ void colchannel2im_gpu_kernel(const int n, const Dtype* data_col,
 				int h       = ch_h - h_start;
 				int w       = ch_w - w_start;
 				//Toroidal wrapping
-				h           = h % patch_h;
-				w           = w % patch_w;
+				h           = my_modulus(h, patch_h);
+				w           = my_modulus(w, patch_w);
 				// 
 				int pos     = h * patch_w + w;	
 				offset     += pos * col_row_length;
 
 				//Toroidal wrapping
-				int h_col_wrap = h_col % height_col;
-				int w_col_wrap = w_col % width_col;
+				int h_col_wrap, w_col_wrap;
+				h_col_wrap = my_modulus(h_col, height_col);
+				w_col_wrap = my_modulus(w_col, width_col);
 				//
 	
 				//Get the patch num
@@ -172,7 +184,8 @@ __global__ void colchannel2im_gpu_kernel(const int n, const Dtype* data_col,
 				//offset due to image location. 
 				offset  +=  row * imWidth + col; 
         val += data_col[offset];
-      }
+    		//printf("offset: %d", offset);
+		  }
     }
     data_im[index] = val;
   }

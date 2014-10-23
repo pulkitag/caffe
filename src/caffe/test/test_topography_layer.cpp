@@ -8,6 +8,8 @@
 #include "caffe/filler.hpp"
 #include "caffe/vision_layers.hpp"
 
+#include "caffe/util/math_functions.hpp"
+
 #include "caffe/test/test_caffe_main.hpp"
 #include "caffe/test/test_gradient_check_util.hpp"
 
@@ -64,8 +66,8 @@ void caffe_topography(const Blob<Dtype>* in, TopographyParameter* topography_par
                		int h_pad = h * stride_h + p - pad_h;
 									int w_pad = w * stride_w + q - pad_w;
 									//Toroidal wrapping
-									h_pad = h_pad % ch_h;
-									w_pad = w_pad % ch_w;
+									h_pad = caffe_cpu_modulus(h_pad, ch_h);
+									w_pad = caffe_cpu_modulus(w_pad, ch_w);
 									//
 									int ch    = h_pad * ch_w + w_pad;
                   if (h_pad >= 0 && h_pad < ch_h
@@ -102,8 +104,8 @@ class TopographyLayerTest : public ::testing::Test {
 */
  protected:
   TopographyLayerTest()
-      : blob_bottom_(new Blob<Dtype>(1, 4, 1, 1)),
-        blob_bottom_2_(new Blob<Dtype>(1, 4, 1, 1)),
+      : blob_bottom_(new Blob<Dtype>(2, 4, 6, 4)),
+        blob_bottom_2_(new Blob<Dtype>(2, 4, 6, 4)),
         blob_bottom_3_(new Blob<Dtype>(2, 12, 1, 1)),
         blob_top_(new Blob<Dtype>()),
         blob_top_2_(new Blob<Dtype>()),
@@ -114,6 +116,7 @@ class TopographyLayerTest : public ::testing::Test {
     FillerParameter filler_param;
     filler_param.set_value(1.);
     GaussianFiller<Dtype> filler(filler_param);
+    //SequenceFiller<Dtype> filler(filler_param);
     filler.Fill(this->blob_bottom_);
     filler.Fill(this->blob_bottom_2_);
     blob_bottom_vec_.push_back(blob_bottom_);
@@ -195,10 +198,12 @@ TYPED_TEST(TopographyLayerTest, TestSetup) {
   EXPECT_EQ(this->blob_top_3_->width(), 4);
 }
 */
+
+
 TYPED_TEST(TopographyLayerTest, TestSimpleConvolution) {
   // We will simply see if the convolution layer carries out averaging well.
   typedef typename TypeParam::Dtype Dtype;
-	std::cout << "Entering \n;
+	std::cout << "Entering \n";
   //typedef TypeParam Dtype;
   this->blob_bottom_vec_.push_back(this->blob_bottom_2_);
   this->blob_top_vec_.push_back(this->blob_top_2_);
@@ -239,6 +244,7 @@ TYPED_TEST(TopographyLayerTest, TestSimpleConvolution) {
     EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-4);
   }
 }
+// */
 /*
 TYPED_TEST(TopographyLayerTest, TestSimpleConvolutionGroup) {
   // We will simply see if the convolution layer carries out averaging well.
@@ -367,9 +373,69 @@ TYPED_TEST(TopographyLayerTest, TestSobelConvolution) {
 }
 */
 
+/* */
+TYPED_TEST(TopographyLayerTest, TestGradientSimple) {
+  typedef typename TypeParam::Dtype Dtype;
+  std::cout << "here Loc 0 \n";
+  
+	LayerParameter layer_param;
+  TopographyParameter* topography_param =
+      layer_param.mutable_topography_param();
+  topography_param->set_kernel_size(3);
+  topography_param->set_stride(1);
+  topography_param->mutable_weight_filler()->set_type("sequence");
+  std::cout << "here Loc 1 \n";
+
+	 shared_ptr<Layer<Dtype> > layer(
+      new TopographyLayer<Dtype>(layer_param));
+	 layer->SetUp(this->blob_bottom_vec_, &(this->blob_top_vec_));
+
+	layer->blobs().resize(1);
+  layer->blobs()[0].reset(new Blob<Dtype>(1, 1, 3, 3));
+  Dtype* weights = layer->blobs()[0]->mutable_cpu_data();
+	for (int c = 0; c < 1; ++c) {
+    int i = c * 9;  // 3 x 3 filter
+    weights[i +  0] =  1;
+    weights[i +  1] =  2;
+    weights[i +  2] =  3;
+    weights[i +  3] =  4;
+    weights[i +  4] =  5;
+    weights[i +  5] =  6;
+    weights[i +  6] =  7;
+    weights[i +  7] =  8;
+    weights[i +  8] =  9;
+  }
+  std::cout << "Weights Filled \n";
+
+	vector<bool>  prop_down;
+	prop_down.push_back(true);
+
+	std::cout << "Backward Pass \n";
+	caffe_set(this->blob_top_vec_[0]->count(), Dtype(1), 
+						this->blob_top_vec_[0]->mutable_cpu_diff());
+	layer->Backward( (this->blob_top_vec_), prop_down, &(this->blob_bottom_vec_));
+
+	//std::cout<<"Size is "<<this->blob_bottom_vec_.size();
+	std::cout << "Gradient ############### \n \n";
+	const Dtype* bottom = this->blob_bottom_vec_[0]->cpu_diff();
+	for (int count=0; count < this->blob_bottom_vec_[0]->count(); ++count){
+			//std::cout << " \n St: ";
+		  std::cout << bottom[count] << " ";
+	}
+	std::cout<<"\n";
+
+	///
+ // GradientChecker<Dtype> checker(1e-2, 1e-3);
+ // checker.CheckGradientExhaustive(&layer, &(this->blob_bottom_vec_),
+ //     &(this->blob_top_vec_));
+	
+}
+// */
+
 
 TYPED_TEST(TopographyLayerTest, TestGradient) {
   typedef typename TypeParam::Dtype Dtype;
+	std::cout <<"Test Gradient \n";
   LayerParameter layer_param;
   TopographyParameter* topography_param =
       layer_param.mutable_topography_param();
@@ -377,12 +443,13 @@ TYPED_TEST(TopographyLayerTest, TestGradient) {
   this->blob_top_vec_.push_back(this->blob_top_2_);
   topography_param->set_kernel_size(3);
   topography_param->set_stride(1);
-  topography_param->mutable_weight_filler()->set_type("gaussian");
+  topography_param->mutable_weight_filler()->set_type("sequence");
   TopographyLayer<Dtype> layer(layer_param);
   GradientChecker<Dtype> checker(1e-2, 1e-3);
   checker.CheckGradientExhaustive(&layer, &(this->blob_bottom_vec_),
       &(this->blob_top_vec_));
 }
+// */
 
 /*
 TYPED_TEST(TopographyLayerTest, TestGradientGroup) {

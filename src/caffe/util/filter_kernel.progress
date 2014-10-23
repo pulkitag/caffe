@@ -1,0 +1,10 @@
+#include "caffe/common.hpp"
+#include "caffe/util/filter_kernel.hpp"
+#include <cmath>
+
+template<Dtype>
+void caffe_gaussian_kernel(Dtype* gk, const Dtype sd, const int sz){
+	Dtype coeff_sum = 0;
+	
+
+} 
