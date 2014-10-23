@@ -44,11 +44,11 @@ void TopographyLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
       const vector<bool>& propagate_down, vector<Blob<Dtype>*>* bottom) {
   const Dtype* weight = NULL;
   Dtype* weight_diff = NULL;
-  if (this->param_propagate_down_[0]) {
+  //if (this->param_propagate_down_[0]) {
     weight = this->blobs_[0]->gpu_data();
     weight_diff = this->blobs_[0]->mutable_gpu_diff();
     caffe_gpu_set(this->blobs_[0]->count(), Dtype(0), weight_diff);
-  }
+  //}
   
   const int top_offset = M_ * N_;
   for (int i = 0; i < top.size(); ++i) {
@@ -61,24 +61,25 @@ void TopographyLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
 			Dtype* col_diff = col_buffer_.mutable_gpu_diff();
 			const Dtype* bottom_data = (*bottom)[i]->gpu_data();
 			Dtype* bottom_diff = (*bottom)[i]->mutable_gpu_diff();
+		
 			for (int n = 0; n < num_; ++n) {
-				for (int g = 0; g < group_; ++g) {
-				// Since we sory in the forward pass by not storing all col
-				// data, we will need to recompute them.
-				 imchannel2col_gpu(bottom_data + (*bottom)[i]->offset(n) 
-						+ g * height_ * width_ * channels_ / group_, 
-						channels_ / group_, height_, width_, chHeight_, chWidth_,
-						kernel_h_, kernel_w_, pad_h_, pad_w_, stride_h_, stride_w_,
-						col_data);
 				
-					// gradient w.r.t. weight. Note that we will accumulate diffs.
-					if (this->param_propagate_down_[0]) {
+				// gradient w.r.t. weight. Note that we will accumulate diffs.
+				if (this->param_propagate_down_[0]) {
+					for (int g = 0; g < group_; ++g) {
+						// Since we sory in the forward pass by not storing all col
+						// data, we will need to recompute them.
+					  imchannel2col_gpu(bottom_data + (*bottom)[i]->offset(n) 
+							+ g * height_ * width_ * channels_ / group_, 
+							channels_ / group_, height_, width_, chHeight_, chWidth_,
+							kernel_h_, kernel_w_, pad_h_, pad_w_, stride_h_, stride_w_,
+							col_data);
+					
 						caffe_gpu_gemm<Dtype>(CblasNoTrans, CblasTrans, M_, K_, N_,
 								(Dtype)1., top_diff + top[i]->offset(n) + top_offset * g,
 								col_data, (Dtype)1.,
 								weight_diff);
 					}
-				
 				}
 
 				// gradient w.r.t. bottom data, if necessary

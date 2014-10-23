@@ -52,6 +52,10 @@ __global__ void imchannel2col_gpu_kernel(const int n, const Dtype* data_im,
       for (int j = 0; j < kernel_w; ++j) {
         int h = h_in + i;
         int w = w_in + j;
+				//Introducing topography
+				h = h % chHeight;
+				w = w % chWidth;
+				//
         *data_col_ptr = (h >= 0 && w >= 0 && h < chHeight && w < chWidth) ?
             data_im_ptr[(h * chWidth + w) * imWidth * imHeight] : 0;
         data_col_ptr += totalPatches;
@@ -125,13 +129,21 @@ __global__ void colchannel2im_gpu_kernel(const int n, const Dtype* data_col,
 
 		int ch_w = chn % chWidth + pad_w;
 		int ch_h = chn / chWidth + pad_h; 
-	  // compute the start and end of the output
+		int col_row_length = imHeight * imWidth * height_col * width_col; 
+	  
+		/*
+		// compute the start and end of the output
     int w_col_start = (ch_w < patch_w) ? 0 : (ch_w - patch_w) / stride_w + 1;
     int w_col_end   = min(ch_w / stride_w + 1, width_col);
     int h_col_start = (ch_h < patch_h) ? 0 : (ch_h - patch_h) / stride_h + 1;
     int h_col_end   = min(ch_h / stride_h + 1, height_col);
-	 
-		int col_row_length = imHeight * imWidth * height_col * width_col; 
+	 */
+
+	 //For wrapping into toroid. 
+    int w_col_start = (ch_w - patch_w) / stride_w + 1;
+    int w_col_end   = ch_w / stride_w + 1;
+    int h_col_start = (ch_h - patch_h) / stride_h + 1;
+    int h_col_end   = ch_h / stride_h + 1;
 	  
 		for (int h_col = h_col_start; h_col < h_col_end; ++h_col) {
       for (int w_col = w_col_start; w_col < w_col_end; ++w_col) {
@@ -141,11 +153,20 @@ __global__ void colchannel2im_gpu_kernel(const int n, const Dtype* data_col,
 				int w_start = w_col * stride_w;
 				int h       = ch_h - h_start;
 				int w       = ch_w - w_start;
+				//Toroidal wrapping
+				h           = h % patch_h;
+				w           = w % patch_w;
+				// 
 				int pos     = h * patch_w + w;	
 				offset     += pos * col_row_length;
+
+				//Toroidal wrapping
+				int h_col_wrap = h_col % height_col;
+				int w_col_wrap = w_col % width_col;
+				//
 	
 				//Get the patch num
-				int patch_num  = h_col * width_col + w_col;	
+				int patch_num  = h_col_wrap * width_col + w_col_wrap;	
 				offset        += patch_num * imHeight * imWidth;
 				
 				//offset due to image location. 

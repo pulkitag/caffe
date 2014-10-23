@@ -32,6 +32,10 @@ void imchannel2col_cpu(const Dtype* data_im, const int channels,
 				//For a given position in the patch, find values in all patches. 
 				int h_pad = h * stride_h - pad_h + h_offset;
 				int w_pad = w * stride_w - pad_w + w_offset;
+				//Introudcing wrapping to get toroidal topography
+				h_pad = h_pad % chHeight;
+				w_pad = w_pad % chWidth;
+				//
 				int c_im  = h_pad * chWidth + w_pad;
 				for (int i = 0; i < imHeight; ++i){
 					for (int j = 0; j < imWidth; ++j){
@@ -93,6 +97,10 @@ void colchannel2im_cpu(const Dtype* data_col, const int channels,
 			for (int w = 0; w < width_col; ++w) {
 				int h_pad = h * stride_h - pad_h + h_offset;
 				int w_pad = w * stride_w - pad_w + w_offset;
+				//Introudcing wrapping to get toroidal topography
+				h_pad = h_pad % chHeight;
+				w_pad = w_pad % chWidth;
+				//
 				int c_im  = h_pad * chWidth + w_pad;
 				for (int i = 0; i < imHeight; ++i){
 					for (int j = 0; j < imWidth; ++j){

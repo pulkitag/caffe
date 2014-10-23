@@ -63,6 +63,10 @@ void caffe_topography(const Blob<Dtype>* in, TopographyParameter* topography_par
                 for (int q = 0; q < kernel_w; q++) {
                		int h_pad = h * stride_h + p - pad_h;
 									int w_pad = w * stride_w + q - pad_w;
+									//Toroidal wrapping
+									h_pad = h_pad % ch_h;
+									w_pad = w_pad % ch_w;
+									//
 									int ch    = h_pad * ch_w + w_pad;
                   if (h_pad >= 0 && h_pad < ch_h
                     && w_pad >= 0 && w_pad < ch_w) {
@@ -98,8 +102,8 @@ class TopographyLayerTest : public ::testing::Test {
 */
  protected:
   TopographyLayerTest()
-      : blob_bottom_(new Blob<Dtype>(2, 9, 6, 4)),
-        blob_bottom_2_(new Blob<Dtype>(2, 9, 6, 4)),
+      : blob_bottom_(new Blob<Dtype>(1, 4, 1, 1)),
+        blob_bottom_2_(new Blob<Dtype>(1, 4, 1, 1)),
         blob_bottom_3_(new Blob<Dtype>(2, 12, 1, 1)),
         blob_top_(new Blob<Dtype>()),
         blob_top_2_(new Blob<Dtype>()),
@@ -194,6 +198,7 @@ TYPED_TEST(TopographyLayerTest, TestSetup) {
 TYPED_TEST(TopographyLayerTest, TestSimpleConvolution) {
   // We will simply see if the convolution layer carries out averaging well.
   typedef typename TypeParam::Dtype Dtype;
+	std::cout << "Entering \n;
   //typedef TypeParam Dtype;
   this->blob_bottom_vec_.push_back(this->blob_bottom_2_);
   this->blob_top_vec_.push_back(this->blob_top_2_);
@@ -205,10 +210,14 @@ TYPED_TEST(TopographyLayerTest, TestSimpleConvolution) {
   topography_param->mutable_weight_filler()->set_type("gaussian");
   shared_ptr<Layer<Dtype> > layer(
       new TopographyLayer<Dtype>(layer_param));
-  layer->SetUp(this->blob_bottom_vec_, &(this->blob_top_vec_));
+ 
+	std::cout << "Seeting Layer \n";
+	 layer->SetUp(this->blob_bottom_vec_, &(this->blob_top_vec_));
 
+	std::cout << "Forward Pass \n";
 	layer->Forward(this->blob_bottom_vec_, &(this->blob_top_vec_));
- 	
+ 
+	std::cout <<"Reference calculation \n";	
   // Check against reference convolution.
   const Dtype* top_data;
   const Dtype* ref_top_data;
