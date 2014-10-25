@@ -651,28 +651,27 @@ message SoftmaxParameter {
 
 // Message that stores parameters used by TopographyLayer
 message TopographyParameter {
-  optional uint32 num_output = 1; // The number of outputs for the layer
   // Pad, kernel size, and stride are all given as a single value for equal
   // dimensions in height and width or as Y, X pairs.
-  optional uint32 pad = 2 [default = 1]; // The padding size (equal in Y, X)
-  optional uint32 pad_h = 3 [default = 1]; // The padding height
-  optional uint32 pad_w = 4 [default = 1]; // The padding width
-  optional uint32 kernel_size = 5;// The kernel size (square)
-  optional uint32 kernel_h = 6; // The kernel height
-  optional uint32 kernel_w = 7; // The kernel width
-  optional uint32 group = 8 [default = 1]; // The group size for group conv
-  optional uint32 stride = 9 [default = 1]; // The stride (equal in Y, X)
-  optional uint32 stride_h = 10; // The stride height
-  optional uint32 stride_w = 11; // The stride width
-  optional FillerParameter weight_filler = 12; // The filler for the weight
+  optional uint32 pad = 1 [default = 1]; // The padding size (equal in Y, X)
+  optional uint32 pad_h = 2 [default = 1]; // The padding height
+  optional uint32 pad_w = 3 [default = 1]; // The padding width
+  optional uint32 kernel_size = 4;// The kernel size (square)
+  optional uint32 kernel_h = 5; // The kernel height
+  optional uint32 kernel_w = 6; // The kernel width
+  optional uint32 group = 7 [default = 1]; // The group size for group conv
+  optional uint32 stride = 8 [default = 1]; // The stride (equal in Y, X)
+  optional uint32 stride_h = 9; // The stride height
+  optional uint32 stride_w = 10; // The stride width
+  optional FillerParameter weight_filler = 11; // The filler for the weight
   enum Engine {
     DEFAULT = 0;
     CAFFE = 1;
     CUDNN = 2;
   }
-  optional Engine engine = 13 [default = DEFAULT];
-	optional float topography_sd = 14;
-	optional uint32 topography_sz = 15;
+  optional Engine engine = 12 [default = DEFAULT];
+	optional bool is_gaussian_topo = 14 [default = true];
+	optional float gaussian_sd = 13;
 }
 
 

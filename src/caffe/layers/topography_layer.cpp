@@ -47,10 +47,18 @@ void TopographyLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
     // 1 x 1 x kernel height x kernel width
     this->blobs_[0].reset(new Blob<Dtype>(
         1, 1, kernel_h_, kernel_w_));
-  		
-		Dtype* weights = this->blobs_[0]->mutable_cpu_data();
-	 	caffe_gaussian_kernel(weights, (Dtype)top_param.topography_sd(), 
-						top_param.topography_sz()); 	
+
+  	if (top_param.is_gaussian_topo()){
+			LOG(INFO)<<"Gaussian Weight init";	
+			Dtype* weights = this->blobs_[0]->mutable_cpu_data();
+			caffe_gaussian_kernel(weights, (Dtype)top_param.gaussian_sd(), 
+							top_param.kernel_size()); 
+		}else{
+			LOG(INFO)<<"Random Weight Init";	
+			shared_ptr<Filler<Dtype> > weight_filler(GetFiller<Dtype>(
+					this->layer_param_.convolution_param().weight_filler()));
+			weight_filler->Fill(this->blobs_[0].get());
+		}
 	}
   // Propagate gradients to the parameters (as directed by backward pass).
   this->param_propagate_down_.resize(this->blobs_.size(), true);
@@ -76,12 +84,10 @@ void TopographyLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
   height_out_ = height_;
   width_out_  = width_;
 	//The size of channel grid.
-	std::cout << "groups: " << group_ << " pad_w: " << pad_w_ 
-						<< " stride_w_: " << stride_w_ << " \n "; 
+	//std::cout << "groups: " << group_ << " pad_w: " << pad_w_ 
+ 	//					<< " stride_w_: " << stride_w_ << " \n "; 
 	width_col_  = (chWidth_ + 2 * pad_w_ - kernel_w_)/stride_w_ + 1;
 	height_col_ = (chHeight_ + 2 * pad_h_ - kernel_h_)/stride_h_ + 1;
- 	std::cout << "width_col: " << width_col_ << " height_col: " <<
-		height_col_ << "\n"; 
 	for (int top_id = 0; top_id < top->size(); ++top_id) {
     (*top)[top_id]->Reshape(num_, width_col_ * height_col_ * group_ , 
 						height_out_, width_out_);
