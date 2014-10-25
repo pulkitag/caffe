@@ -671,6 +671,8 @@ message TopographyParameter {
     CUDNN = 2;
   }
   optional Engine engine = 13 [default = DEFAULT];
+	optional float topography_sd = 14;
+	optional uint32 topography_sz = 15;
 }
 
 

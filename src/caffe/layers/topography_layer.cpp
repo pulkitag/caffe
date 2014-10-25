@@ -4,6 +4,7 @@
 #include "caffe/layer.hpp"
 #include "caffe/util/imchannel2col.hpp"
 #include "caffe/util/math_functions.hpp"
+#include "caffe/util/filter_kernel.hpp"
 #include "caffe/vision_layers.hpp"
 
 namespace caffe {
@@ -46,10 +47,11 @@ void TopographyLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
     // 1 x 1 x kernel height x kernel width
     this->blobs_[0].reset(new Blob<Dtype>(
         1, 1, kernel_h_, kernel_w_));
-    shared_ptr<Filler<Dtype> > weight_filler(GetFiller<Dtype>(
-        this->layer_param_.topography_param().weight_filler()));
-    weight_filler->Fill(this->blobs_[0].get());
-  }
+  		
+		Dtype* weights = this->blobs_[0]->mutable_cpu_data();
+	 	caffe_gaussian_kernel(weights, (Dtype)top_param.topography_sd(), 
+						top_param.topography_sz()); 	
+	}
   // Propagate gradients to the parameters (as directed by backward pass).
   this->param_propagate_down_.resize(this->blobs_.size(), true);
 }
