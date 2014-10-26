@@ -1,13 +1,13 @@
 net: "/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/cifar10/best_ball/normal_big/train_test.prototxt" 
 test_iter: 100 
-test_interval: 500 
-base_lr: 0.00100000 
+test_interval: 22500 
+base_lr: 0.00000049 
 lr_policy: "fixed" 
 display: 200 
-max_iter: 500 
+max_iter: 22500 
 momentum: 0.900000 
 weight_decay: 0.004000 
 snapshot: 500 
-snapshot_prefix: "/data1/pulkitag/snapshots/cifar10/best_ball/normal_big/snap_round1_lr0.00100000" 
+snapshot_prefix: "/data1/pulkitag/snapshots/cifar10/best_ball/normal_big/snap_round45_lr0.00000049" 
 solver_mode: GPU 
 device_id: 0 

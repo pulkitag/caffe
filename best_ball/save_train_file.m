@@ -9,7 +9,7 @@ fprintf(fid, sprintf('LOG_FILE_NAME=%s \n \n', logFile));
 trainCmd = 'GLOG_logtostderr=1 $TOOLS/caffe train %s 2>&1 | tee -a ${LOG_FILE_NAME}';
 trainStr = sprintf('--solver=%s ',prms.path.solverProtoFile);
 if prms.isResume
-	trainStr = strcat(trainStr,sprintf('--snapshot=%s',prms.path.resumeFile));
+	trainStr = sprintf('%s --snapshot=%s',trainStr,prms.path.resumeFile);
 end
 
 trainCmd = sprintf(trainCmd, trainStr);
