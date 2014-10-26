@@ -1,11 +1,32 @@
-name: "CIFAR10_full_deploy"
-# N.B. input image must be in CIFAR-10 format
-# as described at http://www.cs.toronto.edu/~kriz/cifar.html
-input: "data"
-input_dim: 1
-input_dim: 3
-input_dim: 32
-input_dim: 32
+name: "CIFAR10_full"
+layers {
+  name: "cifar"
+  type: DATA
+  top: "data"
+  top: "label"
+  data_param {
+    source: "/data1/pulkitag/cifar10/leveldb_store/cifar10-train-leveldb"
+    batch_size: 100
+  }
+  transform_param {
+    mean_file: "/data1/pulkitag/cifar10/leveldb_store/mean.binaryproto"
+  }
+  include: { phase: TRAIN }
+}
+layers {
+  name: "cifar"
+  type: DATA
+  top: "data"
+  top: "label"
+  data_param {
+    source: "/data1/pulkitag/cifar10/leveldb_store/cifar10-test-leveldb"
+    batch_size: 100
+  }
+  transform_param {
+    mean_file: "/data1/pulkitag/cifar10/leveldb_store/mean.binaryproto"
+  }
+  include: { phase: TEST }
+}
 layers {
   name: "conv1"
   type: CONVOLUTION
@@ -14,10 +35,17 @@ layers {
   blobs_lr: 1
   blobs_lr: 2
   convolution_param {
-    num_output: 36
+    num_output: 64
     pad: 2
     kernel_size: 5
     stride: 1
+    weight_filler {
+      type: "gaussian"
+      std: 0.0001
+    }
+    bias_filler {
+      type: "constant"
+    }
   }
 }
 layers {
@@ -38,30 +66,36 @@ layers {
   top: "pool1"
 }
 layers {
-	name: "top1"
-	type: TOPOGRAPHY
-	bottom: "pool1"
-	top:  "top1"
-  blobs_lr: 0
-	topography_param {
-		kernel_size: 3
-		stride: 1
-		is_gaussian_topo: true
-		gaussian_sd: 0.75		
-	}
+  name: "norm1"
+  type: LRN
+  bottom: "pool1"
+  top: "norm1"
+  lrn_param {
+    norm_region: WITHIN_CHANNEL
+    local_size: 3
+    alpha: 5e-05
+    beta: 0.75
+  }
 }
 layers {
   name: "conv2"
   type: CONVOLUTION
-  bottom: "top1"
+  bottom: "norm1"
   top: "conv2"
   blobs_lr: 1
   blobs_lr: 2
   convolution_param {
-    num_output: 36
+    num_output: 64
     pad: 2
     kernel_size: 5
     stride: 1
+    weight_filler {
+      type: "gaussian"
+      std: 0.01
+    }
+    bias_filler {
+      type: "constant"
+    }
   }
 }
 layers {
@@ -103,6 +137,13 @@ layers {
     pad: 2
     kernel_size: 5
     stride: 1
+    weight_filler {
+      type: "gaussian"
+      std: 0.01
+    }
+    bias_filler {
+      type: "constant"
+    }
   }
 }
 layers {
@@ -133,11 +174,27 @@ layers {
   weight_decay: 0
   inner_product_param {
     num_output: 10
+    weight_filler {
+      type: "gaussian"
+      std: 0.01
+    }
+    bias_filler {
+      type: "constant"
+    }
   }
 }
 layers {
-  name: "prob"
-  type: SOFTMAX
+  name: "accuracy"
+  type: ACCURACY
   bottom: "ip1"
-  top: "prob"
+  bottom: "label"
+  top: "accuracy"
+  include: { phase: TEST }
+}
+layers {
+  name: "loss"
+  type: SOFTMAX_LOSS
+  bottom: "ip1"
+  bottom: "label"
+  top: "loss"
 }

@@ -9,7 +9,7 @@ GLOG_logtostderr=1 $TOOLS/caffe train \
 # reduce learning rate by factor of 10
 GLOG_logtostderr=1 $TOOLS/caffe train \
     --solver=cifar10_full_solver_lr1.prototxt \
-    --snapshot=/data1/pulkitag/snapshots/cifar10/cifar10_full_iter_60000.solverstate \
+    --snapshot=/data1/pulkitag/snapshots/cifar10/topo_all_big/cifar10_full_iter_60000.solverstate \
 	 2>&1 | tee -a ${LOG_FILE_NAME}
 
 # reduce learning rate by factor of 10

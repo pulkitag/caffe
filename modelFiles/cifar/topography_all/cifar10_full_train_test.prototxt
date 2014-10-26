@@ -66,21 +66,22 @@ layers {
   top: "pool1"
 }
 layers {
-  name: "norm1"
-  type: LRN
-  bottom: "pool1"
-  top: "norm1"
-  lrn_param {
-    norm_region: WITHIN_CHANNEL
-    local_size: 3
-    alpha: 5e-05
-    beta: 0.75
-  }
+	name: "top1"
+	type: TOPOGRAPHY
+	bottom: "pool1"
+	top:  "top1"
+  blobs_lr: 0
+	topography_param {
+		kernel_size: 3
+		stride: 1
+		is_gaussian_topo: true
+		gaussian_sd: 0.75		
+	}
 }
 layers {
   name: "conv2"
   type: CONVOLUTION
-  bottom: "norm1"
+  bottom: "top1"
   top: "conv2"
   blobs_lr: 1
   blobs_lr: 2
@@ -116,21 +117,22 @@ layers {
   }
 }
 layers {
-  name: "norm2"
-  type: LRN
-  bottom: "pool2"
-  top: "norm2"
-  lrn_param {
-    norm_region: WITHIN_CHANNEL
-    local_size: 3
-    alpha: 5e-05
-    beta: 0.75
-  }
+	name: "top2"
+	type: TOPOGRAPHY
+	bottom: "pool2"
+	top:  "top2"
+  blobs_lr: 0
+	topography_param {
+		kernel_size: 3
+		stride: 1
+		is_gaussian_topo: true
+		gaussian_sd: 0.75		
+	}
 }
 layers {
   name: "conv3"
   type: CONVOLUTION
-  bottom: "norm2"
+  bottom: "top2"
   top: "conv3"
   convolution_param {
     num_output: 64
@@ -164,9 +166,22 @@ layers {
   }
 }
 layers {
+	name: "top3"
+	type: TOPOGRAPHY
+	bottom: "pool3"
+	top:  "top3"
+  blobs_lr: 0
+	topography_param {
+		kernel_size: 3
+		stride: 1
+		is_gaussian_topo: true
+		gaussian_sd: 0.75		
+	}
+}
+layers {
   name: "ip1"
   type: INNER_PRODUCT
-  bottom: "pool3"
+  bottom: "top3"
   top: "ip1"
   blobs_lr: 1
   blobs_lr: 2
