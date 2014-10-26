@@ -1,4 +1,4 @@
-function [acc] = log2accuracy(parseScript,fileName)
+function [acc, varargout] = log2accuracy(parseScript,fileName)
 %Find the test accuracy from the log file
 
 system(sprintf('%s %s',parseScript,fileName));
@@ -17,6 +17,10 @@ fclose(fid);
 pos = strfind(pLine,'  ');
 acc = pLine(pos(2)+1:pos(3)-1);
 acc = str2double(acc);
+
+iters = pLine(1:pos(1)-1);
+iters = str2num(iters);
+varargout{1} = iters;
 
 trainFileName = strcat(fileName,'.train');
 system(['rm ' testFileName]);

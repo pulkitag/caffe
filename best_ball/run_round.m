@@ -1,7 +1,7 @@
-function [] = run_round(prms, baseLr, roundNum)
+function [] = run_round(prms, baseLr, roundNum, iterCount)
 
 lrPower      = [-2, -1, 0, 1, 2];
-prms.maxIter = roundNum*prms.iterPerRound;
+prms.maxIter = iterCount + prms.iterPerRound;
 
 for l=1:1:5
 	lr = baseLr*power(2,lrPower(l));
