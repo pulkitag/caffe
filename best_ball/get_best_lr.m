@@ -11,8 +11,10 @@ for l=1:1:length(lrPower)
 end
 
 %Get the best learning rate. 
-[~,idx] = max(acc);
+[bestAcc,idx] = max(acc);
 bestLr  = baseLr*power(2,lrPower(idx));
 varargout{1} = idx;
 varargout{2} = iterCount;
+varargout{3} = bestAcc;
+varargout{4} = acc;
 end
