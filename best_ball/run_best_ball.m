@@ -1,4 +1,4 @@
-expName = 'normal_big';
+expName = 'topo_all_big';
 
 %Get prms
 prms = get_prms({'expName',expName});
@@ -19,13 +19,13 @@ for r=1:1:numRound
 	try	
 		% For using previous calculations
 		[baseLr, idx, iterCount] = get_best_lr(prms, baseLr, r);
-		disp(sprintf('BestLr: %f, iterCount: %d',baseLr, iterCount));
+		disp(sprintf('BestLr: %f, idx:%d, iterCount: %d',baseLr, idx,iterCount));
 	catch myErr
 		oldRounds = r;
 		break;
 	end
 end
-
+keyboard;
 for r=oldRounds:1:numRound
 	disp('Running round');	
 	run_round(prms, baseLr, r, iterCount);
