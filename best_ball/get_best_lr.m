@@ -12,6 +12,16 @@ end
 
 %Get the best learning rate. 
 [bestAcc,idx] = max(acc);
+
+%Encourage larger learning rates. 
+midIdx = round(length(lrPower)/2);
+if idx < midIdx
+	if acc(midIdx) + 0.01 > bestAcc
+		bestAcc = acc(midIdx);
+		idx     = midIdx;
+	end
+end
+
 bestLr  = baseLr*power(2,lrPower(idx));
 varargout{1} = idx;
 varargout{2} = iterCount;
