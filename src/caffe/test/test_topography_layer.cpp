@@ -213,6 +213,7 @@ TYPED_TEST(TopographyLayerTest, TestSimpleConvolution) {
       layer_param.mutable_topography_param();
   topography_param->set_kernel_size(3);
   topography_param->set_stride(1);
+	topography_param->set_is_gaussian_topo(false);
   topography_param->mutable_weight_filler()->set_type("gaussian");
   shared_ptr<Layer<Dtype> > layer(
       new TopographyLayer<Dtype>(layer_param));
@@ -245,6 +246,51 @@ TYPED_TEST(TopographyLayerTest, TestSimpleConvolution) {
     EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-4);
   }
 }
+
+TYPED_TEST(TopographyLayerTest, TestNonSmoothOp) {
+  // We will simply see if the convolution layer carries out averaging well.
+  typedef typename TypeParam::Dtype Dtype;
+	std::cout << "Entering \n";
+  //typedef TypeParam Dtype;
+  this->blob_bottom_vec_.push_back(this->blob_bottom_2_);
+  this->blob_top_vec_.push_back(this->blob_top_2_);
+  LayerParameter layer_param;
+  TopographyParameter* topography_param =
+      layer_param.mutable_topography_param();
+  topography_param->set_kernel_size(3);
+  topography_param->set_stride(1);
+	topography_param->set_smooth_output(false);
+	topography_param->set_is_gaussian_topo(false);
+  topography_param->mutable_weight_filler()->set_type("gaussian");
+  shared_ptr<Layer<Dtype> > layer(
+      new TopographyLayer<Dtype>(layer_param));
+ 
+	std::cout << "Seeting Layer \n";
+	 layer->SetUp(this->blob_bottom_vec_, &(this->blob_top_vec_));
+
+	std::cout << "Forward Pass \n";
+	layer->Forward(this->blob_bottom_vec_, &(this->blob_top_vec_));
+ 
+	std::cout <<"Reference calculation \n";	
+  // Check against reference convolution.
+  const Dtype* top_data;
+	const Dtype* ref_top_data;
+	top_data = this->blob_top_->cpu_data();
+  ref_top_data = this->blob_bottom_->cpu_data();
+	for (int i = 0; i < this->blob_top_->count(); ++i) {
+    EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-4);
+  }
+
+  top_data = this->blob_top_2_->cpu_data();
+  ref_top_data = this->blob_bottom_2_->cpu_data();
+  for (int i = 0; i < this->blob_top_->count(); ++i) {
+    EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-4);
+  }
+}
+
+
+
+
 // */
 /*
 TYPED_TEST(TopographyLayerTest, TestSimpleConvolutionGroup) {
@@ -383,6 +429,7 @@ TYPED_TEST(TopographyLayerTest, TestRotation) {
       layer_param.mutable_topography_param();
   topography_param->set_kernel_size(3);
   topography_param->set_stride(1);
+	topography_param->set_is_gaussian_topo(false);
   topography_param->mutable_weight_filler()->set_type("sequence");
   std::cout << "here Loc 1 \n";
 
@@ -448,6 +495,7 @@ TYPED_TEST(TopographyLayerTest, TestGradientSimple) {
       layer_param.mutable_topography_param();
   topography_param->set_kernel_size(3);
   topography_param->set_stride(1);
+	topography_param->set_is_gaussian_topo(false);
   topography_param->mutable_weight_filler()->set_type("sequence");
   std::cout << "here Loc 1 \n";
 
@@ -508,7 +556,8 @@ TYPED_TEST(TopographyLayerTest, TestGradient) {
   this->blob_top_vec_.push_back(this->blob_top_2_);
   topography_param->set_kernel_size(3);
   topography_param->set_stride(1);
-  topography_param->mutable_weight_filler()->set_type("sequence");
+	topography_param->set_is_gaussian_topo(false);
+  topography_param->mutable_weight_filler()->set_type("gaussian");
   TopographyLayer<Dtype> layer(layer_param);
   GradientChecker<Dtype> checker(1e-2, 1e-3);
   checker.CheckGradientExhaustive(&layer, &(this->blob_bottom_vec_),

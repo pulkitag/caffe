@@ -1,6 +1,6 @@
-expName = 'topo_top_025';
+expName = 'topo_top_225_075';
 leveldbNum = 2;
-deviceId   = 2;
+deviceId   = 0;
 
 %Get prms
 prms = get_prms({'expName',expName,'deviceId',deviceId});

@@ -672,6 +672,7 @@ message TopographyParameter {
   optional Engine engine = 12 [default = DEFAULT];
 	optional bool is_gaussian_topo = 14 [default = true];
 	optional float gaussian_sd = 13;
+	optional bool smooth_output = 15 [default = true];
 }
 
 

@@ -229,6 +229,7 @@ class TopographyLayer : public Layer<Dtype> {
   int group_;
   int height_out_, width_out_;
 	int height_col_, width_col_;
+	bool smooth_output_;
 
   /// M_ is the channel dimension of the output for a single group, which is the
   /// leading dimension of the filter matrix.
