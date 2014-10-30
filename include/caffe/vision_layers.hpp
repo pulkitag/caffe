@@ -208,6 +208,7 @@ class TopographyLayer : public Layer<Dtype> {
   virtual inline int MinBottomBlobs() const { return 1; }
   virtual inline int MinTopBlobs() const { return 1; }
   virtual inline bool EqualNumBottomTopBlobs() const { return true; }
+	virtual inline void PrintWeights() const;
 
  protected:
   virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,

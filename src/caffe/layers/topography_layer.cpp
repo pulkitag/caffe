@@ -68,6 +68,15 @@ void TopographyLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
 }
 
 template <typename Dtype>
+void TopographyLayer<Dtype>::PrintWeights() const {
+	const Dtype* weight = this->blobs_[0]->cpu_data();
+	int sz = this->blobs_[0]->count();
+	for (int i=0; i<sz; i++)
+		std::cout << weight[sz] << " ";
+	std::cout << "\n";
+}
+
+template <typename Dtype>
 void TopographyLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
       vector<Blob<Dtype>*>* top) {
   num_ = bottom[0]->num();

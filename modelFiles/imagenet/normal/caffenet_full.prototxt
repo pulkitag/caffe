@@ -294,31 +294,16 @@ layers {
   }
 }
 layers {
-  name: "top7"
-  type: TOPOGRAPHY
-  bottom: "fc7"
-  top:    "top7"
-  blobs_lr: 0.01
-  weight_decay: 0.01
-  topography_param {
-	kernel_size: 3
-	stride: 1
-	is_gaussian_topo: true
-	gaussian_sd: 0.75
-	smooth_output: false
- }
-}
-layers {
   name: "relu7"
   type: RELU
-  bottom: "top7"
-  top: "top7"
+  bottom: "fc7"
+  top: "fc7"
 }
 layers {
   name: "drop7"
   type: DROPOUT
-  bottom: "top7"
-  top: "top7"
+  bottom: "fc7"
+  top: "fc7"
   dropout_param {
     dropout_ratio: 0.5
   }
@@ -326,7 +311,7 @@ layers {
 layers {
   name: "fc8"
   type: INNER_PRODUCT
-  bottom: "top7"
+  bottom: "fc7"
   top: "fc8"
   blobs_lr: 1.
   blobs_lr: 2.
