@@ -499,7 +499,7 @@ void Net<Dtype>::GetLearningRateAndWeightDecay() {
 
 template <typename Dtype>
 void Net<Dtype>::PrintLayerDebugInfo() const {
-	for (int i = 0; i <= layers_.size(); ++i) {
+	for (int i = 0; i < layers_.size(); ++i) {
     layers_[i]->PrintWeights();
   }
 }

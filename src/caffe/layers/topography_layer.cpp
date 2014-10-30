@@ -71,9 +71,10 @@ template <typename Dtype>
 void TopographyLayer<Dtype>::PrintWeights() const {
 	const Dtype* weight = this->blobs_[0]->cpu_data();
 	int sz = this->blobs_[0]->count();
-	for (int i=0; i<sz; i++)
-		std::cout << weight[sz] << " ";
-	std::cout << "\n";
+	LOG(INFO)<<"Topography Layer Weights " << sz;
+	for (int i=0; i<sz; i++){
+		LOG(INFO) << weight[i] << " ";
+	}
 }
 
 template <typename Dtype>
