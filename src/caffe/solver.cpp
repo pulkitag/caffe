@@ -403,7 +403,7 @@ void SGDSolver<Dtype>::ComputeUpdateValue() {
   if (this->param_.display() && this->iter_ % this->param_.display() == 0) {
     LOG(INFO) << "Iteration " << this->iter_ << ", lr = " << rate;
 		if (this->param_.print_layer_debug()){
-			net_->PrintLayerDebugInfo();
+			this->net_->PrintLayerDebugInfo();
 		}
   }
   Dtype momentum = this->param_.momentum();
