@@ -44,6 +44,17 @@ static int init_key = -2;
 // The actual forward function. It takes in a cell array of 4-D arrays as
 // input and outputs a cell array.
 
+static void find_layer_idx(vector<string> names, int* nameIdx){
+  const vector<string>& layer_names = net_->layer_names();
+  for (int i=0;i<(int)names.size();i++){
+     nameIdx[i] = -1;
+     for (int j=0;j<(int)layer_names.size();j++){
+	 if (layer_names[j].compare(names[i])==0)
+		nameIdx[i] = j;
+     }
+  }  
+}
+
 static mxArray* do_forward(const mxArray* const bottom) {
   vector<Blob<float>*>& input_blobs = net_->input_blobs();
   CHECK_EQ(static_cast<unsigned int>(mxGetDimensions(bottom)[0]),
@@ -145,6 +156,71 @@ static mxArray* do_backward(const mxArray* const top_diff) {
 
   return mx_out;
 }
+
+static void get_features(MEX_ARGS){
+	const mxArray *namesCell = prhs[0]; 
+	mwSize numNames = mxGetNumberOfElements(namesCell);
+	if (numNames==0){
+	mexPrintf("No names specified");
+	return;
+	}
+	vector<string> names;
+  string s;
+	for (int i=0;i<numNames;i++){
+	 const mxArray* tmp = mxGetCell(namesCell,i);
+   s                  = mxArrayToString(tmp);
+	 names.push_back(s);
+	}
+			 
+	int* nameIdx = new int[names.size()];
+	find_layer_idx(names,nameIdx);
+	/*for (int i=0;i<(int)names.size();i++){
+	 std::cout<<nameIdx[i]<<std::endl;
+	}*/
+
+  const vector<vector<Blob<float>*> >& top_vecs = net_->top_vecs();
+  
+  const mwSize dims[2]   = {numNames,1};
+	const char*  fnames[2] = {"feat","name"};
+  mxArray* mx_feat       = mxCreateStructArray(2,dims,2,fnames);
+  int idx;
+
+  for (int i=0;i<numNames;i++){
+    idx = nameIdx[i];
+		if (idx==-1){
+			mexPrintf("Layer not found %s",names[i].c_str());
+			continue;
+		}
+		mxArray* mx_layer_cells = NULL;
+		const mwSize dims[2]    = {top_vecs[idx].size(), 1};
+    mx_layer_cells          = mxCreateCellArray(2,dims);
+    mxSetField(mx_feat,i,"feat",mx_layer_cells);
+	  mxSetField(mx_feat,i,"name",mxCreateString(names[i].c_str()));
+    for (unsigned int j=0;j<top_vecs[idx].size();j++){
+			mwSize dims[4] = {top_vecs[idx][j]->width(), top_vecs[idx][j]->height(),
+												top_vecs[idx][j]->channels(),top_vecs[idx][j]->num()};
+			mxArray* mx_features = mxCreateNumericArray(4,dims,mxSINGLE_CLASS,mxREAL);
+      mxSetCell(mx_layer_cells,j,mx_features);
+			float* features_ptr = reinterpret_cast<float*>(mxGetPr(mx_features));
+			switch (Caffe::mode()){
+				case Caffe::CPU:
+					memcpy(features_ptr, top_vecs[idx][j]->cpu_data(), sizeof(float) * top_vecs[idx][j]->count());
+				  break;
+				case Caffe::GPU:
+					CUDA_CHECK(cudaMemcpy(features_ptr, top_vecs[idx][j]->gpu_data(),
+										 sizeof(float) * top_vecs[idx][j]->count(),cudaMemcpyDeviceToHost));
+					break;
+				default:
+					LOG(FATAL) << "Unknown caffe mode: " << Caffe::mode();
+		}	
+	 }
+ }
+  	
+  plhs[0] = mx_feat; 
+	delete nameIdx;
+}
+
+
 
 static mxArray* do_get_weights() {
   const vector<shared_ptr<Layer<float> > >& layers = net_->layers();
@@ -363,6 +439,7 @@ static handler_registry handlers[] = {
   { "get_init_key",       get_init_key    },
   { "reset",              reset           },
   { "read_mean",          read_mean       },
+ 	{ "get_features",       get_features    },
   // The end.
   { "END",                NULL            },
 };
