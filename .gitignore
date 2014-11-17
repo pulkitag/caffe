@@ -66,6 +66,11 @@ LOG*
 CURRENT
 MANIFEST-*
 
+#Others
+*.mat
+*.hdf5
+*.h5
+
 # Generated documentation
 docs/_site
 docs/gathered
