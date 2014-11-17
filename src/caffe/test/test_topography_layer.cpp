@@ -198,7 +198,7 @@ TYPED_TEST(TopographyLayerTest, TestSetup) {
 TYPED_TEST(TopographyLayerTest, TestSimpleConvolution) {
   // We will simply see if the convolution layer carries out averaging well.
   typedef typename TypeParam::Dtype Dtype;
-	std::cout << "Entering \n;
+	std::cout << "Entering \n";
   //typedef TypeParam Dtype;
   this->blob_bottom_vec_.push_back(this->blob_bottom_2_);
   this->blob_top_vec_.push_back(this->blob_top_2_);
