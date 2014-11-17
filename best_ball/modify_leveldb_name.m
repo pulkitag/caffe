@@ -28,4 +28,7 @@ end
 fclose(fid);
 fclose(oFid);
 
+system(['mv ' outFile ' ' fileName]);
+system(['rm ' outFile]);
+
 end

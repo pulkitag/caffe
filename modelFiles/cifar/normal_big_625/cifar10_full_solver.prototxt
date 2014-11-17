@@ -21,7 +21,7 @@ display: 200
 max_iter: 60000
 # snapshot intermediate results
 snapshot: 10000
-snapshot_prefix: "/data1/pulkitag/snapshots/cifar10/topo_all_big/cifar10_full"
+snapshot_prefix: "/data1/pulkitag/snapshots/cifar10/normal_big_625/cifar10_full"
 # solver mode: CPU or GPU
 solver_mode: GPU
-device_id: 1
+device_id: 0

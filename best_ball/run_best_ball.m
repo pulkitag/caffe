@@ -1,14 +1,15 @@
-expName = 'topo_all_big';
+expName = 'normal_big_100';
 leveldbNum = 1;
+deviceId   = 0;
 
 %Get prms
-prms = get_prms({'expName',expName});
+prms = get_prms({'expName',expName,'deviceId',deviceId});
 
 %Get Paths
 prms.path = get_path(prms);
 
 if leveldbNum > 1
-	
+	modify_leveldb_name(prms.path.netProtoFile,leveldbNum);	
 end
 
 baseLr   = 0.001;
@@ -16,7 +17,7 @@ numRound = 50;
 prms.isResume = false;
 initIterPerRound = prms.iterPerRound;
 iterCount        = 0;
-maxIterCount     = 15000;
+maxIterCount     = 20000;
 
 %Find the old rounds
 oldRounds = 0;
@@ -40,7 +41,7 @@ for r=oldRounds:1:numRound
 	
 	%Select the best learning rate
 	[baseLr, idx, ~, bestAcc] = get_best_lr(prms, baseLr, r);
-	fprintf(pFile, 'Iter: %d, Acc: %f, lr: %f',iterCount, bestAcc, ...
+	fprintf(pFile, 'Iter: %d, Acc: %f, lr: %f \n',iterCount, bestAcc, ...
 						baseLr);
 	disp(sprintf('BestLr: %f',baseLr));
 	if idx==1 || idx==5
