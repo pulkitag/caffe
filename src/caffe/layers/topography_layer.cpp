@@ -4,6 +4,7 @@
 #include "caffe/layer.hpp"
 #include "caffe/util/imchannel2col.hpp"
 #include "caffe/util/math_functions.hpp"
+#include "caffe/util/filter_kernel.hpp"
 #include "caffe/vision_layers.hpp"
 
 namespace caffe {
@@ -36,6 +37,9 @@ void TopographyLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
 	CHECK_EQ(chHeight_ * chWidth_, channels_ / group_)
 			<< "Number of groups or channels is inappropriate";
 
+
+	smooth_output_ = top_param.smooth_output();
+
   // Handle the parameters: weights and biases.
   // - blobs_[0] holds the filter weights
   if (this->blobs_.size() > 0) {
@@ -46,12 +50,31 @@ void TopographyLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
     // 1 x 1 x kernel height x kernel width
     this->blobs_[0].reset(new Blob<Dtype>(
         1, 1, kernel_h_, kernel_w_));
-    shared_ptr<Filler<Dtype> > weight_filler(GetFiller<Dtype>(
-        this->layer_param_.topography_param().weight_filler()));
-    weight_filler->Fill(this->blobs_[0].get());
-  }
+
+  	if (top_param.is_gaussian_topo()){
+			LOG(INFO)<<"Gaussian Weight init";	
+			Dtype* weights = this->blobs_[0]->mutable_cpu_data();
+			caffe_gaussian_kernel(weights, (Dtype)top_param.gaussian_sd(), 
+							top_param.kernel_size()); 
+		}else{
+			LOG(INFO)<<"Random Weight Init";	
+			shared_ptr<Filler<Dtype> > weight_filler(GetFiller<Dtype>(
+					this->layer_param_.topography_param().weight_filler()));
+			weight_filler->Fill(this->blobs_[0].get());
+		}
+	}
   // Propagate gradients to the parameters (as directed by backward pass).
   this->param_propagate_down_.resize(this->blobs_.size(), true);
+}
+
+template <typename Dtype>
+void TopographyLayer<Dtype>::PrintWeights() const {
+	const Dtype* weight = this->blobs_[0]->cpu_data();
+	int sz = this->blobs_[0]->count();
+	LOG(INFO)<<"Topography Layer Weights " << sz;
+	for (int i=0; i<sz; i++){
+		LOG(INFO) << weight[i] << " ";
+	}
 }
 
 template <typename Dtype>
@@ -74,12 +97,10 @@ void TopographyLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
   height_out_ = height_;
   width_out_  = width_;
 	//The size of channel grid.
-	std::cout << "groups: " << group_ << " pad_w: " << pad_w_ 
-						<< " stride_w_: " << stride_w_ << " \n "; 
+	//std::cout << "groups: " << group_ << " pad_w: " << pad_w_ 
+ 	//					<< " stride_w_: " << stride_w_ << " \n "; 
 	width_col_  = (chWidth_ + 2 * pad_w_ - kernel_w_)/stride_w_ + 1;
 	height_col_ = (chHeight_ + 2 * pad_h_ - kernel_h_)/stride_h_ + 1;
- 	std::cout << "width_col: " << width_col_ << " height_col: " <<
-		height_col_ << "\n"; 
 	for (int top_id = 0; top_id < top->size(); ++top_id) {
     (*top)[top_id]->Reshape(num_, width_col_ * height_col_ * group_ , 
 						height_out_, width_out_);
@@ -109,27 +130,32 @@ void TopographyLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   for (int i = 0; i < bottom.size(); ++i) {
     const Dtype* bottom_data = bottom[i]->cpu_data();
     Dtype* top_data = (*top)[i]->mutable_cpu_data();
-    Dtype* col_data = col_buffer_.mutable_cpu_data();
-    const Dtype* weight = this->blobs_[0]->cpu_data();
-    int top_offset = M_ * N_;  // number of values in an output region / column
-    for (int n = 0; n < num_; ++n) {
-      // im2col transformation: unroll input regions for filtering
-      // into column matrix for multplication.
-           // Take inner products for groups.
-      for (int g = 0; g < group_; ++g) {
-         imchannel2col_cpu(bottom_data + bottom[i]->offset(n) + 
-					 g * height_ *  width_ * channels_ / group_ , 
-			     channels_/group_,
-					 height_, width_, chHeight_, chWidth_, 
-           kernel_h_, kernel_w_, pad_h_, pad_w_, stride_h_, stride_w_,
-           col_data);
-				
-				caffe_cpu_gemm<Dtype>(CblasNoTrans, CblasNoTrans, M_, N_, K_,
-          (Dtype)1., weight, col_data,
-          (Dtype)0., top_data + (*top)[i]->offset(n) + top_offset * g);
+		
+		if (smooth_output_){
+			Dtype* col_data = col_buffer_.mutable_cpu_data();
+			const Dtype* weight = this->blobs_[0]->cpu_data();
+			int top_offset = M_ * N_;  // number of values in an output region / column
+			for (int n = 0; n < num_; ++n) {
+				// im2col transformation: unroll input regions for filtering
+				// into column matrix for multplication.
+						 // Take inner products for groups.
+				for (int g = 0; g < group_; ++g) {
+					 imchannel2col_cpu(bottom_data + bottom[i]->offset(n) + 
+						 g * height_ *  width_ * channels_ / group_ , 
+						 channels_/group_,
+						 height_, width_, chHeight_, chWidth_, 
+						 kernel_h_, kernel_w_, pad_h_, pad_w_, stride_h_, stride_w_,
+						 col_data);
+					
+					caffe_cpu_gemm<Dtype>(CblasNoTrans, CblasNoTrans, M_, N_, K_,
+						(Dtype)1., weight, col_data,
+						(Dtype)0., top_data + (*top)[i]->offset(n) + top_offset * g);
 
-				//Copy data from top_col buffer to top;
-      }
+					//Copy data from top_col buffer to top;
+				}
+			}
+		}else{
+			caffe_copy((*top)[i]->count(), bottom_data, top_data); 
 		}	
   }
 }

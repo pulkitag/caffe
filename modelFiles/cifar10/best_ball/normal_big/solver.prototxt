@@ -1,0 +1,13 @@
+net: "/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/cifar10/best_ball/normal_big/train_test.prototxt" 
+test_iter: 100 
+test_interval: 80000 
+base_lr: 0.00006250 
+lr_policy: "fixed" 
+display: 200 
+max_iter: 80000 
+momentum: 0.900000 
+weight_decay: 0.004000 
+snapshot: 500 
+snapshot_prefix: "/data1/pulkitag/snapshots/cifar10/best_ball/normal_big/snap_round14_lr0.00006250" 
+solver_mode: GPU 
+device_id: 0 

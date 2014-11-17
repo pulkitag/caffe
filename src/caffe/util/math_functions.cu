@@ -420,4 +420,12 @@ void caffe_gpu_rng_gaussian(const int n, const double mu, const double sigma,
       curandGenerateNormalDouble(Caffe::curand_generator(), r, n, mu, sigma));
 }
 
+__device__ int caffe_gpu_modulus(int a, int b){
+	if (a < 0){
+		int q = (-a/b) + 1;
+		return (a + b*q) % b;
+	}else
+		return a % b;	
+}
+
 }  // namespace caffe

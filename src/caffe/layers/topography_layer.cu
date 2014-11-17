@@ -15,26 +15,31 @@ void TopographyLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
   for (int i = 0; i < bottom.size(); ++i) {
     const Dtype* bottom_data = bottom[i]->gpu_data();
     Dtype* top_data = (*top)[i]->mutable_gpu_data();
-    Dtype* col_data = col_buffer_.mutable_gpu_data();
-    const Dtype* weight = this->blobs_[0]->gpu_data();
-    int top_offset = M_ * N_;
-    for (int n = 0; n < num_; ++n) {
-      // Take inner products for groups.
-      for (int g = 0; g < group_; ++g) {
-      // im2col transformation: unroll input regions for filtering
-      // into column matrix for multplication.
-				imchannel2col_gpu(bottom_data + bottom[i]->offset(n) + 
-						g * height_ * width_ * channels_ / group_, 
-						channels_ / group_, height_, width_, chHeight_, chWidth_,
-						kernel_h_, kernel_w_, pad_h_, pad_w_, stride_h_, stride_w_,
-						col_data);
-       
-				caffe_gpu_gemm<Dtype>(CblasNoTrans, CblasNoTrans, M_, N_, K_,
-          (Dtype)1., weight, col_data,
-          (Dtype)0., top_data + (*top)[i]->offset(n) + top_offset * g);
-     		
-			 }
-    }
+    
+		if (smooth_output_){
+			Dtype* col_data = col_buffer_.mutable_gpu_data();
+			const Dtype* weight = this->blobs_[0]->gpu_data();
+			int top_offset = M_ * N_;
+			for (int n = 0; n < num_; ++n) {
+				// Take inner products for groups.
+				for (int g = 0; g < group_; ++g) {
+				// im2col transformation: unroll input regions for filtering
+				// into column matrix for multplication.
+					imchannel2col_gpu(bottom_data + bottom[i]->offset(n) + 
+							g * height_ * width_ * channels_ / group_, 
+							channels_ / group_, height_, width_, chHeight_, chWidth_,
+							kernel_h_, kernel_w_, pad_h_, pad_w_, stride_h_, stride_w_,
+							col_data);
+				 
+					caffe_gpu_gemm<Dtype>(CblasNoTrans, CblasNoTrans, M_, N_, K_,
+						(Dtype)1., weight, col_data,
+						(Dtype)0., top_data + (*top)[i]->offset(n) + top_offset * g);
+					
+				 }
+			}
+		}else{
+			caffe_copy((*top)[i]->count(), bottom_data, top_data); 
+		}
   }
 }
 

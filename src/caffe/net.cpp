@@ -498,6 +498,13 @@ void Net<Dtype>::GetLearningRateAndWeightDecay() {
 }
 
 template <typename Dtype>
+void Net<Dtype>::PrintLayerDebugInfo() const {
+	for (int i = 0; i < layers_.size(); ++i) {
+    layers_[i]->PrintWeights();
+  }
+}
+
+template <typename Dtype>
 Dtype Net<Dtype>::ForwardFromTo(int start, int end) {
   CHECK_GE(start, 0);
   CHECK_LT(end, layers_.size());

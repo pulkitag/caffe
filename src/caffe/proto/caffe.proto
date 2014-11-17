@@ -63,7 +63,7 @@ message NetParameter {
 // NOTE
 // Update the next available ID when you add a new SolverParameter field.
 //
-// SolverParameter next available ID: 33 (last added: test_initialization)
+// SolverParameter next available ID: 34 (last added: print_layer_debug)
 message SolverParameter {
   //////////////////////////////////////////////////////////////////////////////
   // Specifying the train and test networks
@@ -157,6 +157,9 @@ message SolverParameter {
 
   // If false, don't save a snapshot after training finishes.
   optional bool snapshot_after_train = 28 [default = true];
+
+	//Print layer_debug information
+	optional bool print_layer_debug = 33 [default = false];
 }
 
 // A message that stores the solver snapshots
@@ -460,6 +463,7 @@ message EltwiseParameter {
     PROD = 0;
     SUM = 1;
     MAX = 2;
+	SCALE = 3;
   }
   optional EltwiseOp operation = 1 [default = SUM]; // element-wise operation
   repeated float coeff = 2; // blob-wise coefficient for SUM operation
@@ -651,26 +655,28 @@ message SoftmaxParameter {
 
 // Message that stores parameters used by TopographyLayer
 message TopographyParameter {
-  optional uint32 num_output = 1; // The number of outputs for the layer
   // Pad, kernel size, and stride are all given as a single value for equal
   // dimensions in height and width or as Y, X pairs.
-  optional uint32 pad = 2 [default = 1]; // The padding size (equal in Y, X)
-  optional uint32 pad_h = 3 [default = 1]; // The padding height
-  optional uint32 pad_w = 4 [default = 1]; // The padding width
-  optional uint32 kernel_size = 5;// The kernel size (square)
-  optional uint32 kernel_h = 6; // The kernel height
-  optional uint32 kernel_w = 7; // The kernel width
-  optional uint32 group = 8 [default = 1]; // The group size for group conv
-  optional uint32 stride = 9 [default = 1]; // The stride (equal in Y, X)
-  optional uint32 stride_h = 10; // The stride height
-  optional uint32 stride_w = 11; // The stride width
-  optional FillerParameter weight_filler = 12; // The filler for the weight
+  optional uint32 pad = 1 [default = 1]; // The padding size (equal in Y, X)
+  optional uint32 pad_h = 2 [default = 1]; // The padding height
+  optional uint32 pad_w = 3 [default = 1]; // The padding width
+  optional uint32 kernel_size = 4;// The kernel size (square)
+  optional uint32 kernel_h = 5; // The kernel height
+  optional uint32 kernel_w = 6; // The kernel width
+  optional uint32 group = 7 [default = 1]; // The group size for group conv
+  optional uint32 stride = 8 [default = 1]; // The stride (equal in Y, X)
+  optional uint32 stride_h = 9; // The stride height
+  optional uint32 stride_w = 10; // The stride width
+  optional FillerParameter weight_filler = 11; // The filler for the weight
   enum Engine {
     DEFAULT = 0;
     CAFFE = 1;
     CUDNN = 2;
   }
-  optional Engine engine = 13 [default = DEFAULT];
+  optional Engine engine = 12 [default = DEFAULT];
+	optional bool is_gaussian_topo = 14 [default = true];
+	optional float gaussian_sd = 13;
+	optional bool smooth_output = 15 [default = true];
 }
 
 

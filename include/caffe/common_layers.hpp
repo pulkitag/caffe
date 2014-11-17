@@ -169,7 +169,13 @@ class EltwiseLayer : public Layer<Dtype> {
   virtual inline LayerParameter_LayerType type() const {
     return LayerParameter_LayerType_ELTWISE;
   }
-  virtual inline int MinBottomBlobs() const { return 2; }
+  virtual inline int MinBottomBlobs() const { 
+	if (this->layer_param().eltwise_param().operation() == EltwiseParameter_EltwiseOp_SUM)
+		return 1;
+	else
+		return 2;
+	LOG(INFO) << op_; 
+  }
   virtual inline int ExactNumTopBlobs() const { return 1; }
 
  protected:
