@@ -190,6 +190,12 @@ class Layer {
     return LayerParameter_LayerType_Name(type());
   }
 
+	/**
+	 * @breif: Prints the weights of the layers.
+	 *
+	*/
+	virtual inline void PrintWeights() const {};
+
   /**
    * @brief Returns the exact number of bottom blobs required by the layer,
    *        or -1 if no exact number is required.

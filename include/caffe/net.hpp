@@ -147,6 +147,7 @@ class Net {
 
   void set_debug_info(const bool value) { debug_info_ = value; }
 
+	inline void PrintLayerDebugInfo() const;
   // Helpers for Init.
   /**
    * @brief Remove layers that the user specified should be excluded given the current
