@@ -5,6 +5,7 @@ import numpy as np
 import h5py
 import matplotlib.pyplot as plt
 import sys
+import os
 
 def load_images(setName = 'train'):
 	dataPath = '/work4/pulkitag/data_sets/mnist/'
@@ -99,12 +100,16 @@ def check_hdf5(fileName):
     f.close()
 
 if __name__ == "__main__":
-		trainDigits = [2,4,6,7,8,9]
-		valDigits   = [0,1,3,5]
-		numTrain    = int(1e+6)
+		#trainDigits = [2,4,6,7,8,9]
+		#valDigits   = [0,1,3,5]
+		trainDigits = [0,1,2,3,4,5,6,7,8,9]
+		valDigits = [0,1,2,3,4,5,6,7,8,9]
+		numTrain    = int(1e+5)
 		numVal      = int(1e+4)
 		if len(sys.argv) > 1:
 			dirName = sys.argv[1]
+			if not os.path.exists(dirName):
+				os.makedirs(dirName)
 		else:
 			dirName = './'
 
