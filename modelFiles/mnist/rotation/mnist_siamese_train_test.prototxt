@@ -269,7 +269,7 @@ layers {
 
 layers {
   name: "accuracy"
-  type: ACCURACY
+  type: ACCURACY_DIAGONAL
   bottom: "feat2"
   bottom: "rot_label"
   top: "accuracy"
