@@ -217,8 +217,8 @@ def run_experiment(numTrain=1e+6, numVal=1e+4, \
 	expDir = '../rotation_%s/' % expStr
 
 	#Run rotation learning
-	#runFile = expDir + 'train_mnist_siamese.sh'
-	#subprocess.check_call([runFile],shell=True)
+	runFile = expDir + 'train_mnist_siamese.sh'
+	subprocess.check_call([runFile],shell=True)
 
 	#Test Rotations
 	runFile = expDir + 'test_rotations.sh'
