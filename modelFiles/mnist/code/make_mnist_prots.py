@@ -108,11 +108,24 @@ def write_run_file(runFile, solverFile, logFile):
 	give_run_permissions(runFile)
 
 
+def write_run_test_file(runFile, defFile, modelFile,  logFile):
+	with open(runFile,'w') as f:
+		f.write('#!/usr/bin/env sh \n \n')
+		f.write('TOOLS=../../../build/tools \n \n')
+		f.write('GLOG_logtostderr=1 $TOOLS/caffe test')
+		f.write('\t --model=%s' % defFile)
+		f.write('\t --iterations=1000')
+		f.write('\t --gpu=0')
+		f.write('\t --weights=%s' % modelFile)
+		f.write('\t 2>&1 | tee %s \n' % logFile)
+	give_run_permissions(runFile)
+
+
 def write_run_finetune_file(runFile, solverFile, modelFile,  logFile):
 	with open(runFile,'w') as f:
 		f.write('#!/usr/bin/env sh \n \n')
 		f.write('TOOLS=../../../build/tools \n \n')
-		f.write('GLOG_logtostderr=1 $TOOLS/caffe train \n')
+		f.write('GLOG_logtostderr=1 $TOOLS/caffe train ')
 		f.write('\t --solver=%s'  % solverFile)
 		f.write('\t --weights=%s' % modelFile)
 		f.write('\t 2>&1 | tee %s \n' % logFile)
@@ -122,7 +135,7 @@ def write_run_finetune_file(runFile, solverFile, modelFile,  logFile):
 def make_experiment(numTrain=1e+6, numVal=1e+4, \
 				trainDigits = [2, 4, 6, 7, 8, 9], valDigits = [0, 1, 3 ,5]):
 
-	modelIter = 40000
+	modelIter = 50000
 	#Names
 	trainStr, valStr, expStr, snapPrefix = get_names(numTrain, numVal, trainDigits, valDigits) 
 	
@@ -186,4 +199,38 @@ def make_experiment(numTrain=1e+6, numVal=1e+4, \
 	runFineFile = expDir + 'finetune_mnist_rots.sh'
 	write_run_finetune_file(runFineFile, fSolvStr, modelName, 'log_finetune.txt')	
 	
- 
+	#Test file Rotation
+	runFile = expDir + 'test_rotations.sh'
+	rotModel = snapPrefix + '_iter_%d.caffemodel' % modelIter
+	write_run_test_file(runFile,defFile2, rotModel, 'log_test_rot.txt')
+
+	#Test File Mnist	
+	runFile = expDir + 'test_classify.sh'
+	clfModel = snapPrefixFine + '_iter_%d.caffemodel' % modelIter
+	write_run_test_file(runFile, fineFile2, clfModel, 'log_test.txt')
+
+
+def run_experiment(numTrain=1e+6, numVal=1e+4, \
+				trainDigits = [2, 4, 6, 7, 8, 9], valDigits = [0, 1, 3 ,5]):
+
+	trainStr, valStr, expStr, snapPrefix = get_names(numTrain, numVal, trainDigits, valDigits) 
+	expDir = '../rotation_%s/' % expStr
+
+	#Run rotation learning
+	#runFile = expDir + 'train_mnist_siamese.sh'
+	#subprocess.check_call([runFile],shell=True)
+
+	#Test Rotations
+	runFile = expDir + 'test_rotations.sh'
+	subprocess.check_call(['cd %s && ' % expDir + runFile],shell=True)
+
+	#Run fineuning
+	runFineFile = expDir + 'finetune_mnist_rots.sh'
+	subprocess.check_call(['cd %s && ' % expDir + runFineFile],shell=True)
+
+	#Result finetuning
+	runFineFile = expDir + 'test_classify.sh'
+	subprocess.check_call(['cd %s && ' % expDir + runFineFile],shell=True)
+	
+	subprocess.check_call(['cd -'], shell=True)
+
