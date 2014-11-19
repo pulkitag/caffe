@@ -1,47 +1,33 @@
-name: "MNIST_SIAMESE_ROTATION"
+name: "mnist_test"
 layers {
-  name: "mnist"
+  name: "data"
   type: DATA
   top: "data"
   top: "label"
   data_param {
-    source: "/data1/pulkitag/mnist_rotation/leveldb_store/mnist_rotation_train_leveldb"
-    backend: LEVELDB
-    batch_size: 64
-  }
-  transform_param {
+    source: "/data1/pulkitag/mnist/leveldb_store/mnist_test_leveldb"
     scale: 0.00390625
-  }
-  include: { phase: TRAIN }
-}
-layers {
-  name: "mnist"
-  type: DATA
-  top: "data"
-  top: "label"
-  data_param {
-    source: "/data1/pulkitag/mnist_rotation/leveldb_store/mnist_rotation_val_leveldb"
-    backend: LEVELDB
     batch_size: 100
-  }
-  transform_param {
-    scale: 0.00390625
   }
   include: { phase: TEST }
 }
-
-
 layers {
   name: "conv1"
   type: CONVOLUTION
   bottom: "data"
   top: "conv1"
-  blobs_lr: 1
-  blobs_lr: 2
+  blobs_lr: 0
+  blobs_lr: 0
   convolution_param {
     num_output: 20
     kernel_size: 5
     stride: 1
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
   }
 }
 layers {
@@ -60,12 +46,18 @@ layers {
   type: CONVOLUTION
   bottom: "pool1"
   top: "conv2"
-  blobs_lr: 1
-  blobs_lr: 2
+  blobs_lr: 0
+  blobs_lr: 0
   convolution_param {
     num_output: 50
     kernel_size: 5
     stride: 1
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
   }
 }
 layers {
@@ -84,10 +76,16 @@ layers {
   type: INNER_PRODUCT
   bottom: "pool2"
   top: "ip1"
-  blobs_lr: 1
-  blobs_lr: 2
+  blobs_lr: 0
+  blobs_lr: 0
   inner_product_param {
     num_output: 500
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
   }
 }
 layers {
@@ -96,26 +94,31 @@ layers {
   bottom: "ip1"
   top: "ip1"
 }
-layers {
-  name: "ip2"
-  type: INNER_PRODUCT
-  bottom: "ip1"
-  top: "ip2"
-  blobs_lr: 1
-  blobs_lr: 2
-  inner_product_param {
-    num_output: 10
-  }
-}
 
 layers {
   name: "feat"
   type: INNER_PRODUCT
-  bottom: "ip2"
+  bottom: "ip1"
   top: "feat"
   blobs_lr: 1
   blobs_lr: 2
   inner_product_param {
-    num_output: 2
+    num_output: 10
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
   }
 }
+
+layers {
+  name: "accuracy"
+  type: ACCURACY_DIAGONAL
+  bottom: "feat"
+  bottom: "label"
+  top: "accuracy"
+  include: {phase: TEST}
+}
+

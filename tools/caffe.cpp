@@ -185,6 +185,7 @@ int test() {
     }
     LOG(INFO) << output_name << " = " << mean_score << loss_msg_stream.str();
   }
+	caffe_net.PrintLayerDebugInfo();
 
   return 0;
 }

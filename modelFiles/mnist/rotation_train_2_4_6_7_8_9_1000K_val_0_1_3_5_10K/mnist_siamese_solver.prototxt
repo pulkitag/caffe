@@ -20,6 +20,5 @@ display: 100
 max_iter: 50000
 # snapshot intermediate results
 snapshot: 5000
-snapshot_prefix: "/data1/pulkitag/snapshots/mnist_rotation/mnist_rotation"
-# solver mode: CPU or GPU
+snapshot_prefix: "/data1/pulkitag/snapshots/mnist_rotation/exp_train_2_4_6_7_8_9_1000K_val_0_1_3_5_10K/mnist_"# solver mode: CPU or GPU
 solver_mode: GPU

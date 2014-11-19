@@ -2,11 +2,12 @@
 # This script converts the mnist data into lmdb/leveldb format,
 # depending on the value assigned to $BACKEND.
 
-EXAMPLE=examples/mnist
-DATA=data/mnist
+EXAMPLE=/data1/pulkitag/mnist/leveldb_store
+DATA=/work4/pulkitag/data_sets/digits
 BUILD=build/examples/mnist
 
-BACKEND="lmdb"
+#BACKEND="lmdb"
+BACKEND="leveldb"
 
 echo "Creating ${BACKEND}..."
 
