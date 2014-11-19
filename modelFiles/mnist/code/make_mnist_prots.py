@@ -218,11 +218,12 @@ def run_experiment(numTrain=1e+6, numVal=1e+4, \
 
 	#Run rotation learning
 	runFile = expDir + 'train_mnist_siamese.sh'
-	subprocess.check_call([runFile],shell=True)
+	subprocess.check_call(['cd %s && ' % expDir + runFile],shell=True)
 
 	#Test Rotations
 	runFile = expDir + 'test_rotations.sh'
 	subprocess.check_call(['cd %s && ' % expDir + runFile],shell=True)
+
 
 	#Run fineuning
 	runFineFile = expDir + 'finetune_mnist_rots.sh'
