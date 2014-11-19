@@ -1,4 +1,4 @@
-name: "mnist_siamese"
+name: "mnist"
 input: "data"
 input_dim: 1000
 input_dim: 1
