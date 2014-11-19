@@ -1,5 +1,5 @@
-expName = 'topo_top_225_075';
-leveldbNum = 2;
+expName = 'normal_big_100';
+leveldbNum = 1;
 deviceId   = 0;
 
 %Get prms

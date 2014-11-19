@@ -221,7 +221,7 @@ message LayerParameter {
   // line above the enum. Update the next available ID when you add a new
   // LayerType.
   //
-  // LayerType next available ID: 39 (last added: TOPOGRAPHY)
+  // LayerType next available ID: 40 (last added: ACCURACY_DIAGONAL)
   enum LayerType {
     // "NONE" layer type is 0th enum element so that we don't cause confusion
     // by defaulting to an existent LayerType (instead, should usually error if
@@ -229,7 +229,8 @@ message LayerParameter {
     NONE = 0;
     ABSVAL = 35;
     ACCURACY = 1;
-    ARGMAX = 30;
+    ACCURACY_DIAGONAL = 39;
+		ARGMAX = 30;
     BNLL = 2;
     CONCAT = 3;
     CONTRASTIVE_LOSS = 37;
@@ -463,6 +464,7 @@ message EltwiseParameter {
     PROD = 0;
     SUM = 1;
     MAX = 2;
+	SCALE = 3;
   }
   optional EltwiseOp operation = 1 [default = SUM]; // element-wise operation
   repeated float coeff = 2; // blob-wise coefficient for SUM operation

@@ -10,7 +10,7 @@ test_iter: 1000
 # Carry out testing every 1000 training iterations.
 test_interval: 1000
 # The base learning rate, momentum and the weight decay of the network.
-base_lr: 0.01
+base_lr: 0.003
 momentum: 0.9
 weight_decay: 0.0005
 gamma: 0.1
@@ -26,6 +26,4 @@ snapshot: 10000
 snapshot_prefix: "/data1/pulkitag/snapshots/my_caffenet/topo_fc7_lr/caffenet_topo_fc7_lr"
 # solver mode: CPU or GPU
 solver_mode: GPU
-device_id: 1
 print_layer_debug: true
-debug_info: true
