@@ -48,6 +48,20 @@ def modify_snapshot_prefix(lines, prefix):
 			lines[i] = newLine
 			break
 	return lines
+
+
+def modify_solver_file(lines, baseLr=None, weightDecay=None, net=None, snapPrefix=None):
+	if not snapPrefix==None:
+		modify_snapshot_prefix(lines, snapPrefix)
+
+	for (i,l) in enumerate(lines):
+		if not baseLr==None and 'base_lr' in l:
+			lines[i] = 'base_lr: %f' % baseLr
+		if not weightDecay==None and 'weight_decay' in l:
+			lines[i] = 'weight_decay: %f' % weight_decay
+		if not net==None and 'net:' in l:
+			lines[i] = 'net: "%s"' % net
+	return lines
 		
 	
 def get_leveldb_names(trainStr, valStr):
@@ -84,10 +98,10 @@ def get_names(numTrain, numVal, trainDigits, valDigits):
 	return trainStr, valStr, expStr, snapPrefix
 
 
-def h52db(h5Name, dbName):
+def h52db_siamese(h5Name, dbName):
 	print "Creating Leveldb from " + h5Name
 	if not os.path.exists(dbName):
-		args = ['../../../build/tools/hdf52leveldb.bin %s %s' % (h5Name, dbName)]
+		args = ['../../../build/tools/hdf52leveldb_siamese.bin %s %s' % (h5Name, dbName)]
 		subprocess.check_call(args,shell=True)
 	else:
 		print "Leveldb: %s already exists, skipping conversion." % dbName	
@@ -146,8 +160,8 @@ def make_experiment(numTrain=1e+6, numVal=1e+4, \
 	trainDb, valDb = get_leveldb_names(trainStr, valStr)
 
 	#Convert HDF% into leveldb
-	h52db(trainH5, trainDb)
-	h52db(valH5, valDb)
+	h52db_siamese(trainH5, trainDb)
+	h52db_siamese(valH5, valDb)
 	
 	expDir = '../rotation_%s/' % expStr
 	baseDir = '../base_files/'	

@@ -5,7 +5,7 @@ layers {
   top: "data"
   top: "label"
   data_param {
-    source: "/data1/pulkitag/mnist/leveldb_store/mnist_train_numcl10_leveldb"
+    source: "/data1/pulkitag/mnist/leveldb_store/mnist_train_leveldb"
     scale: 0.00390625
     batch_size: 64
   }
@@ -28,8 +28,8 @@ layers {
   type: CONVOLUTION
   bottom: "data"
   top: "conv1"
-  blobs_lr: 1
-  blobs_lr: 2
+  blobs_lr: 0
+  blobs_lr: 0
   convolution_param {
     num_output: 20
     kernel_size: 5
@@ -58,8 +58,8 @@ layers {
   type: CONVOLUTION
   bottom: "pool1"
   top: "conv2"
-  blobs_lr: 1
-  blobs_lr: 2
+  blobs_lr: 0
+  blobs_lr: 0
   convolution_param {
     num_output: 50
     kernel_size: 5
@@ -88,8 +88,8 @@ layers {
   type: INNER_PRODUCT
   bottom: "pool2"
   top: "ip1"
-  blobs_lr: 1
-  blobs_lr: 2
+  blobs_lr: 0
+  blobs_lr: 0
   inner_product_param {
     num_output: 500
     weight_filler {

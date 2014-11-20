@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use('Agg')
 import sys
 import os
 import numpy as np
@@ -5,6 +7,7 @@ import pickle
 import caffe
 import scipy.misc as scm
 import random
+import matplotlib.pyplot as plt
 
 def load_test_images():
 	dataPath  = '/data1/pulkitag/mnist/raw/'
@@ -16,6 +19,21 @@ def load_test_images():
 	
 	im = im /256.0
 	return im, label
+
+
+def find_matches(x,y):
+	'''
+	FInd the indexex of y that best match elements on x
+	'''
+	assert np.ndim(x) == np.ndim(y) and np.ndim(x)==4
+	N = x.shape[0]
+	minIdx = []
+	for i in range(N):
+		diff = y - x[i]
+		diff = np.sum(diff*diff, axis=(1,2,3))
+		minIdx.append(diff.argmin())
+	
+	return minIdx
 
 
 def rotate_images(im, randomSample=False, N=0):
@@ -122,6 +140,24 @@ def test_classify(modelFile, defFile):
 	print "Accuracy is: %f" % acc
 
 
+def vis_rot_embedding(imRef, imTrRot1, imTrRot2, imRes):
+	N = imRef.shape[0]
+	outFile = '/data1/pulkitag/mnist_rotation/vis/tmp1/eg%d.png'
+	for i in range(N):
+		fig = plt.figure()
+		plt.subplot(4,1,1)
+		plt.imshow(imRef[i])
+		plt.subplot(4,1,2)
+		plt.imshow(imTrRot1[i]) 
+ 		plt.subplot(4,1,3)
+		plt.imshow(imTrRot2[i])
+		plt.subplot(4,1,4)
+		plt.imshow(imRes[i])
+		#plt.colormap('gray')
+		plt.savefig(outFile % i, bbox_inches='tight')
+		plt.close(fig)
+
+	
 def test_rots_space(modelFile, defFile):
 	'''
 	Generates rotated versions of images to test if:
@@ -151,6 +187,13 @@ def test_rots_space(modelFile, defFile):
 	featTrRot1    = get_features(net, imTrRot1, layerName)
 	featTrRot2    = get_features(net, imTrRot2, layerName)
 	featOtherRot  = get_features(net, imOtherRot, layerName)
+	print featOtherRot.shape
 
+	print "Finding Matches"
 	featEmbed = featRef + featTrRot1 - featTrRot2
-	#idxs      = find_matches(featEmbed, featOtherRot)	
+	idxs      = find_matches(featEmbed, featOtherRot)	
+	imChoice  = np.array([imOtherRot[i] for i in idxs])
+	
+	print "Saving Figures"
+	vis_rot_embedding(imRef, imTrRot1, imTrRot2, imChoice)
+
