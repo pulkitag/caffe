@@ -2,6 +2,13 @@ from subprocess import Popen, PIPE
 import subprocess
 import os
 import sys
+import socket
+
+HOSTNAME = socket.gethostname()
+if HOSTNAME in ['c82','c83','c84']:
+	TOOLS_DIR = '/home/eecs/pulkitag/Research/codes/codes/projCaffe/caffe-v2-2/build/tools/'
+else:
+	TOOLS_DIR = '/work4/pulkitag-code/pkgs/projCaffe/caffe-v2-2/build/tools/'
 
 def modify_source(lines, traindb, testdb):
 	count = 0
@@ -44,9 +51,23 @@ def read_file(fileName):
 def modify_snapshot_prefix(lines, prefix):
 	for (i,l) in enumerate(lines):
 		if 'snapshot_prefix' in l:
-			newLine = 'snapshot_prefix: "%s"' % prefix
+			newLine = 'snapshot_prefix: "%s" \n' % prefix
 			lines[i] = newLine
 			break
+	return lines
+
+
+def modify_solver_file(lines, baseLr=None, weightDecay=None, net=None, snapPrefix=None):
+	if not snapPrefix==None:
+		modify_snapshot_prefix(lines, snapPrefix)
+
+	for (i,l) in enumerate(lines):
+		if not baseLr==None and 'base_lr' in l:
+			lines[i] = 'base_lr: %f \n' % baseLr
+		if not weightDecay==None and 'weight_decay' in l:
+			lines[i] = 'weight_decay: %f \n' % weight_decay
+		if not net==None and 'net:' in l:
+			lines[i] = 'net: "%s" \n' % net
 	return lines
 		
 	
@@ -64,6 +85,23 @@ def get_hdf5_names(trainStr, valStr):
 	return trainH5, valH5
 
 
+def get_snapshot_prefix(expStr, baseNum, isRot=True):
+	if isRot:
+		snapDir ='/data1/pulkitag/snapshots/mnist_rotation/base%d/exp_%s/'
+	else:
+		snapDir = '/data1/pulkitag/snapshots/mnist/finetune_all_rot/base%d/exp_%s/'
+	snapDir = snapDir % (baseNum, expStr)
+	
+	if not os.path.exists(snapDir):
+		os.makedirs(snapDir)
+
+	if isRot:
+		snapPrefix = snapDir + 'mnist_'
+	else:
+		snapPrefix = snapDir + 'mnist_finetune_all_rot'
+	return snapPrefix
+
+
 def get_names(numTrain, numVal, trainDigits, valDigits):
 	trainStr = ''
 	valStr   = ''
@@ -75,19 +113,13 @@ def get_names(numTrain, numVal, trainDigits, valDigits):
 	trainStr = trainStr + '%dK' % int(numTrain/1000)
 	valStr   = valStr   + '%dK' % int(numVal/1000)
 	expStr = 'train_%s_val_%s' % (trainStr, valStr)
-	
-	snapDir = '/data1/pulkitag/snapshots/mnist_rotation/exp_%s/' % expStr
-	if not os.path.exists(snapDir):
-		os.makedirs(snapDir)
-	snapPrefix = snapDir + 'mnist_'
-
-	return trainStr, valStr, expStr, snapPrefix
+	return trainStr, valStr, expStr
 
 
-def h52db(h5Name, dbName):
+def h52db_siamese(h5Name, dbName):
 	print "Creating Leveldb from " + h5Name
 	if not os.path.exists(dbName):
-		args = ['../../../build/tools/hdf52leveldb.bin %s %s' % (h5Name, dbName)]
+		args = ['%shdf52leveldb_siamese.bin %s %s' % (TOOLS_DIR, h5Name, dbName)]
 		subprocess.check_call(args,shell=True)
 	else:
 		print "Leveldb: %s already exists, skipping conversion." % dbName	
@@ -101,7 +133,7 @@ def give_run_permissions(fileName):
 def write_run_file(runFile, solverFile, logFile):
 	with open(runFile,'w') as f:
 		f.write('#!/usr/bin/env sh \n \n')
-		f.write('TOOLS=../../../build/tools \n \n')
+		f.write('TOOLS=%s \n \n' % TOOLS_DIR)
 		f.write('GLOG_logtostderr=1 $TOOLS/caffe train')
 		f.write('\t --solver=%s' % solverFile)
 		f.write('\t 2>&1 | tee %s \n' % logFile)
@@ -111,7 +143,7 @@ def write_run_file(runFile, solverFile, logFile):
 def write_run_test_file(runFile, defFile, modelFile,  logFile):
 	with open(runFile,'w') as f:
 		f.write('#!/usr/bin/env sh \n \n')
-		f.write('TOOLS=../../../build/tools \n \n')
+		f.write('TOOLS=%s \n \n' % TOOLS_DIR)
 		f.write('GLOG_logtostderr=1 $TOOLS/caffe test')
 		f.write('\t --model=%s' % defFile)
 		f.write('\t --iterations=1000')
@@ -124,7 +156,7 @@ def write_run_test_file(runFile, defFile, modelFile,  logFile):
 def write_run_finetune_file(runFile, solverFile, modelFile,  logFile):
 	with open(runFile,'w') as f:
 		f.write('#!/usr/bin/env sh \n \n')
-		f.write('TOOLS=../../../build/tools \n \n')
+		f.write('TOOLS=%s \n \n' % TOOLS_DIR)
 		f.write('GLOG_logtostderr=1 $TOOLS/caffe train ')
 		f.write('\t --solver=%s'  % solverFile)
 		f.write('\t --weights=%s' % modelFile)
@@ -133,11 +165,12 @@ def write_run_finetune_file(runFile, solverFile, modelFile,  logFile):
 
 
 def make_experiment(numTrain=1e+6, numVal=1e+4, \
-				trainDigits = [2, 4, 6, 7, 8, 9], valDigits = [0, 1, 3 ,5]):
+				trainDigits = [2, 4, 6, 7, 8, 9], \
+				valDigits = [0, 1, 3 ,5], baseNum=1):
 
 	modelIter = 50000
 	#Names
-	trainStr, valStr, expStr, snapPrefix = get_names(numTrain, numVal, trainDigits, valDigits) 
+	trainStr, valStr, expStr  = get_names(numTrain, numVal, trainDigits, valDigits) 
 	
 	#Names of HDF5 files
 	trainH5, valH5 = get_hdf5_names(trainStr, valStr)
@@ -146,54 +179,55 @@ def make_experiment(numTrain=1e+6, numVal=1e+4, \
 	trainDb, valDb = get_leveldb_names(trainStr, valStr)
 
 	#Convert HDF% into leveldb
-	h52db(trainH5, trainDb)
-	h52db(valH5, valDb)
+	h52db_siamese(trainH5, trainDb)
+	h52db_siamese(valH5, valDb)
 	
-	expDir = '../rotation_%s/' % expStr
-	baseDir = '../base_files/'	
+	expDir = '../exp_base%d/rotation_%s/' % (baseNum, expStr)
+	baseDir = '../base_files%d/' % baseNum	
 	if not os.path.exists(expDir):
 		os.makedirs(expDir)
 	
-	defStr  = 'mnist_siamese_train_test.prototxt'
+	siameseDefStr  = 'mnist_siamese_train_test.prototxt'
+	fineDefStr     = 'mnist_train_test.prototxt'
 	fineStr = 'mnist_train_test_finetune.prototxt' 	
+	solvStr = 'mnist_solver.prototxt'
 
 	#Rotation Training Net-Def
-	defFile1 = baseDir + defStr
-	defFile2 = expDir + defStr
+	defFile1 = baseDir + siameseDefStr
+	defFile2 = expDir +  siameseDefStr
 	defLines = read_file(defFile1)
 	defLines = modify_source(defLines, trainDb, valDb)
 	write_file(defLines, defFile2) 
 
 	#Finetune Net-Def
-	fineFile1 = baseDir + fineStr
-	fineFile2 = expDir + fineStr	
+	fineFile1 = baseDir + fineDefStr
+	fineFile2 = expDir + fineDefStr	
 	fineLines = read_file(fineFile1)
 	write_file(fineLines, fineFile2)
 
 	#Rotation Trainin Solver File
-	solvStr = 'mnist_siamese_solver.prototxt'
 	solvFile1 = baseDir + solvStr
-	solvFile2 = expDir  + solvStr	
+	solvFile2 = expDir  + 'mnist_siamese_solver.prototxt'
 	solvLines = read_file(solvFile1)
-	solvLines = modify_snapshot_prefix(solvLines, snapPrefix)
+	snapPrefix = get_snapshot_prefix(expStr, baseNum, True)
+	solvLines = modify_solver_file(solvLines, snapPrefix=snapPrefix,\
+								net=siameseDefStr) 
 	modelName = snapPrefix + '_iter_%d.caffemodel' % modelIter
 	write_file(solvLines, solvFile2)
 
-	#Finetune Solver File
-	fSolvStr = 'mnist_finetune_solver.prototxt'
-	fSolvFile1 = baseDir + fSolvStr
-	fSolvFile2 = expDir  + fSolvStr
-	snapDir    = '/data1/pulkitag/snapshots/mnist/finetune_rot/exp_%s/' % expStr
-	if not os.path.exists(snapDir):
-		os.makedirs(snapDir)		
-	snapPrefixFine = snapDir + 'mnist_finetune_rot'
-	fSolvLines = read_file(fSolvFile1)
-	fSolvLines = modify_snapshot_prefix(fSolvLines, snapPrefixFine)
-	write_file(fSolvLines, fSolvFile2)
-
 	#Run file for Rotation training
 	runFile = expDir + 'train_mnist_siamese.sh'
-	write_run_file(runFile, solvStr, 'log.txt')
+	write_run_file(runFile, 'mnist_siamese_solver.prototxt', 'log.txt')
+	
+	#Finetune Solver File
+	fSolvStr = 'mnist_finetune_solver.prototxt'
+	fSolvFile1 = baseDir + solvStr
+	fSolvFile2 = expDir  + fSolvStr
+	snapPrefixFine = get_snapshot_prefix(expStr, baseNum, False)
+	fSolvLines = read_file(fSolvFile1)
+	fSolvLines = modify_solver_file(fSolvLines,\
+						net=fineDefStr, snapPrefix=snapPrefixFine, baseLr=0.001)
+	write_file(fSolvLines, fSolvFile2)
 
 	#Run file for fine-tuning
 	runFineFile = expDir + 'finetune_mnist_rots.sh'
@@ -211,27 +245,25 @@ def make_experiment(numTrain=1e+6, numVal=1e+4, \
 
 
 def run_experiment(numTrain=1e+6, numVal=1e+4, \
-				trainDigits = [2, 4, 6, 7, 8, 9], valDigits = [0, 1, 3 ,5]):
+				trainDigits = [2, 4, 6, 7, 8, 9], \
+			  valDigits = [0, 1, 3 ,5], baseNum=1):
 
-	trainStr, valStr, expStr, snapPrefix = get_names(numTrain, numVal, trainDigits, valDigits) 
-	expDir = '../rotation_%s/' % expStr
+	trainStr, valStr, expStr  = get_names(numTrain, numVal, trainDigits, valDigits) 
+	expDir = '../exp_base%d/rotation_%s/' % (baseNum, expStr)
 
 	#Run rotation learning
-	runFile = expDir + 'train_mnist_siamese.sh'
+	runFile = './train_mnist_siamese.sh'
 	subprocess.check_call(['cd %s && ' % expDir + runFile],shell=True)
 
 	#Test Rotations
-	runFile = expDir + 'test_rotations.sh'
+	runFile = './test_rotations.sh'
 	subprocess.check_call(['cd %s && ' % expDir + runFile],shell=True)
 
-
 	#Run fineuning
-	runFineFile = expDir + 'finetune_mnist_rots.sh'
+	runFineFile = './finetune_mnist_rots.sh'
 	subprocess.check_call(['cd %s && ' % expDir + runFineFile],shell=True)
 
 	#Result finetuning
-	runFineFile = expDir + 'test_classify.sh'
+	runFineFile =  './test_classify.sh'
 	subprocess.check_call(['cd %s && ' % expDir + runFineFile],shell=True)
-	
-	subprocess.check_call(['cd -'], shell=True)
 
