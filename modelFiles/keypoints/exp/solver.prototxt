@@ -2,7 +2,7 @@
 # then another factor of 10 after 10 more epochs (5000 iters)
 
 # The train/test net protocol buffer definition
-net: "caffenet_full.prototxt"
+net: "caffenet_siamese.prototxt"
 # test_iter specifies how many forward passes the test should carry out.
 # In the case of CIFAR10, we have test batch size 100 and 100 test iterations,
 # covering the full 10,000 testing images.
@@ -23,7 +23,7 @@ display: 20
 max_iter: 310000
 # snapshot intermediate results
 snapshot: 10000
-snapshot_prefix: "/scratch/pulkitag/snapshots/caffenet_conv7_fc2048_op2_coeff0.1/caffenet_conv7_fc2048_op2_coeff0.1"
+snapshot_prefix: "/data1/pulkitag/snapshots/keypoints/keypoints_siamese"
 # solver mode: CPU or GPU
 solver_mode: GPU
-print_layer_debug: true
+device_id: 1

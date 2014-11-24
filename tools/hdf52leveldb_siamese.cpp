@@ -32,37 +32,47 @@ int main(int argc, char** argv){
 	std::string filePath(argv[1]);
 	std::cout << filePath << "\n";
 	const H5std_string fileName(filePath);
-	const H5std_string dataIm1("images");
+	const H5std_string dataIm1("images1");
+	const H5std_string dataIm2("images2");
 	const H5std_string dataLbl("labels");
 
 	//Load the daasets
 	H5::H5File file(fileName, H5F_ACC_RDONLY);
 	H5::DataSet im1 = file.openDataSet(dataIm1);
+	H5::DataSet im2 = file.openDataSet(dataIm2);
 	H5::DataSet lbl = file.openDataSet(dataLbl);
 
 	//Check Type
+	hid_t dt = H5Tcopy(H5T_STD_U8LE);
 	H5T_class_t type_class = im1.getTypeClass();	
 	assert(type_class == H5T_NATIVE_UCHAR);
+	type_class = im2.getTypeClass();	
+	assert(type_class == H5T_Integer);
 	type_class = lbl.getTypeClass();	
-	assert(type_class == H5T_NATIVE_UCHAR);
+	assert(type_class == H5T_Integer);
 
 	//Get dimensions
 	int ndims;
 	unsigned long N,imsz;
 	H5::DataSpace dataspace1    = im1.getSpace();
+	H5::DataSpace dataspace2    = im2.getSpace();
 	H5::DataSpace dataspaceLbl  = lbl.getSpace();
 	hsize_t dims_out[1];
 	ndims = dataspace1.getSimpleExtentDims( dims_out, NULL);
 	imsz = (unsigned long)dims_out[0];
+	ndims = dataspace2.getSimpleExtentDims( dims_out, NULL);
+	assert(imsz==(unsigned long)dims_out[0]);
 	ndims = dataspaceLbl.getSimpleExtentDims( dims_out, NULL);
 	N     = (unsigned long)dims_out[0];
 	assert(imsz == rows * cols * N);
 	std::cout << "Num Images: " << N << " \n";
 
+
 	//Define memspaces
 	hsize_t memDims[1];
 	memDims[0] = imsz;
 	H5::DataSpace memspace1(1, memDims);
+	H5::DataSpace memspace2(1, memDims);
 	memDims[0] = N;
 	H5::DataSpace memspaceLbl(1, memDims);
 
@@ -85,7 +95,7 @@ int main(int argc, char** argv){
 
   // Storing to db
 	int Nr = rows * cols;
-  unsigned char* pixels = new unsigned char[Nr];
+  unsigned char* pixels = new unsigned char[2 * Nr];
 	unsigned char labels;
   int count = 0;
 	unsigned long num_items = N;
@@ -94,15 +104,16 @@ int main(int argc, char** argv){
   std::string value;
 
   caffe::Datum datum;
-  datum.set_channels(1);
+  datum.set_channels(2);
   datum.set_height(rows);
   datum.set_width(cols);
   LOG(INFO) << "A total of " << num_items << " items.";
   LOG(INFO) << "Rows: " << rows << " Cols: " << cols;
   for (int item_id = 0; item_id < num_items; ++item_id) {
     read_data(im1, dataspace1, memspace1, pixels, item_id, Nr);
+    read_data(im2, dataspace2, memspace2, pixels + Nr, item_id, Nr);
     read_data(lbl, dataspaceLbl, memspaceLbl, &labels, item_id, 1);
-		datum.set_data(pixels, rows * cols);
+		datum.set_data(pixels, 2 * rows * cols);
     datum.set_label(labels);
     snprintf(key_cstr, kMaxKeyLength, "%08d", item_id);
     datum.SerializeToString(&value);

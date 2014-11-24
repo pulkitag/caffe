@@ -1,28 +1,10 @@
-name: "mnist_train_test"
-layers {
-  name: "data"
-  type: DATA
-  top: "data"
-  top: "label"
-  data_param {
-    source: "/data1/pulkitag/mnist/leveldb_store/mnist_train_numcl10_leveldb"
-    scale: 0.00390625
-    batch_size: 64
-  }
-  include: { phase: TRAIN }
-}
-layers {
-  name: "data"
-  type: DATA
-  top: "data"
-  top: "label"
-  data_param {
-    source: "/data1/pulkitag/mnist/leveldb_store/mnist_test_leveldb"
-    scale: 0.00390625
-    batch_size: 100
-  }
-  include: { phase: TEST }
-}
+name: "mnist_siamese"
+input: "data"
+input_dim: 10000
+input_dim: 1
+input_dim: 28
+input_dim: 28
+
 layers {
   name: "conv1"
   type: CONVOLUTION
@@ -34,12 +16,6 @@ layers {
     num_output: 20
     kernel_size: 5
     stride: 1
-    weight_filler {
-      type: "xavier"
-    }
-    bias_filler {
-      type: "constant"
-    }
   }
 }
 layers {
@@ -64,12 +40,6 @@ layers {
     num_output: 50
     kernel_size: 5
     stride: 1
-    weight_filler {
-      type: "xavier"
-    }
-    bias_filler {
-      type: "constant"
-    }
   }
 }
 layers {
@@ -92,12 +62,6 @@ layers {
   blobs_lr: 2
   inner_product_param {
     num_output: 500
-    weight_filler {
-      type: "xavier"
-    }
-    bias_filler {
-      type: "constant"
-    }
   }
 }
 layers {
@@ -124,20 +88,3 @@ layers {
     }
   }
 }
-
-layers {
-  name: "accuracy"
-  type: ACCURACY
-  bottom: "feat"
-  bottom: "label"
-  top: "accuracy"
-  include: {phase: TEST}
-}
-layers {
-  name: "loss"
-  type: SOFTMAX_LOSS
-  bottom: "feat"
-  bottom: "label"
-  top: "loss"
-}
-

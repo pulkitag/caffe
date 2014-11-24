@@ -25,50 +25,46 @@ int main(int argc, char** argv){
 	}
 
 	int rows, cols;
-	rows = 28;
-	cols = 28;
+	rows = 256;
+	cols = 256;
 	//std::string dataPath = "/work4/pulkitag/data_sets/digits/";
 	//std::string filePath = dataPath + "mnist_train.hdf5";
 	std::string filePath(argv[1]);
 	std::cout << filePath << "\n";
 	const H5std_string fileName(filePath);
-	const H5std_string dataIm1("images");
-	const H5std_string dataLbl("labels");
+	const H5std_string dataIm1("images1");
+	const H5std_string dataIm2("images2");
 
 	//Load the daasets
 	H5::H5File file(fileName, H5F_ACC_RDONLY);
 	H5::DataSet im1 = file.openDataSet(dataIm1);
-	H5::DataSet lbl = file.openDataSet(dataLbl);
+	H5::DataSet im2 = file.openDataSet(dataIm2);
 
 	//Check Type
+	hid_t dt = H5Tcopy(H5T_STD_U8LE);
 	H5T_class_t type_class = im1.getTypeClass();	
 	assert(type_class == H5T_NATIVE_UCHAR);
-	type_class = lbl.getTypeClass();	
-	assert(type_class == H5T_NATIVE_UCHAR);
+	type_class = im2.getTypeClass();	
+	assert(type_class == H5T_Integer);
 
 	//Get dimensions
 	int ndims;
 	unsigned long N,imsz;
 	H5::DataSpace dataspace1    = im1.getSpace();
-	H5::DataSpace dataspaceLbl  = lbl.getSpace();
+	H5::DataSpace dataspace2    = im2.getSpace();
 	hsize_t dims_out[1];
 	ndims = dataspace1.getSimpleExtentDims( dims_out, NULL);
 	imsz = (unsigned long)dims_out[0];
-	ndims = dataspaceLbl.getSimpleExtentDims( dims_out, NULL);
-	N     = (unsigned long)dims_out[0];
-	assert(imsz == rows * cols * N);
-	std::cout << "Num Images: " << N << " \n";
+	ndims = dataspace2.getSimpleExtentDims( dims_out, NULL);
+	assert(imsz==(unsigned long)dims_out[0]);
 
 	//Define memspaces
 	hsize_t memDims[1];
 	memDims[0] = imsz;
 	H5::DataSpace memspace1(1, memDims);
-	memDims[0] = N;
-	H5::DataSpace memspaceLbl(1, memDims);
-
+	H5::DataSpace memspace2(1, memDims);
 	
 	//leveldb
-	//std::string db_path = dataPath + "mnist_leveldb";
 	std::string db_path(argv[2]);
   leveldb::DB* db;
   leveldb::Options options;
@@ -84,27 +80,26 @@ int main(int argc, char** argv){
   batch = new leveldb::WriteBatch();
 
   // Storing to db
-	int Nr = rows * cols;
-  unsigned char* pixels = new unsigned char[Nr];
-	unsigned char labels;
+	int Nr = rows * cols *3;
+  unsigned char* pixels = new unsigned char[2 * Nr];
   int count = 0;
-	unsigned long num_items = N;
+	assert(imsz % Nr == 0);
+	unsigned long num_items = imsz / Nr;
   const int kMaxKeyLength = 10;
   char key_cstr[kMaxKeyLength];
   std::string value;
 
   caffe::Datum datum;
-  datum.set_channels(1);
+  datum.set_channels(2 * 3);
   datum.set_height(rows);
   datum.set_width(cols);
   LOG(INFO) << "A total of " << num_items << " items.";
   LOG(INFO) << "Rows: " << rows << " Cols: " << cols;
   for (int item_id = 0; item_id < num_items; ++item_id) {
     read_data(im1, dataspace1, memspace1, pixels, item_id, Nr);
-    read_data(lbl, dataspaceLbl, memspaceLbl, &labels, item_id, 1);
-		datum.set_data(pixels, rows * cols);
-    datum.set_label(labels);
-    snprintf(key_cstr, kMaxKeyLength, "%08d", item_id);
+    read_data(im2, dataspace2, memspace2, pixels + Nr, item_id, Nr);
+		datum.set_data(pixels, 2 * Nr);
+    snprintf(key_cstr, kMaxKeyLength, "%09d", item_id);
     datum.SerializeToString(&value);
     std::string keystr(key_cstr);
 
@@ -126,6 +121,11 @@ int main(int argc, char** argv){
 		LOG(ERROR) << "Processed " << count << " files.";
   }
   delete pixels;
+	//H5Sclose(dataspace1);
+	//H5Sclose(dataspace2);
+  //H5Dclose(im1);
+  //H5Dclose(im2);
+	//H5Fclose(file);
 	return 0;
 }
 

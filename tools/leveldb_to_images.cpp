@@ -16,7 +16,7 @@ void write_image(std::string file_name, float* data, int count);
 int main(int argc, char** argv){
 
 	if (argc < 2){
-		std::cout << "Usage: ./read_leveldb dbDirectoryName numExamples(optional)" <<std::endl;
+		std::cout << "Usage: ./leveldb_to_images.bin dbDirectoryName numExamples(optional)" <<std::endl;
 		return 0;
 	}
 	int maxCount,count,countFlag;
@@ -95,10 +95,10 @@ int main(int argc, char** argv){
 
 void write_image(std::string file_name, float* data, int count){
 
-	std::ofstream fid;
-	fid.open(file_name.c_str(), std::ofstream::out);
+	FILE* fid;
+	fid = std::fopen(file_name.c_str(), "w");
 	for(int i=0; i<count; i++)
-		fid << data[i] << "\t"; 
+		std::fprintf(fid, "%f \n", data[i]); 
 	
-	fid.close();
+	std::fclose(fid);
 }

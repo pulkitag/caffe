@@ -24,9 +24,9 @@ def load_images(setName = 'train'):
 def make_rotations(im, N, outFile, numBins=20):
     bins = np.linspace(-180,180,numBins,endpoint=False)
     fid  = h5py.File(outFile,'w')
-    imSet1 = fid.create_dataset("/images1", (N*28*28,), dtype='i1')
-    imSet2 = fid.create_dataset("/images2", (N*28*28,), dtype='i1')
-    labels = fid.create_dataset("/labels",  (N,),       dtype='i1')
+    imSet1 = fid.create_dataset("/images1", (N*28*28,), dtype='u1')
+    imSet2 = fid.create_dataset("/images2", (N*28*28,), dtype='u1')
+    labels = fid.create_dataset("/labels",  (N,),       dtype='u1')
     theta1 = fid.create_dataset("/theta1",  (N,),       dtype='f')
     theta2 = fid.create_dataset("/theta2",  (N,),       dtype='f')
     
@@ -100,10 +100,10 @@ def check_hdf5(fileName):
     f.close()
 
 if __name__ == "__main__":
-		#trainDigits = [2,4,6,7,8,9]
-		#valDigits   = [0,1,3,5]
-		trainDigits = [0,1,2,3,4,5,6,7,8,9]
-		valDigits = [0,1,2,3,4,5,6,7,8,9]
+		trainDigits = [2,4,6,7,8,9]
+		valDigits   = [0,1,3,5]
+		#trainDigits = [0,1,2,3,4,5,6,7,8,9]
+		#valDigits = [0,1,2,3,4,5,6,7,8,9]
 		numTrain    = int(1e+5)
 		numVal      = int(1e+4)
 		if len(sys.argv) > 1:

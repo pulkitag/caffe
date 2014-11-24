@@ -13,7 +13,7 @@
 
 #include "caffe/proto/caffe.pb.h"
 void read_data(H5::DataSet& dataset, H5::DataSpace dataspace,
-						 H5::DataSpace memspace, unsigned char* data_out, 
+						 H5::DataSpace memspace, float* data_out, 
 						unsigned long offset, unsigned long nx );
 
 
@@ -24,45 +24,30 @@ int main(int argc, char** argv){
 		return 1;
 	}
 
-	int rows, cols;
-	rows = 28;
-	cols = 28;
-	//std::string dataPath = "/work4/pulkitag/data_sets/digits/";
-	//std::string filePath = dataPath + "mnist_train.hdf5";
+	int labelSz = 9;
 	std::string filePath(argv[1]);
 	std::cout << filePath << "\n";
 	const H5std_string fileName(filePath);
-	const H5std_string dataIm1("images");
 	const H5std_string dataLbl("labels");
 
 	//Load the daasets
 	H5::H5File file(fileName, H5F_ACC_RDONLY);
-	H5::DataSet im1 = file.openDataSet(dataIm1);
 	H5::DataSet lbl = file.openDataSet(dataLbl);
 
 	//Check Type
-	H5T_class_t type_class = im1.getTypeClass();	
-	assert(type_class == H5T_NATIVE_UCHAR);
-	type_class = lbl.getTypeClass();	
+	H5T_class_t type_class = lbl.getTypeClass();	
 	assert(type_class == H5T_NATIVE_UCHAR);
 
 	//Get dimensions
 	int ndims;
-	unsigned long N,imsz;
-	H5::DataSpace dataspace1    = im1.getSpace();
+	unsigned long N;
 	H5::DataSpace dataspaceLbl  = lbl.getSpace();
 	hsize_t dims_out[1];
-	ndims = dataspace1.getSimpleExtentDims( dims_out, NULL);
-	imsz = (unsigned long)dims_out[0];
 	ndims = dataspaceLbl.getSimpleExtentDims( dims_out, NULL);
 	N     = (unsigned long)dims_out[0];
-	assert(imsz == rows * cols * N);
-	std::cout << "Num Images: " << N << " \n";
-
+	
 	//Define memspaces
 	hsize_t memDims[1];
-	memDims[0] = imsz;
-	H5::DataSpace memspace1(1, memDims);
 	memDims[0] = N;
 	H5::DataSpace memspaceLbl(1, memDims);
 
@@ -84,27 +69,28 @@ int main(int argc, char** argv){
   batch = new leveldb::WriteBatch();
 
   // Storing to db
-	int Nr = rows * cols;
-  unsigned char* pixels = new unsigned char[Nr];
-	unsigned char labels;
+	int Nr = labelSz;
+  float* labels = new float[Nr];
   int count = 0;
-	unsigned long num_items = N;
+	unsigned long num_items = N / labelSz;
   const int kMaxKeyLength = 10;
   char key_cstr[kMaxKeyLength];
   std::string value;
 
   caffe::Datum datum;
-  datum.set_channels(1);
-  datum.set_height(rows);
-  datum.set_width(cols);
+  datum.set_channels(labelSz);
+  datum.set_height(1);
+  datum.set_width(1);
   LOG(INFO) << "A total of " << num_items << " items.";
-  LOG(INFO) << "Rows: " << rows << " Cols: " << cols;
-  for (int item_id = 0; item_id < num_items; ++item_id) {
-    read_data(im1, dataspace1, memspace1, pixels, item_id, Nr);
-    read_data(lbl, dataspaceLbl, memspaceLbl, &labels, item_id, 1);
-		datum.set_data(pixels, rows * cols);
-    datum.set_label(labels);
-    snprintf(key_cstr, kMaxKeyLength, "%08d", item_id);
+  for (int i=0; i<labelSz; i++)
+		datum.add_float_data(0.0);
+	for (int item_id = 0; item_id < num_items; ++item_id) {
+    read_data(lbl, dataspaceLbl, memspaceLbl, labels, item_id, labelSz);
+		for (int i=0; i< labelSz; i++){
+			datum.set_float_data(i, labels[i]);
+  		//std::cout << labels[i] << "\n"; 
+		}
+		snprintf(key_cstr, kMaxKeyLength, "%08d", item_id);
     datum.SerializeToString(&value);
     std::string keystr(key_cstr);
 
@@ -125,13 +111,13 @@ int main(int argc, char** argv){
 		delete db;
 		LOG(ERROR) << "Processed " << count << " files.";
   }
-  delete pixels;
+  delete labels;
 	return 0;
 }
 
 
 void read_data(H5::DataSet& dataset, H5::DataSpace dataspace,
-						 H5::DataSpace memspace, unsigned char* data_out, 
+						 H5::DataSpace memspace, float* data_out, 
 						unsigned long offset, unsigned long nx ){
 
 	//Select data in dataspace
@@ -148,6 +134,6 @@ void read_data(H5::DataSet& dataset, H5::DataSpace dataspace,
 	offset_out[0] = 0;
 	count_out[0]  = nx;
 	memspace.selectHyperslab( H5S_SELECT_SET, count_out, offset_out);	
-	dataset.read( data_out, H5::PredType::NATIVE_UCHAR, memspace, dataspace );
+	dataset.read( data_out, H5::PredType::NATIVE_FLOAT, memspace, dataspace );
 	//dataset.read( data_out, H5T_NATIVE_UCHAR, memspace, dataspace );
 }
