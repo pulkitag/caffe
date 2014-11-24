@@ -71,7 +71,6 @@ void DataTransformer<Dtype>::Transform(const int batch_item_id,
   } else {
     // we will prefer to use data() first, and then try float_data()
     if (data.size()) {
-			LOG(INFO) << "Using data ";
       for (int j = 0; j < size; ++j) {
         Dtype datum_element =
             static_cast<Dtype>(static_cast<uint8_t>(data[j]));
@@ -79,7 +78,6 @@ void DataTransformer<Dtype>::Transform(const int batch_item_id,
             (datum_element - mean[j]) * scale;
       }
     } else {
-			LOG(INFO) << "Using Float Data.. ";
       for (int j = 0; j < size; ++j) {
         transformed_data[j + batch_item_id * size] =
             (datum.float_data(j) - mean[j]) * scale;

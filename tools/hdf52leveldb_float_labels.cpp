@@ -78,9 +78,9 @@ int main(int argc, char** argv){
   std::string value;
 
   caffe::Datum datum;
-  datum.set_channels(1);
+  datum.set_channels(labelSz);
   datum.set_height(1);
-  datum.set_width(labelSz);
+  datum.set_width(1);
   LOG(INFO) << "A total of " << num_items << " items.";
   for (int i=0; i<labelSz; i++)
 		datum.add_float_data(0.0);
