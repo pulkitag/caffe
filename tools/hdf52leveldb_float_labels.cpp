@@ -13,7 +13,7 @@
 
 #include "caffe/proto/caffe.pb.h"
 void read_data(H5::DataSet& dataset, H5::DataSpace dataspace,
-						 H5::DataSpace memspace, unsigned char* data_out, 
+						 H5::DataSpace memspace, float* data_out, 
 						unsigned long offset, unsigned long nx );
 
 
@@ -24,47 +24,36 @@ int main(int argc, char** argv){
 		return 1;
 	}
 
-	int rows, cols;
-	rows = 256;
-	cols = 256;
-	//std::string dataPath = "/work4/pulkitag/data_sets/digits/";
-	//std::string filePath = dataPath + "mnist_train.hdf5";
+	int labelSz = 9;
 	std::string filePath(argv[1]);
 	std::cout << filePath << "\n";
 	const H5std_string fileName(filePath);
-	const H5std_string dataIm1("images1");
-	const H5std_string dataIm2("images2");
+	const H5std_string dataLbl("labels");
 
 	//Load the daasets
 	H5::H5File file(fileName, H5F_ACC_RDONLY);
-	H5::DataSet im1 = file.openDataSet(dataIm1);
-	H5::DataSet im2 = file.openDataSet(dataIm2);
+	H5::DataSet lbl = file.openDataSet(dataLbl);
 
 	//Check Type
-	hid_t dt = H5Tcopy(H5T_STD_U8LE);
-	H5T_class_t type_class = im1.getTypeClass();	
+	H5T_class_t type_class = lbl.getTypeClass();	
 	assert(type_class == H5T_NATIVE_UCHAR);
-	type_class = im2.getTypeClass();	
-	assert(type_class == H5T_Integer);
 
 	//Get dimensions
 	int ndims;
-	unsigned long N,imsz;
-	H5::DataSpace dataspace1    = im1.getSpace();
-	H5::DataSpace dataspace2    = im2.getSpace();
+	unsigned long N;
+	H5::DataSpace dataspaceLbl  = lbl.getSpace();
 	hsize_t dims_out[1];
-	ndims = dataspace1.getSimpleExtentDims( dims_out, NULL);
-	imsz = (unsigned long)dims_out[0];
-	ndims = dataspace2.getSimpleExtentDims( dims_out, NULL);
-	assert(imsz==(unsigned long)dims_out[0]);
-
+	ndims = dataspaceLbl.getSimpleExtentDims( dims_out, NULL);
+	N     = (unsigned long)dims_out[0];
+	
 	//Define memspaces
 	hsize_t memDims[1];
-	memDims[0] = imsz;
-	H5::DataSpace memspace1(1, memDims);
-	H5::DataSpace memspace2(1, memDims);
+	memDims[0] = N;
+	H5::DataSpace memspaceLbl(1, memDims);
+
 	
 	//leveldb
+	//std::string db_path = dataPath + "mnist_leveldb";
 	std::string db_path(argv[2]);
   leveldb::DB* db;
   leveldb::Options options;
@@ -80,26 +69,28 @@ int main(int argc, char** argv){
   batch = new leveldb::WriteBatch();
 
   // Storing to db
-	int Nr = rows * cols *3;
-  unsigned char* pixels = new unsigned char[2 * Nr];
+	int Nr = labelSz;
+  float* labels = new float[Nr];
   int count = 0;
-	assert(imsz % Nr == 0);
-	unsigned long num_items = imsz / Nr;
+	unsigned long num_items = N / labelSz;
   const int kMaxKeyLength = 10;
   char key_cstr[kMaxKeyLength];
   std::string value;
 
   caffe::Datum datum;
-  datum.set_channels(2 * 3);
-  datum.set_height(rows);
-  datum.set_width(cols);
+  datum.set_channels(1);
+  datum.set_height(1);
+  datum.set_width(labelSz);
   LOG(INFO) << "A total of " << num_items << " items.";
-  LOG(INFO) << "Rows: " << rows << " Cols: " << cols;
-  for (int item_id = 0; item_id < num_items; ++item_id) {
-    read_data(im1, dataspace1, memspace1, pixels, item_id, Nr);
-    read_data(im2, dataspace2, memspace2, pixels + Nr, item_id, Nr);
-		datum.set_data(pixels, 2 * Nr);
-    snprintf(key_cstr, kMaxKeyLength, "%09d", item_id);
+  for (int i=0; i<labelSz; i++)
+		datum.add_float_data(0.0);
+	for (int item_id = 0; item_id < num_items; ++item_id) {
+    read_data(lbl, dataspaceLbl, memspaceLbl, labels, item_id, labelSz);
+		for (int i=0; i< labelSz; i++){
+			datum.set_float_data(i, labels[i]);
+  		//std::cout << labels[i] << "\n"; 
+		}
+		snprintf(key_cstr, kMaxKeyLength, "%08d", item_id);
     datum.SerializeToString(&value);
     std::string keystr(key_cstr);
 
@@ -120,18 +111,13 @@ int main(int argc, char** argv){
 		delete db;
 		LOG(ERROR) << "Processed " << count << " files.";
   }
-  delete pixels;
-	//H5Sclose(dataspace1);
-	//H5Sclose(dataspace2);
-  //H5Dclose(im1);
-  //H5Dclose(im2);
-	//H5Fclose(file);
+  delete labels;
 	return 0;
 }
 
 
 void read_data(H5::DataSet& dataset, H5::DataSpace dataspace,
-						 H5::DataSpace memspace, unsigned char* data_out, 
+						 H5::DataSpace memspace, float* data_out, 
 						unsigned long offset, unsigned long nx ){
 
 	//Select data in dataspace
@@ -148,6 +134,6 @@ void read_data(H5::DataSet& dataset, H5::DataSpace dataspace,
 	offset_out[0] = 0;
 	count_out[0]  = nx;
 	memspace.selectHyperslab( H5S_SELECT_SET, count_out, offset_out);	
-	dataset.read( data_out, H5::PredType::NATIVE_UCHAR, memspace, dataspace );
+	dataset.read( data_out, H5::PredType::NATIVE_FLOAT, memspace, dataspace );
 	//dataset.read( data_out, H5T_NATIVE_UCHAR, memspace, dataspace );
 }
