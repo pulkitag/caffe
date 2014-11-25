@@ -5,11 +5,11 @@ layers {
   type: DATA
   top: "pair_data"
   data_param {
-    source: "/data1/pulkitag/keypoints/leveldb_store/val_images_leveldb-copy"
+    source: "/data1/pulkitag/keypoints/leveldb_store/train_images_leveldb"
     batch_size: 256
   }
   transform_param {
-    #mean_file: "/data1/pulkitag/ILSVRC12/ilsvrc2012_mean.binaryproto"
+    mean_file: "/data1/pulkitag/keypoints/leveldb_store/keypoints_im256_mean.binaryproto"
 	crop_size: 227
 	mirror: true
   }
@@ -20,7 +20,7 @@ layers {
   type: DATA
   top: "label"
   data_param {
-    source: "/data1/pulkitag/keypoints/leveldb_store/val_labels_leveldb-copy"
+    source: "/data1/pulkitag/keypoints/leveldb_store/train_labels_leveldb"
     batch_size: 256
   }
   include: { phase: TRAIN }
@@ -34,7 +34,7 @@ layers {
     batch_size: 50
   }
   transform_param {
-    #mean_file: "/data1/pulkitag/ILSVRC12/ilsvrc2012_mean.binaryproto"
+    mean_file: "/data1/pulkitag/keypoints/leveldb_store/keypoints_im256_mean.binaryproto"
  	crop_size: 227
 	mirror: false
   }

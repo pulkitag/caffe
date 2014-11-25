@@ -26,4 +26,4 @@ snapshot: 10000
 snapshot_prefix: "/data1/pulkitag/snapshots/keypoints/keypoints_siamese"
 # solver mode: CPU or GPU
 solver_mode: GPU
-device_id: 1
+device_id: 0
