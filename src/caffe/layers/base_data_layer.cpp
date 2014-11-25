@@ -47,6 +47,11 @@ void BaseDataLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   }
   mean_ = data_mean_.cpu_data();
   data_transformer_.InitRand();
+	FILE* fid = fopen("tmp_mean.txt", "w");
+	std::fprintf(fid, "%d, %d, %d, %d,", data_mean_.num(), data_mean_.channels(), data_mean_.height(), data_mean_.width());
+	for (int i=0; i< data_mean_.count(); i++)
+		std::fprintf(fid, "%f \n",mean_[i]); 
+	fclose(fid);
 }
 
 template <typename Dtype>
