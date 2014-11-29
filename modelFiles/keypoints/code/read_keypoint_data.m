@@ -1,5 +1,6 @@
-fileName = '/work4/pulkitag/data_sets/keypoints/data_for_pulkit.mat';
-outDir   = '/data1/pulkitag/keypoints/raw/';
+imSz = 128
+fileName = '/data1/pulkitag/data_sets/keypoints/data_for_pulkit.mat';
+outDir   = sprintf('/data1/pulkitag/keypoints/raw/imSz%d/', imSz);
 classNames = {'aeroplane','bicycle','bird','boat','bottle',...
 							'bus','car','cat','chair','cow',...
 							'diningtable','dog','horse','motorbike','person'...
@@ -7,7 +8,9 @@ classNames = {'aeroplane','bicycle','bird','boat','bottle',...
 data     = load(fileName);
 numCl    = 20;
 
-imSz = 256
+if ~(exist(outDir,'dir')==7)
+	system(['mkdir -p ' outDir]);
+end
 for cl=1:1:20
 	imCl = data.all_I{cl};
 	ims  = zeros(size(imCl,1),imSz,imSz,3,'uint8');
