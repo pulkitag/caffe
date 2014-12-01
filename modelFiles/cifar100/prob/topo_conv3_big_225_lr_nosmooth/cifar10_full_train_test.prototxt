@@ -1,23 +1,53 @@
-name: "CIFAR10_full_deploy"
-# N.B. input image must be in CIFAR-10 format
-# as described at http://www.cs.toronto.edu/~kriz/cifar.html
-input: "data"
-input_dim: 256
-input_dim: 3
-input_dim: 32
-input_dim: 32
+name: "CIFAR100_full"
+layers {
+  name: "cifar"
+  type: DATA
+  top: "data"
+  top: "label"
+  data_param {
+    source: "/data1/pulkitag/cifar100/leveldb_store/cifar100_train_leveldb"
+    batch_size: 100
+  }
+  transform_param {
+    mean_file: "/data1/pulkitag/cifar10/leveldb_store/mean.binaryproto"
+  }
+  include: { phase: TRAIN }
+}
+layers {
+  name: "cifar"
+  type: DATA
+  top: "data"
+  top: "label"
+  data_param {
+    source: "/data1/pulkitag/cifar100/leveldb_store/cifar100_test_leveldb"
+    batch_size: 100
+  }
+  transform_param {
+    mean_file: "/data1/pulkitag/cifar10/leveldb_store/mean.binaryproto"
+  }
+  include: { phase: TEST }
+}
 layers {
   name: "conv1"
   type: CONVOLUTION
   bottom: "data"
   top: "conv1"
-  blobs_lr: 1
-  blobs_lr: 2
-  convolution_param {
+  blobs_lr: 0
+  blobs_lr: 0
+  weight_decay: 0
+	weight_decay: 0
+	convolution_param {
     num_output: 64
     pad: 2
     kernel_size: 5
     stride: 1
+    weight_filler {
+      type: "gaussian"
+      std: 0.0001
+    }
+    bias_filler {
+      type: "constant"
+    }
   }
 }
 layers {
@@ -54,13 +84,22 @@ layers {
   type: CONVOLUTION
   bottom: "norm1"
   top: "conv2"
-  blobs_lr: 1
-  blobs_lr: 2
+  blobs_lr: 0
+  blobs_lr: 0
+	weight_decay: 0
+	weight_decay: 0
   convolution_param {
     num_output: 64
     pad: 2
     kernel_size: 5
     stride: 1
+    weight_filler {
+      type: "gaussian"
+      std: 0.01
+    }
+    bias_filler {
+      type: "constant"
+    }
   }
 }
 layers {
@@ -97,11 +136,22 @@ layers {
   type: CONVOLUTION
   bottom: "norm2"
   top: "conv3"
+	blobs_lr: 0
+	blobs_lr: 0
+	weight_decay: 0
+	weight_decay: 0
   convolution_param {
     num_output: 225
     pad: 2
     kernel_size: 5
     stride: 1
+    weight_filler {
+      type: "gaussian"
+      std: 0.01
+    }
+    bias_filler {
+      type: "constant"
+    }
   }
 }
 layers {
@@ -109,8 +159,10 @@ layers {
 	type: TOPOGRAPHY
 	bottom: "conv3"
 	top:  "top3"
+  blobs_lr: 0
+	weight_decay: 0
 	topography_param {
-		smooth_output: true
+		smooth_output: false
 		kernel_size: 3
 		stride: 1
 		is_gaussian_topo: true
@@ -118,7 +170,7 @@ layers {
 	}
 }
 layers {
-  name: "relu3"
+	name: "relu3"
   type: RELU
   bottom: "top3"
   top: "top3"
@@ -135,21 +187,37 @@ layers {
   }
 }
 layers {
-  name: "ip1"
+  name: "ip1_100"
   type: INNER_PRODUCT
   bottom: "pool3"
-  top: "ip1"
+  top: "ip1_100"
   blobs_lr: 1
   blobs_lr: 2
   weight_decay: 250
   weight_decay: 0
   inner_product_param {
-    num_output: 10
+    num_output: 100
+    weight_filler {
+      type: "gaussian"
+      std: 0.01
+    }
+    bias_filler {
+      type: "constant"
+    }
   }
 }
 layers {
-  name: "prob"
-  type: SOFTMAX
-  bottom: "ip1"
-  top: "prob"
+  name: "accuracy"
+  type: ACCURACY
+  bottom: "ip1_100"
+  bottom: "label"
+  top: "accuracy"
+  include: { phase: TEST }
+}
+layers {
+  name: "loss"
+  type: SOFTMAX_LOSS
+  bottom: "ip1_100"
+  bottom: "label"
+  top: "loss"
 }
