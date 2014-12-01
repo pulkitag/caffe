@@ -2,14 +2,14 @@ name: "KeyNet"
 layers {
   name: "KeyNet"
   type: DATA
-  top: "data"
-  top: "label"
+  top: "data-sun"
+  top: "label-sun"
   data_param {
     source: "/data1/pulkitag/sun/leveldb_store/sun-leveldb-train-1"
     batch_size: 256
   }
   transform_param {
-    mean_file: "/data1/pulkitag/ILSVRC12/ilsvrc2012_mean.binaryproto"
+    mean_file: "/data1/pulkitag/keypoints/leveldb_store/keypoints_im256_mean_deploy.binaryproto"
 	crop_size: 227
 	mirror: true
   }
@@ -18,14 +18,14 @@ layers {
 layers {
   name: "imagenet"
   type: DATA
-  top: "data"
-  top: "label"
+  top: "data-sun"
+  top: "label-sun"
   data_param {
     source: "/data1/pulkitag/sun/leveldb_store/sun-leveldb-val-1"
     batch_size: 50
   }
   transform_param {
-    mean_file: "/data1/pulkitag/ILSVRC12/ilsvrc2012_mean.binaryproto"
+    mean_file: "/data1/pulkitag/keypoints/leveldb_store/keypoints_im256_mean_deploy.binaryproto"
  	crop_size: 227
 	mirror: false
   }
@@ -35,7 +35,7 @@ layers {
 layers {
   name: "conv1"
   type: CONVOLUTION
-  bottom: "data"
+  bottom: "data-sun"
   top: "conv1"
   blobs_lr: 0.
   blobs_lr: 0.
@@ -245,7 +245,7 @@ layers {
   weight_decay: 0.
   weight_decay: 0.
   inner_product_param {
-    num_output: 4096
+    num_output: 2048
     weight_filler {
 	  type: "gaussian"
 	  std: 0.005
@@ -263,15 +263,6 @@ layers {
   top: "fc6"
 }
 layers {
-  name: "drop6"
-  type: DROPOUT
-  bottom: "fc6"
-  top: "fc6"
-  dropout_param {
-    dropout_ratio: 0.5
-  }
-}
-layers {
   name: "fc7-sun"
   type: INNER_PRODUCT
   bottom: "fc6"
@@ -281,7 +272,7 @@ layers {
   weight_decay: 1.
   weight_decay: 0.
   inner_product_param {
-    num_output: 4096
+    num_output: 2048
     weight_filler {
 	  type: "gaussian"
 	  std: 0.005
@@ -308,10 +299,10 @@ layers {
   }
 }
 layers {
-  name: "fc8"
+  name: "fc8-sun"
   type: INNER_PRODUCT
   bottom: "fc7-sun"
-  top: "fc8"
+  top: "fc8-sun"
   blobs_lr: 1.
   blobs_lr: 2.
   weight_decay: 1.
@@ -329,18 +320,18 @@ layers {
   }
 }
 layers {
-  name: "accuracy"
+  name: "accuracy-sun"
   type: ACCURACY
-  bottom: "fc8"
-  bottom: "label"
-  top: "accuracy"
+  bottom: "fc8-sun"
+  bottom: "label-sun"
+  top: "accuracy-sun"
   include: {phase: TEST}
 }
 layers {
-  name: "loss"
+  name: "loss-sun"
   type: SOFTMAX_LOSS
-  bottom: "fc8"
-  bottom: "label"
-  top: "loss"
+  bottom: "fc8-sun"
+  bottom: "label-sun"
+  top: "loss-sun"
 }
 
