@@ -138,6 +138,12 @@ def create_data_images(h5DataFile, ims, idxs, imSz):
 	fid.close()
 
 
+def get_rot_angle(view1, view2):
+	viewDiff = linalg.logm(np.dot(view2, np.transpose(view1)))
+	viewDiff = linalg.norm(viewDiff, ord='fro')
+	angle    = viewDiff/np.sqrt(2)
+	return angle
+
 def create_data_labels(h5LabelFile, views, idxs, labelType):
 	numSamples = [len(i) for i in idxs]
 	numSamples = sum(numSamples)
@@ -147,6 +153,9 @@ def create_data_labels(h5LabelFile, views, idxs, labelType):
 		labelSz = 9
 	elif labelType == 'angle':
 		labelSz = 1
+	elif labelType == 'uniform20':
+		labelSz = 1
+		angRange = np.linspace(0,np.pi,20,endpoint=False)
 	else:
 		print "Unrecognized labelType "
 		raise("Label Type not found exception")
@@ -162,11 +171,16 @@ def create_data_labels(h5LabelFile, views, idxs, labelType):
 			view2 = view[clIdx2]
 			if labelType == '9DRot':
 				viewDiff = np.dot(view2, np.linalg.inv(view1))
-			elif labelType == 'angle': 								
-				viewDiff = linalg.logm(np.dot(view2, np.transpose(view1)))
-				viewDiff = linalg.norm(viewDiff, ord='fro')
-				viewDiff = viewDiff/np.sqrt(2)
-			
+			elif labelType == 'angle': 
+				viewDiff = get_rot_angle(view1, view2)								
+			elif labelType == 'uniform20':
+				angle    = get_rot_angle(view1, view2)			
+				try:
+					viewDiff = np.where(angle >= angRange)[0][-1] 
+				except:
+					print "Error encountered"
+					pdb.set_trace()			
+	
 			labels[lSt:lEn] = viewDiff.flatten()
 	fidl.close()	
 
@@ -195,7 +209,7 @@ def get_lblDbName(setName, exp, imSz, lblType):
 	return dbName
 
 
-def h52db(exp, labelType, imSz):
+def h52db(exp, labelType, imSz, lblOnly=False):
 	imToolName = TOOL_DIR + 'hdf52leveldb_siamese_nolabels.bin'
 	lbToolName = TOOL_DIR + 'hdf52leveldb_float_labels.bin'
 	splits = ['val','train']
@@ -203,11 +217,14 @@ def h52db(exp, labelType, imSz):
 		labelSz = 9
 	elif labelType=='angle':
 		labelSz = 1
+	elif labelType=='uniform20':
+		labelSz = 1
 	
 	for s in splits:
-		h5ImName = get_imH5Name(s, exp, imSz)
-		dbImName = get_imDbName(s, exp, imSz) 
-		subprocess.check_call(['%s %s %s %d' % (imToolName, h5ImName, dbImName, imSz)],shell=True)
+		if not lblOnly:
+			h5ImName = get_imH5Name(s, exp, imSz)
+			dbImName = get_imDbName(s, exp, imSz) 
+			subprocess.check_call(['%s %s %s %d' % (imToolName, h5ImName, dbImName, imSz)],shell=True)
 		h5LbName = get_lblH5Name(s, exp, imSz, labelType)
 		dbLbName = get_lblDbName(s, exp, imSz, labelType)	 
 		subprocess.check_call(['%s %s %s %d' % (lbToolName, h5LbName, dbLbName, labelSz)],shell=True)
@@ -216,7 +233,7 @@ def h52db(exp, labelType, imSz):
 if __name__ == "__main__":
 	imSz      = 128
 	exp       = 'rigid'
-	labelType = 'angle' 
+	labelType = 'uniform20' 
 	
 	trainDetails, valDetails = get_experiment_details(exp, imSz)
 	
@@ -231,7 +248,7 @@ if __name__ == "__main__":
 	valDataH5   = get_imH5Name('val', exp, imSz)
 	valLabelH5  = get_lblH5Name('val', exp, imSz, labelType)
 	valIdxs, valIms, valViews = valDetails
-	create_data_images(valDataH5, valIms, valIdxs, imSz)
+	#create_data_images(valDataH5, valIms, valIdxs, imSz)
 	create_data_labels(valLabelH5, valViews, valIdxs, labelType)
 
 '''

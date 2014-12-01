@@ -2,8 +2,8 @@ name: "KeyNet"
 input: "data"
 input_dim: 256
 input_dim: 3
-input_dim: 227
-input_dim: 227
+input_dim: 112
+input_dim: 112
 layers {
   name: "conv1"
   type: CONVOLUTION
@@ -15,8 +15,8 @@ layers {
   weight_decay: 0.
   convolution_param {
     num_output: 96
-    kernel_size: 11
-    stride: 4
+    kernel_size: 7
+    stride: 2
     weight_filler {
       type: "gaussian"
       std: 0.01
