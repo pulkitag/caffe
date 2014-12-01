@@ -20,13 +20,22 @@ void read_data(H5::DataSet& dataset, H5::DataSpace dataspace,
 int main(int argc, char** argv){
 
 	if (argc < 3){
-		std::cout << "Usage: ./convert_dataset_rotation HDF5_FILE_NAME LEVELDB_NAME \n";
+		std::cout << "Usage: ./convert_dataset_rotation HDF5_FILE_NAME LEVELDB_NAME imSz[optional]\n";
 		return 1;
 	}
 
 	int rows, cols;
-	rows = 256;
-	cols = 256;
+	if (argc==4){
+		rows = atoi(argv[3]);
+		cols = atoi(argv[3]);
+	}
+	else{
+		rows = 256;
+		cols = 256;
+	}
+
+	std::cout<<"Num (Rows, Cols) in Im:" << rows << "\t" << cols << "\n";
+
 	//std::string dataPath = "/work4/pulkitag/data_sets/digits/";
 	//std::string filePath = dataPath + "mnist_train.hdf5";
 	std::string filePath(argv[1]);

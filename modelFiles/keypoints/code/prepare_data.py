@@ -1,4 +1,5 @@
 import scipy.io as sio
+from scipy import linalg as linalg
 import scipy
 import sys, os
 import h5py
@@ -162,27 +163,54 @@ def create_data_labels(h5LabelFile, views, idxs, labelType):
 			if labelType == '9DRot':
 				viewDiff = np.dot(view2, np.linalg.inv(view1))
 			elif labelType == 'angle': 								
-				viewDiff = scipy.linalg.logm(np.dot(view2, np.transpose(view1)))
-				viewDiff = scipy.linalg.norm(viewDiff, ord='fro')
+				viewDiff = linalg.logm(np.dot(view2, np.transpose(view1)))
+				viewDiff = linalg.norm(viewDiff, ord='fro')
 				viewDiff = viewDiff/np.sqrt(2)
 			
 			labels[lSt:lEn] = viewDiff.flatten()
 	fidl.close()	
 
 
+def get_imH5Name(setName, exp, imSz):
+	h5Name = '%s_images_exp%s_imSz%d.hdf5'%(setName, exp, imSz)
+	h5Name = h5Dir + h5Name
+	return h5Name
 
-def h52db():
+
+def get_lblH5Name(setName, exp, imSz, lblType):
+	h5Name = '%s_labels_exp%s_lbl%s_imSz%d.hdf5'%(setName, exp, lblType, imSz)
+	h5Name = h5Dir + h5Name
+	return h5Name
+
+
+def get_imDbName(setName, exp, imSz):
+	dbName = '%s_images_exp%s_imSz%d-leveldb'%(setName, exp, imSz)
+	dbName = dbDir + dbName
+	return dbName
+
+
+def get_lblDbName(setName, exp, imSz, lblType):
+	dbName = '%s_labels_exp%s_lbl%s_imSz%d-leveldb'%(setName, exp, lblType, imSz)
+	dbName = dbDir + dbName
+	return dbName
+
+
+def h52db(exp, labelType, imSz):
 	imToolName = TOOL_DIR + 'hdf52leveldb_siamese_nolabels.bin'
 	lbToolName = TOOL_DIR + 'hdf52leveldb_float_labels.bin'
 	splits = ['val','train']
-
+	if labelType=='9DRot':
+		labelSz = 9
+	elif labelType=='angle':
+		labelSz = 1
+	
 	for s in splits:
-		h5ImName = h5Dir + '%s_images.hdf5' % s
-		dbImName = dbDir + '%s_images_leveldb' % s	 
-		subprocess.check_call(['%s %s %s' % (imToolName, h5ImName, dbImName)],shell=True)
-		h5LbName = h5Dir + '%s_labels.hdf5' % s
-		dbLbName = dbDir + '%s_labels_leveldb' % s	 
-		subprocess.check_call(['%s %s %s' % (lbToolName, h5LbName, dbLbName)],shell=True)
+		h5ImName = get_imH5Name(s, exp, imSz)
+		dbImName = get_imDbName(s, exp, imSz) 
+		subprocess.check_call(['%s %s %s %d' % (imToolName, h5ImName, dbImName, imSz)],shell=True)
+		h5LbName = get_lblH5Name(s, exp, imSz, labelType)
+		dbLbName = get_lblDbName(s, exp, imSz, labelType)	 
+		subprocess.check_call(['%s %s %s %d' % (lbToolName, h5LbName, dbLbName, labelSz)],shell=True)
 
 
 if __name__ == "__main__":
@@ -193,15 +221,15 @@ if __name__ == "__main__":
 	trainDetails, valDetails = get_experiment_details(exp, imSz)
 	
 	print "Making training Data .."
-	trainDataH5  = h5Dir + 'train_images_exp%s_imSz%d.hdf5' % (exp,imSz)
-	trainLabelH5 = h5Dir + 'train_labels_exp%s_lbl%s_imSz%d.hdf5' % (exp,labelType, imSz)
+	trainDataH5  = get_imH5Name('train', exp, imSz)
+	trainLabelH5 = get_lblH5Name('train', exp, imSz, labelType)
 	trainIdxs, trainIms, trainViews = trainDetails
-	create_data_images(trainDataH5, trainIms, trainIdxs, imSz)
+	#create_data_images(trainDataH5, trainIms, trainIdxs, imSz)
 	create_data_labels(trainLabelH5, trainViews, trainIdxs, labelType)
 
 	print "Making Validation Data.."
-	valDataH5   = h5Dir + 'val_images_exp%s_imSz%d.hdf5' % (exp, imSz)
-	valLabelH5  = h5Dir + 'val_labels_exp%s_lbl%s_imSz%d.hdf5' % (exp, labelType, imSz)
+	valDataH5   = get_imH5Name('val', exp, imSz)
+	valLabelH5  = get_lblH5Name('val', exp, imSz, labelType)
 	valIdxs, valIms, valViews = valDetails
 	create_data_images(valDataH5, valIms, valIdxs, imSz)
 	create_data_labels(valLabelH5, valViews, valIdxs, labelType)

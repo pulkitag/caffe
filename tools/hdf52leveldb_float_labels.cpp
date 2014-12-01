@@ -20,11 +20,16 @@ void read_data(H5::DataSet& dataset, H5::DataSpace dataspace,
 int main(int argc, char** argv){
 
 	if (argc < 3){
-		std::cout << "Usage: ./convert_dataset_rotation HDF5_FILE_NAME LEVELDB_NAME \n";
+		std::cout << "Usage: ./hfd5leveldb_float_labels HDF5_FILE_NAME LEVELDB_NAME LABEL_SZ[optiona]\n";
 		return 1;
 	}
 
-	int labelSz = 9;
+	int labelSz;
+	if (argc==4)
+		labelSz = atoi(argv[3]);
+	else
+		labelSz = 9;
+
 	std::string filePath(argv[1]);
 	std::cout << filePath << "\n";
 	const H5std_string fileName(filePath);
