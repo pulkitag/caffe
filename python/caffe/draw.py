@@ -18,9 +18,10 @@ NEURON_LAYER_STYLE = {'shape': 'record', 'fillcolor': '#90EE90',
 BLOB_STYLE = {'shape': 'octagon', 'fillcolor': '#F0E68C',
         'style': 'filled'}
 def get_enum_name_by_value():
-  desc = caffe_pb2.LayerParameter.LayerType.DESCRIPTOR
+  #desc = caffe_pb2.LayerParameter.LayerType.DESCRIPTOR
+  desc = caffe_pb2.LayerParameter.DESCRIPTOR
   d = {}
-  for k,v in desc.values_by_name.items():
+  for k,v in desc.enum_values_by_name.items():
     d[v.number] = k
   return d
 

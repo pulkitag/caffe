@@ -144,6 +144,19 @@ def get_rot_angle(view1, view2):
 	angle    = viewDiff/np.sqrt(2)
 	return angle
 
+
+def get_angle_counts(fileName, thetaThresh):
+	''' Finds the number of angles below and above the thetaThresh ''' 
+
+	fidl = h5py.File(fileName, 'r')
+	angles = fidl['labels']
+	count  = angles.shape[0]
+	thetaThresh = (np.pi/180.0) * thetaThresh
+	threshCount = np.sum(np.array(angles) <= thetaThresh)
+	pdb.set_trace()
+	print "%d number of examples below thresh, %d number above" % (threshCount, count - threshCount)		
+
+
 def create_data_labels(h5LabelFile, views, idxs, labelType):
 	numSamples = [len(i) for i in idxs]
 	numSamples = sum(numSamples)
