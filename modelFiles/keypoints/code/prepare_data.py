@@ -169,6 +169,14 @@ def create_data_labels(h5LabelFile, views, idxs, labelType):
 	elif labelType == 'uniform20':
 		labelSz = 1
 		angRange = np.linspace(0,np.pi,20,endpoint=False)
+	elif labelType == 'limited30_3':
+		#Divide zero to 30 in 3 bins and the fourth bin is for the rest
+		labelSz = 1
+		angRange = np.zeros((5,1))
+		angRange[0:4,0] =(np.linspace(0,30,4)).flatten()
+		angRange[4] = 180.
+		angRange    = np.pi*(angRange/180.)
+		print angRange
 	else:
 		print "Unrecognized labelType "
 		raise("Label Type not found exception")
@@ -186,7 +194,7 @@ def create_data_labels(h5LabelFile, views, idxs, labelType):
 				viewDiff = np.dot(view2, np.linalg.inv(view1))
 			elif labelType == 'angle': 
 				viewDiff = get_rot_angle(view1, view2)								
-			elif labelType == 'uniform20':
+			elif labelType in ['uniform20', 'limited30_3']:
 				angle    = get_rot_angle(view1, view2)			
 				try:
 					viewDiff = np.where(angle >= angRange)[0][-1] 
@@ -232,6 +240,8 @@ def h52db(exp, labelType, imSz, lblOnly=False):
 		labelSz = 1
 	elif labelType=='uniform20':
 		labelSz = 1
+	elif labelType == 'limited30_3':
+		labelSz = 1 
 	
 	for s in splits:
 		if not lblOnly:
@@ -246,7 +256,7 @@ def h52db(exp, labelType, imSz, lblOnly=False):
 if __name__ == "__main__":
 	imSz      = 128
 	exp       = 'rigid'
-	labelType = 'uniform20' 
+	labelType = 'limited30_3' 
 	
 	trainDetails, valDetails = get_experiment_details(exp, imSz)
 	
@@ -261,7 +271,7 @@ if __name__ == "__main__":
 	valDataH5   = get_imH5Name('val', exp, imSz)
 	valLabelH5  = get_lblH5Name('val', exp, imSz, labelType)
 	valIdxs, valIms, valViews = valDetails
-	#create_data_images(valDataH5, valIms, valIdxs, imSz)
+	create_data_images(valDataH5, valIms, valIdxs, imSz)
 	create_data_labels(valLabelH5, valViews, valIdxs, labelType)
 
 '''
