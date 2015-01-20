@@ -1,6 +1,7 @@
 import numpy as np
 import h5py
 import caffe
+import pdb
 
 def init_network(modelFile, defFile, isGPU=True):
 	net = caffe.Net(modelFile, defFile)
@@ -23,7 +24,8 @@ def prepare_image(im, cropSz=[], imMean=[]):
 	
 	if np.ndim(im) == 3:
 		im = im.reshape(shp[0],1,h,w)
-	else:
+	elif not np.ndim(im) == 4:
+		pdb.set_trace()
 		print "Incorrect image dimensions"
 		raise
 
@@ -34,14 +36,21 @@ def prepare_image(im, cropSz=[], imMean=[]):
 		hSt = int((h - cropSz)/2.0)
 		hEn = hSt + cropSz
 		im  = im[:,:,hSt:hEn,wSt:wEn]
+	else:
+		wSt,wEn = 0,w
+		hSt,hEn = 0,h
 
 	if not imMean==[]:
 		assert imMean.ndim ==4
 		assert imMean.shape[0] == 1
+		imMean = imMean[:,:,wSt:wEn,hSt:hEn]
 		im = im - imMean
 
+	return im
 
-def get_features(net, im, layerName=None):
+
+
+def get_features(net, im, layerName=None, ipLayerName='data'):
 	dataBlob = net.blobs['data']
 	batchSz  = dataBlob.num
 	assert im.ndim == 4
@@ -54,18 +63,21 @@ def get_features(net, im, layerName=None):
 		outName   = layerName[0]	
 	else:
 		outName   = net.outputs[0]
-
+		layerName = []
+	
 	print layerName
 	imBatch = np.zeros((batchSz,nc,h,w))
 	outFeats = {}
 	outBlob  = net.blobs[outName]
 	outFeats = np.zeros((N, outBlob.channels, outBlob.height, outBlob.width))
+
 	for i in range(0,N,batchSz):
 		st = i
 		en = min(N, st + batchSz)
 		l  = en - st
 		imBatch[0:l,:,:,:] = np.copy(im[st:en])
-		feats = net.forward(blobs=layerName, start=None, end=None, data=imBatch)		 
+		dataLayer = {ipLayerName:imBatch}
+		feats = net.forward(blobs=layerName, start=None, end=None, **dataLayer)		 
 		outFeats[st:en] = feats[outName][0:l]
 
 	return outFeats
@@ -90,8 +102,20 @@ def compute_error(gtLabels, prLabels, errType='classify'):
 		raise
 	return res	
 
+def feats_2_labels(feats, lblType):
+	#feats are assumed to be numEx * featDims
+	labels = []
+	if lblType == 'uniform20':
+		r,c = feats.shape
+		labels = np.argmax(feats, axis=1)
+		labels = labels.reshape((r,1))
+	else:
+		print "UNrecognized lblType"
+		raise
+	return labels
 
-def test_network_siamese_h5(imH5File, lbH5File, netFile, defFile, imSz=128, cropSz=112, nCh=3,  meanFile=[]):
+
+def test_network_siamese_h5(imH5File, lbH5File, netFile, defFile, imSz=128, cropSz=112, nCh=3, outLblSz=1, meanFile=[], ipLayerName='data', lblType='uniform20',outFeatSz=20):
 	print imH5File, lbH5File
 	imFid = h5py.File(imH5File,'r')
 	lbFid = h5py.File(lbH5File,'r')
@@ -101,13 +125,19 @@ def test_network_siamese_h5(imH5File, lbH5File, netFile, defFile, imSz=128, crop
 
 	#Initialize network
 	net  = init_network(netFile, defFile)
+	
+	#Get the mean
+	imMean = []
+	if not meanFile == []:
+		imMean = read_mean_txt(meanFile)	
+		imMean = imMean.reshape((1,2 * nCh,imSz,imSz))
 
 	#Get Sizes
 	imSzSq = imSz * imSz
 	assert(ims1.shape[0] % imSzSq == 0 and ims2.shape[0] % imSzSq ==0)
 	N     = ims1.shape[0]/(imSzSq * nCh)
 	assert(lbls.shape[0] % N == 0)
-	lblSz = lbls.shape[0] / N
+	lblSz = outLblSz
 
 	#Initialize variables
 	batchSz  = get_batchsz(net)
@@ -124,10 +154,24 @@ def test_network_siamese_h5(imH5File, lbH5File, netFile, defFile, imSz=128, crop
 		ims[0:batchSz] = 0
 		ims[0:numIm,0:nCh,:,:] = ims1[st:en].reshape((numIm,nCh,imSz,imSz))
 		ims[0:numIm,nCh:2*nCh,:,:] = ims2[st:en].reshape((numIm,nCh,imSz,imSz))
-		ims = prepare_image(ims, cropSz, imMean)  
-		predFeat = get_features(net, ims)
-		labels[i : i + numIm, :]    = predFeat.reshape((numIm,lblSz))
-		gtLabels[i : i + numIm, : ] = lbls[i * lblSz : (i+numIm) * lblSz] 
+		imsPrep   = prepare_image(ims, cropSz, imMean)  
+		predFeat  = get_features(net, imsPrep, ipLayerName=ipLayerName)
+		predFeat  = predFeat[0:numIm]
+		print numIm
+		try:
+			labels[i : i + numIm, :]    = feats_2_labels(predFeat.reshape((numIm,outFeatSz)), lblType)[0:numIm]
+			gtLabels[i : i + numIm, : ] = (lbls[i * lblSz : (i+numIm) * lblSz]).reshape(numIm, lblSz) 
+		except ValueError:
+			print "Value Error found"
+			pdb.set_trace()
 	
 	confMat = compute_error(gtLabels, labels, 'classify')
-	return confMat	
+	return confMat, labels, gtLabels	
+
+
+def read_mean_txt(fileName):
+	with open(fileName,'r') as f:
+		l = f.readlines()
+		mn = [float(i) for i in l]
+		mn = np.array(mn)
+	return mn

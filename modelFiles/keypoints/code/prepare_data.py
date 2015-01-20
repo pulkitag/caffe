@@ -57,6 +57,7 @@ def get_experiment_details(expName, imSz=256):
 	
 	numTrain = 1e+6
 	numVal   = 5e+4
+	numTest  = 1e+5
 	global rawDir
 	rawDir = rawDir % imSz
 	ims  = []
@@ -102,14 +103,19 @@ def get_experiment_details(expName, imSz=256):
 	#Get the indexes in the form: (idx, pair1, pair2)
 	trainIdx   = get_indexes(trainImIdx, numTrain)
 	valIdx     = get_indexes(valImIdx, numVal)
+	testIdx    = get_indexes(valImIdx, numTest)
 
-	#Image and view data
+	#Image data
 	trainIms = [ims[classNames.index(cl)] for cl in classNames if cl in trainClass] 
 	valIms   = [ims[classNames.index(cl)] for cl in classNames if cl in valClass] 
+	testIms  = [ims[classNames.index(cl)] for cl in classNames if cl in valClass]
+	
+	#view data
 	trainView = [view[classNames.index(cl)] for cl in classNames if cl in trainClass] 
 	valView   = [view[classNames.index(cl)] for cl in classNames if cl in valClass] 
-
-	return (trainIdx, trainIms, trainView), (valIdx, valIms, valView)
+	testView  = [view[classNames.index(cl)] for cl in classNames if cl in valClass] 
+	
+	return (trainIdx, trainIms, trainView), (valIdx, valIms, valView), (testIdx, testIms, testView)
 
 
 def create_data_images(h5DataFile, ims, idxs, imSz):	
@@ -157,7 +163,39 @@ def get_angle_counts(fileName, thetaThresh):
 	print "%d number of examples below thresh, %d number above" % (threshCount, count - threshCount)		
 
 
-def create_data_labels(h5LabelFile, views, idxs, labelType):
+def find_view_centers(views, idxs, numCenters, maxAngle=30):
+	numSample  = 50000
+	nSPerClass = int(numSample/len(idxs))
+	viewDiff   = np.zeros((numSample,9))
+	maxAngle   = (np.pi*maxAngle)/180.
+
+	totalCount = 0
+	for cl in range(len(idxs)):
+		#Get views for a class
+		clViews = views[cl]
+		N       = len(clViews)
+		cl1Sample = np.random.random_integers(0, N-1, 20*nSPerClass)
+		cl2Sample = np.random.random_integers(0, N-1, 20*nSPerClass)
+		count     = 0
+		for i in range(20*nSPerClass):
+			view1,view2 = clViews[cl1Sample[i]], clViews[cl2Sample[i]
+			theta       = get_rot_angle(view1, view2)	
+			if theta < maxAngle:
+				viewDiff[totalCount,:] = linalg.logm(np.dot(view2, np.transpose(view1))) 
+				count             += 1
+				totalCount        += 1
+				if count >= nSPerClass
+					break
+
+	#Find the K-Means centers
+	model = skcl.KMeans(n_clusters=	
+
+	#Convert the K-Mean centers into medoids
+
+	
+
+
+def create_data_labels(h5LabelFile, views, idxs, labelType, viewCenters=[]):
 	numSamples = [len(i) for i in idxs]
 	numSamples = sum(numSamples)
 
@@ -180,8 +218,21 @@ def create_data_labels(h5LabelFile, views, idxs, labelType):
 	else:
 		print "Unrecognized labelType "
 		raise("Label Type not found exception")
+	elif labelType =='kmedoids30_20':
+		#If views are within 30 degree rotations then assign to one of the rotation centers,
+		#otherwise regard them as outsider. 
+		labelSz  = 21
+		angRange = np.zeros((2,1))
+		angRange[0] = 30
+		angRange[1] = 180
+		angRange    = np.pi*(angRange/180.)
+		if viewCenters==[]:
+			#Need to find the medoids/centers.
+			viewCenters = find_view_centers(views, idxs, labelSz-1)
 
-	labels  = fidl.create_dataset("/labels",(numSamples * labelSz,), dtype='f')
+	labels   = fidl.create_dataset("/labels",(numSamples * labelSz,), dtype='f')
+	indices  = fidl.create_dataset("/indices",(numSamples * 4,), dtype='f')
+	count    = 0
 	for cl in range(len(idxs)):
 		outIdx, view = idxs[cl], views[cl]
 		for k in range(len(outIdx)):
@@ -203,6 +254,8 @@ def create_data_labels(h5LabelFile, views, idxs, labelType):
 					pdb.set_trace()			
 	
 			labels[lSt:lEn] = viewDiff.flatten()
+			indices[count:count+4] = idx,cl,clIdx1,clIdx2
+			count = count + 4
 	fidl.close()	
 
 
@@ -256,23 +309,38 @@ def h52db(exp, labelType, imSz, lblOnly=False):
 if __name__ == "__main__":
 	imSz      = 128
 	exp       = 'rigid'
-	labelType = 'limited30_3' 
+	labelType = 'uniform20' 
 	
-	trainDetails, valDetails = get_experiment_details(exp, imSz)
-	
-	print "Making training Data .."
-	trainDataH5  = get_imH5Name('train', exp, imSz)
-	trainLabelH5 = get_lblH5Name('train', exp, imSz, labelType)
-	trainIdxs, trainIms, trainViews = trainDetails
-	#create_data_images(trainDataH5, trainIms, trainIdxs, imSz)
-	create_data_labels(trainLabelH5, trainViews, trainIdxs, labelType)
+	trainDetails, valDetails, testDetails = get_experiment_details(exp, imSz)
 
-	print "Making Validation Data.."
-	valDataH5   = get_imH5Name('val', exp, imSz)
-	valLabelH5  = get_lblH5Name('val', exp, imSz, labelType)
-	valIdxs, valIms, valViews = valDetails
-	create_data_images(valDataH5, valIms, valIdxs, imSz)
-	create_data_labels(valLabelH5, valViews, valIdxs, labelType)
+	isTrain = False
+	isVal   = False
+	isTest  = True
+
+	if isTrain:	
+		print "Making training Data .."
+		trainDataH5  = get_imH5Name('train', exp, imSz)
+		trainLabelH5 = get_lblH5Name('train', exp, imSz, labelType)
+		trainIdxs, trainIms, trainViews = trainDetails
+		#create_data_images(trainDataH5, trainIms, trainIdxs, imSz)
+		create_data_labels(trainLabelH5, trainViews, trainIdxs, labelType)
+
+	if isVal:
+		print "Making Validation Data.."
+		valDataH5   = get_imH5Name('val', exp, imSz)
+		valLabelH5  = get_lblH5Name('val', exp, imSz, labelType)
+		valIdxs, valIms, valViews = valDetails
+		create_data_images(valDataH5, valIms, valIdxs, imSz)
+		create_data_labels(valLabelH5, valViews, valIdxs, labelType)
+
+	if isTest:
+		print "Making Test Data .."
+		testDataH5  = get_imH5Name('test', exp, imSz)
+		testLabelH5  = get_lblH5Name('test', exp, imSz, labelType)
+		testIdxs, testIms, testViews = testDetails
+		create_data_images(testDataH5, testIms, testIdxs, imSz)
+		create_data_labels(testLabelH5, testViews, testIdxs, labelType)
+
 
 '''
 OLD Code
