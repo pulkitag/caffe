@@ -4,10 +4,22 @@ from   scipy import linalg as linalg
 import sys, os
 import pdb
 import math
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
 
 def get_rot_angle(view1, view2):
-	viewDiff = linalg.logm(np.dot(view2, np.transpose(view1)))
+	try:
+		viewDiff = linalg.logm(np.dot(view2, np.transpose(view1)))
+	except:
+		print "Error Encountered"
+		pdb.set_trace()
+
 	viewDiff = linalg.norm(viewDiff, ord='fro')
+	assert not np.isnan(viewDiff.flatten())
+	assert not np.isinf(viewDiff.flatten())
 	angle    = viewDiff/np.sqrt(2)
 	return angle
 
@@ -16,18 +28,23 @@ def get_cluster_assignments(x, centers):
 	N       = x.shape[0]
 	nCl     = centers.shape[0]	
 	distMat = np.inf * np.ones((nCl,N))
+	print "Num Examples: %d, Num Dist-Mat: %d" % (N, nCl)
+
 	for c in range(nCl):
 		for i in range(N):
-			distMat[c,i] = get_rot_angle(centers[c], centers[i])
+			distMat[c,i] = get_rot_angle(centers[c], x[i])
+
+	assert not np.isinf(distMat.flatten())
+	assert not np.isnan(distMat.flatten())
 	
 	assgn    = np.argmin(distMat, axis=0)
 	minDist  = np.amin(distMat, axis=0)
 	meanDist = np.mean(minDist) 
-	assert all(minDist.flatten()>0)
+	assert all(minDist.flatten()>=0)
 	return assgn, meanDist
  
 
-def karcher_mean(x):
+def karcher_mean(x, tol=0.01):
 	'''
 	Determined the Karcher mean of rotations
 	Implementation from Algorithm 1, Rotation Averaging, Hartley et al, IJCV 2013
@@ -35,21 +52,23 @@ def karcher_mean(x):
 	R = x[0]
 	N = x.shape[0]
 	normDeltaR = np.inf
-
+	itr = 0
 	while True:
 		#Estimate the delta rotation between the current center and all points
 		deltaR  = np.zeros((3,3))
 		oldNorm = normDeltaR
 		for i in range(N):
-			deltaR = linalg.logm(np.dot(np.transpose(R),x[i]))
+			deltaR += linalg.logm(np.dot(np.transpose(R),x[i]))
 		deltaR     = deltaR / N
 		normDeltaR = linalg.norm(deltaR, ord='fro')/np.sqrt(2)
 
 		if oldNorm - normDeltaR < tol:
 			break
 	
-		R = np.dot(R, deltaR) 
-				
+		R = np.dot(R, linalg.expm(deltaR)) 
+		#print itr
+		itr += 1		
+	
 	return R
 	
 
@@ -73,8 +92,8 @@ def cluster_rotmats(x,nCl=2,tol=0.01):
 
 	#Randomly chose some points as initial cluster centers
 	perm        = np.random.permutation(N)
-	centers     = x[perm[0:N]] 
-	assgn, dist = get_cluster_assignment(x, centers)	
+	centers     = x[perm[0:nCl]] 
+	assgn, dist = get_cluster_assignments(x, centers)	
 	print "Initial Mean Distance is: %f" % dist
 
 	itr = 0
@@ -86,7 +105,7 @@ def cluster_rotmats(x,nCl=2,tol=0.01):
 		#Find the new centers
 		centers    = estimate_clusters(x, assgn, nCl)
 		#Find the new assgn
-		assgn,dist = get_cluster_assignment(x, centers)
+		assgn,dist = get_cluster_assignments(x, centers)
 
 		print "iteration: %d, mean distance: %f" % (itr,dist)
 
@@ -96,6 +115,7 @@ def cluster_rotmats(x,nCl=2,tol=0.01):
 
 		if all(assgn==prevAssgn):
 			print "Assignments didnot change in this iteration, hence converged"
+			clusterFlag = False
 
 	return assgn, centers	 	
 
@@ -141,9 +161,17 @@ def rotmat_to_angle_axis(rotMat):
 
 
 def plot_rotmats(rotMats):
+	plt.ion()
+	fig = plt.figure()
+	ax = fig.add_subplot(111, projection='3d')
+	xpos, ypos, zpos = [0], [0], [0]	
 	N = rotMats.shape[0]
-	#for i in range(N):
-		
+	for i in range(N):
+		theta,v = rotmat_to_angle_axis(rotMats[i])
+		v       = theta * v
+		ax.quiver(xpos,ypos,zpos,v[0],v[1],v[2])
+	
+	plt.draw()
 
 
 def generate_random_rotmats(numMat = 100, thetaRange=np.pi/4):
