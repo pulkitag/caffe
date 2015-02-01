@@ -4,9 +4,6 @@ from   scipy import linalg as linalg
 import sys, os
 import pdb
 import math
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
 
@@ -18,8 +15,8 @@ def get_rot_angle(view1, view2):
 		pdb.set_trace()
 
 	viewDiff = linalg.norm(viewDiff, ord='fro')
-	assert not np.isnan(viewDiff.flatten())
-	assert not np.isinf(viewDiff.flatten())
+	assert not any(np.isnan(viewDiff.flatten()))
+	assert not any(np.isinf(viewDiff.flatten()))
 	angle    = viewDiff/np.sqrt(2)
 	return angle
 
@@ -28,14 +25,13 @@ def get_cluster_assignments(x, centers):
 	N       = x.shape[0]
 	nCl     = centers.shape[0]	
 	distMat = np.inf * np.ones((nCl,N))
-	print "Num Examples: %d, Num Dist-Mat: %d" % (N, nCl)
 
 	for c in range(nCl):
 		for i in range(N):
 			distMat[c,i] = get_rot_angle(centers[c], x[i])
 
-	assert not np.isinf(distMat.flatten())
-	assert not np.isnan(distMat.flatten())
+	assert not any(np.isinf(distMat.flatten()))
+	assert not any(np.isnan(distMat.flatten()))
 	
 	assgn    = np.argmin(distMat, axis=0)
 	minDist  = np.amin(distMat, axis=0)
@@ -156,32 +152,89 @@ def rotmat_to_angle_axis(rotMat):
 	v1,v2,v3 = -aa[1,2], aa[0,2], -aa[0,1]
 	v  = np.array((v1,v2,v3))
 	theta = np.linalg.norm(v)
-	v     = v/theta
+	if theta>0:
+		v     = v/theta
 	return theta, v
 
 
-def plot_rotmats(rotMats):
+def plot_rotmats(rotMats, isInteractive=True):
+	if isInteractive:
+		import matplotlib
+		matplotlib.use('tkagg')
+		import matplotlib.pyplot as plt
+	else:
+		import matplotlib
+		matplotlib.use('Agg')
+		import matplotlib.pyplot as plt
+	
+	N = rotMats.shape[0]
 	plt.ion()
 	fig = plt.figure()
 	ax = fig.add_subplot(111, projection='3d')
-	xpos, ypos, zpos = [0], [0], [0]	
-	N = rotMats.shape[0]
+	
+	xpos, ypos, zpos = np.zeros((N,1)), np.zeros((N,1)), np.zeros((N,1))
+	vx,vy,vz = [],[],[]
+
 	for i in range(N):
 		theta,v = rotmat_to_angle_axis(rotMats[i])
 		v       = theta * v
-		ax.quiver(xpos,ypos,zpos,v[0],v[1],v[2])
-	
-	plt.draw()
+		vx.append(v[0])
+		vy.append(v[1])
+		vz.append(v[2])
+
+	ax.quiver(xpos,ypos,zpos,vx,vy,vz)
+	plt.show()	
+	ax.set_xlim(-1,1)
+	ax.set_ylim(-1,1)
+	ax.set_zlim(-1,1)
 
 
-def generate_random_rotmats(numMat = 100, thetaRange=np.pi/4):
+def generate_random_rotmats(numMat = 100, thetaRange=np.pi/4, thetaFixed=False):
 	rotMats = np.zeros((numMat,3,3))
-	#Randomly generate an axis for rotation matrix
-	v    = np.random.random(3)
-	for i in range(numMat):
-		theta      = thetaRange * np.random.random()					
-		rotMats[i] = angle_axis_to_rotmat(theta, v)
+
+	if not thetaFixed:
+		#Randomly generate an axis for rotation matrix
+		v    = np.random.random(3)
+		for i in range(numMat):
+			theta      = thetaRange * np.random.random()					
+			rotMats[i] = angle_axis_to_rotmat(theta, v)
+	else:
+		for i in range(numMat):
+			v    = np.random.randn(3)
+			v    = v/linalg.norm(v)
+			theta      = thetaRange * np.random.random()					
+			rotMats[i] = angle_axis_to_rotmat(theta, v)
+		
 	return rotMats
 
 
+def test_clustering():
+	'''
+	For testing clustering:
+	Randomly generate soem data, cluster it and save it .mat file
+	Using matlab I will then visualize it. Visualizing in python is being a pain. 
+	'''
+	N   = 1000
+	nCl = 3
+
+	#Generate the data using nCl different axes. 
+	dat = np.zeros((N,3,3))
+	idx = np.linspace(0,N,nCl+1).astype('int')
+	for i in range(nCl):
+		dat[idx[i]:idx[i+1]] = generate_random_rotmats(idx[i+1]-idx[i],thetaFixed=True)	
+
+	assgn, centersMat = cluster_rotmats(dat,nCl)
+
+	points = np.zeros((N,3))
+	for i in range(N):
+		theta,points[i] = rotmat_to_angle_axis(dat[i])
+		points[i] = theta*points[i]
+
+	centers = np.zeros((nCl,3))
+	for i in range(nCl):
+		theta,centers[i] = rotmat_to_angle_axis(centersMat[i])
+		centers[i] = theta*centers[i]
+
+	sio.savemat('test_clustering.mat',{'assgn':assgn,'centers':centers,'points':points})	 
+	
 	

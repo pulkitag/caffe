@@ -174,6 +174,10 @@ def get_angle_counts(fileName, thetaThresh):
 
 
 def find_view_centers(views, idxs, numCenters, maxAngle=30):
+	'''
+		Find the centers by only taking examples which correspond to a rotation
+		of less than maxAngle.
+	'''
 	numSample  = 50000
 	nSPerClass = int(numSample/len(idxs))
 	viewDiff   = np.zeros((numSample,3,3))
@@ -203,7 +207,6 @@ def find_view_centers(views, idxs, numCenters, maxAngle=30):
 
 	return centers
 	
-
 
 def create_data_labels(h5LabelFile, views, idxs, labelType, viewCenters=[]):
 	numSamples = [len(i) for i in idxs]
@@ -239,7 +242,8 @@ def create_data_labels(h5LabelFile, views, idxs, labelType, viewCenters=[]):
 		angRange    = np.pi*(angRange/180.)
 		if len(viewCenters)==0:
 			#Need to find the medoids/centers.
-			viewCenters = find_view_centers(views, idxs, numLabels-1)
+			print "Computing Centers ..."
+			viewCenters = find_view_centers(views, idxs, numLabels-1, maxAngle=30)
 	else:
 		print "Unrecognized labelType "
 		raise("Label Type not found exception")
@@ -274,8 +278,12 @@ def create_data_labels(h5LabelFile, views, idxs, labelType, viewCenters=[]):
 					pdb.set_trace()			
 			elif labelType =='kmedoids30_20':
 				viewDiff = np.dot(view2, np.linalg.inv(view1))
-				viewDiff = ru.get_cluster_assignments(viewDiff, viewCenters)	
-	
+				theta,_  = ru.rotmat_to_angle_axis(viewDiff)
+				if theta < ((np.pi)*30.0)/180.0:
+					viewDiff,_ = ru.get_cluster_assignments(viewDiff.reshape((1,3,3)), viewCenters)	
+				else:
+					viewDiff = np.array([20])
+
 			labels[lSt:lEn] = viewDiff.flatten()
 			indices[count:count+4] = idx,cl,clIdx1,clIdx2
 			count = count + 4
@@ -362,6 +370,40 @@ def h52db(exp, labelType, imSz, lblOnly=False):
 		h5LbName = get_lblH5Name(s, exp, imSz, labelType)
 		dbLbName = get_lblDbName(s, exp, imSz, labelType)	 
 		subprocess.check_call(['%s %s %s %d' % (lbToolName, h5LbName, dbLbName, labelSz)],shell=True)
+
+
+def vis_rot_clusters():
+	exp       = 'rigid'
+	labelType = 'kmedoids30_20'  
+	vcFileName  = get_view_centers_name(exp, labelType)
+	viewCenters = read_view_centers(vcFileName)
+	
+	outFile = 'data/exp%s_lbl%s_clusters.mat' % (exp, labelType)
+	N       = viewCenters.shape[0]
+	centers = np.zeros((N,3))
+	
+	for i in range(0,N):
+		theta,v = ru.rotmat_to_angle_axis(viewCenters[i])
+		centers[i] = theta*v
+
+	sio.savemat(outFile, {'centers':centers})	
+
+
+def vis_im_label_pairs():
+	'''
+		Stores the image and label pairs for visualization.
+		USeful for sanity check that the leveldb which was formed
+		along with the labels was sane. 
+	'''
+	imSz      = 128
+	exp       = 'rigid'
+	labelType = 'kmedoids30_20' 
+	setName   = 'val'	
+
+	#File Names
+	h5ImName = get_imH5Name(setName, exp, imSz)
+	h5LbName = get_lblH5Name(setName, exp, imSz, labelType)
+
 
 
 if __name__ == "__main__":
