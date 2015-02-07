@@ -3,6 +3,69 @@ import h5py
 import caffe
 import pdb
 
+
+class layerSz:
+	def __init__(self, stride, filterSz):
+		self.imSzPrev = [] #We will assume square images for now
+		self.stride   = stride #Stride with which filters are applied
+		self.filterSz = filterSz #Size of filters. 
+		self.stridePixPrev = [] #Stride in image pixels of the filters in the previous layers.
+		self.pixelSzPrev   = [] #Size of the filters in the previous layers in the image space
+		#To be computed
+		self.pixelSz   = [] #the receptive field size of the filter in the original image.
+		self.stridePix = [] #Stride of units in the image pixel domain.
+
+	def prev_prms(self, prevLayer):
+		self.set_prev_prms(prevLayer.stridePix, prevLayer.pixelSz)
+
+	def set_prev_prms(self, stridePixPrev, pixelSzPrev):
+		self.stridePixPrev = stridePixPrev
+		self.pixelSzPrev   = pixelSzPrev
+
+	def compute(self):
+		self.pixelSz   = self.pixelSzPrev + (self.filterSz-1)*self.stridePixPrev	  
+		self.stridePix = self.stride * self.stridePixPrev
+
+
+
+
+def calculate_size():
+	conv1 = layerSz(4,11)
+	conv1.set_prev_prms(1,1)
+	conv1.compute()
+	pool1 = layerSz(2,3)
+	pool1.prev_prms(conv1)
+	pool1.compute()
+
+	conv2 = layerSz(1,5)
+	conv2.prev_prms(pool1)
+	conv2.compute()
+	pool2 = layerSz(2,3)
+	pool2.prev_prms(conv2)
+	pool2.compute()
+
+	conv3 = layerSz(1,3)
+	conv3.prev_prms(pool2)
+	conv3.compute()
+
+	conv4 = layerSz(1,3)
+	conv4.prev_prms(conv3)
+	conv4.compute()
+
+	conv5 = layerSz(1,3)
+	conv5.prev_prms(conv4)
+	conv5.compute()
+	pool5 = layerSz(2,3)
+	pool5.prev_prms(conv5)
+	pool5.compute()
+
+	print 'Pool1: Receptive: %d, Stride: %d ' % (pool1.pixelSz, pool1.stridePix)	
+	print 'Pool2: Receptive: %d, Stride: %d ' % (pool2.pixelSz, pool2.stridePix)	
+	print 'Conv3: Receptive: %d, Stride: %d ' % (conv3.pixelSz, conv3.stridePix)	
+	print 'Conv4: Receptive: %d, Stride: %d ' % (conv4.pixelSz, conv4.stridePix)	
+	print 'Pool5: Receptive: %d, Stride: %d ' % (pool5.pixelSz, pool5.stridePix)	
+	
+
 def init_network(modelFile, defFile, isGPU=True):
 	net = caffe.Net(modelFile, defFile)
 	net.set_phase_test()

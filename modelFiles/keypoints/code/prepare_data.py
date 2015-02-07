@@ -10,9 +10,11 @@ import rot_utils as ru
 
 TOOL_DIR = '/work4/pulkitag-code/pkgs/caffe-v2-2/build/tools/'
 
-rawDir = '/data1/pulkitag/keypoints/raw/imSz%d/';
-h5Dir  = '/data1/pulkitag/keypoints/h5/';
-dbDir  = '/data1/pulkitag/keypoints/leveldb_store/';
+rawDir = '/data1/pulkitag/keypoints/raw/imSz%d/'
+h5Dir  = '/data1/pulkitag/keypoints/h5/'
+dbDir  = '/data1/pulkitag/keypoints/leveldb_store/'
+visDir = '/data1/pulkitag/keypoints/vis/'
+
 classNames = ['aeroplane','bicycle','bird','boat','bottle',\
 							'bus','car','cat','chair','cow', \
 							'diningtable','dog','horse','motorbike','person', \
@@ -21,6 +23,10 @@ classNames = ['aeroplane','bicycle','bird','boat','bottle',\
 rigidClass = ['aeroplane', 'bicycle', 'boat', 'bottle', \
 							'bus', 'car', 'chair', 'diningtable', 'motorbike', \
 							'potted-plant', 'sofa', 'train', 'tvmonitor']
+
+rotClass   = ['aeroplane', 'bicycle', 'bird', 'boat', \
+							'bus', 'car', 'chair', 'cow', 'horse', 'motorbike', \
+							'person', 'sheep', 'sofa', 'train', 'tvmonitor']
 							
 def normalize_counts(clCount, numSamples):
 	countSum = sum(clCount)
@@ -36,7 +42,6 @@ def get_indexes(clIdx, numSamples):
 	the data for example at position pos. 
 	'''
 	
-
 	#Find number of valid samples
 	clCount = [len(c) for c in clIdx]
 	clCount = normalize_counts(clCount, numSamples)
@@ -65,6 +70,7 @@ def get_indexes(clIdx, numSamples):
 def get_experiment_details(expName, imSz=256):
 	
 	numTrain = 1e+6
+	#numTrain = 4e+5
 	numVal   = 5e+4
 	numTest  = 1e+5
 	global rawDir
@@ -95,15 +101,18 @@ def get_experiment_details(expName, imSz=256):
 			else:
 				valImIdx.append(range(clCount[i])) 
 
-	elif expName=='rigid':
-		trainClass = rigidClass
+	elif expName in ['rigid', 'rotObjs']:
+		if expName == 'rigid':
+			trainClass = rigidClass
+		else:
+			trainClass = rotClass 
 		valClass   = trainClass
 		#Select training and val images for each class
 		trainPercent = .80 
 		valPercent   = .20
 		trainImIdx, valImIdx   = [],[]
 		np.random.seed(7)
-		for cl in rigidClass:
+		for cl in trainClass:
 			cc = clCount[classNames.index(cl)]
 			classIdx = np.random.permutation(cc)
 			N        = int(trainPercent * cc)
@@ -315,6 +324,26 @@ def get_lblDbName(setName, exp, imSz, lblType):
 	return dbName
 
 
+def get_labelsz(labelType):
+	if labelType=='9DRot':
+		labelSz = 9
+	elif labelType in ['angle','uniform20','limited30_3','kmedoids30_20']:
+		labelSz = 1
+	return labelSz
+
+
+def get_num_label_class(labelType):
+	if labelType in ['9DRot', 'angle']:
+		nCl = np.inf
+	elif labelType=='uniform20':
+		nCl = 20
+	elif labelType=='limited30_3':
+		nCl = 4
+	elif labelType=='kmedoids30_20':
+		nCl = 21
+	return nCl
+
+
 def get_view_centers_name(exp, lblType):
 	vName = 'view_centers_exp%s_lbl%s' % (exp, lblType)
 	vName = h5Dir + vName
@@ -356,12 +385,9 @@ def read_view_centers(vFile):
 def h52db(exp, labelType, imSz, lblOnly=False):
 	imToolName = TOOL_DIR + 'hdf52leveldb_siamese_nolabels.bin'
 	lbToolName = TOOL_DIR + 'hdf52leveldb_float_labels.bin'
-	splits = ['val','train']
-	if labelType=='9DRot':
-		labelSz = 9
-	elif labelType in ['angle','uniform20','limited30_3','kmedoids30_20']:
-		labelSz = 1
-	
+	splits  = ['val','train']
+	labelSz = get_labelsz(labelType)
+ 	
 	for s in splits:
 		if not lblOnly:
 			h5ImName = get_imH5Name(s, exp, imSz)
@@ -395,20 +421,82 @@ def vis_im_label_pairs():
 		USeful for sanity check that the leveldb which was formed
 		along with the labels was sane. 
 	'''
+
+	import matplotlib
+	matplotlib.use('Agg')
+	import matplotlib.pyplot as plt
+	fig = plt.figure()
+
 	imSz      = 128
-	exp       = 'rigid'
+	exp       = 'rotObjs'
 	labelType = 'kmedoids30_20' 
 	setName   = 'val'	
+	nsPerCl   = 100 #Numbr of samples in the class. 
+
+	labelSz   = get_labelsz(labelType)
+	nCl       = get_num_label_class(labelType)
+
+	#Paths
+	outDir  = os.path.join(visDir,'exp%s_lbl%s' % (exp, labelType),'set%s' % setName)
+	if not os.path.exists(outDir):
+		os.makedirs(outDir)
 
 	#File Names
 	h5ImName = get_imH5Name(setName, exp, imSz)
 	h5LbName = get_lblH5Name(setName, exp, imSz, labelType)
+	imFid    = h5py.File(h5ImName,'r')
+	lbFid    = h5py.File(h5LbName,'r')
+	im1      = imFid['images1']
+	im2      = imFid['images2']
+	lbl      = lbFid['labels']
 
+	N = lbl.shape[0]
+	assert np.mod(N,labelSz)==0	
+	N = int(N/labelSz)
+
+	lblCount  = np.zeros((nCl,1))
+	if labelSz==1:
+		for cl in range(nCl):
+			lblCount[cl] = np.sum(lbl[:]==cl)
+
+	h,w,ch = imSz,imSz,3
+	sz     = h * w * ch
+	for cl in range(nCl):
+		print 'Class: %d' % cl
+		#Choose some examples to vis
+		idx   = np.where(lbl[:]==cl)[0]
+		idx   = idx[0:nsPerCl]
+	
+		#Form the directory for storing stuff. 
+		clDir = os.path.join(outDir,'class_%d' % cl)
+		if not os.path.exists(clDir):
+			os.makedirs(clDir)
+		outFile = clDir + '/im_%d.png' 
+	
+		count  = 1
+		for i in idx:	
+			#Get the images corresponding to these examples. 
+			st  = i * sz
+			en  = st + sz
+			imFirst = np.array(im1[st:en]).reshape((ch, h, w)).transpose((1, 2, 0)) 	
+			imSec   = np.array(im2[st:en]).reshape((ch, h, w)).transpose((1, 2, 0)) 	
+			
+			#Make the images
+			plt.subplot(2,1,1)
+			plt.imshow(imFirst)
+			plt.xticks([])
+			plt.yticks([])
+			plt.subplot(2,1,2)
+			plt.imshow(imSec)
+			plt.xticks([])
+			plt.yticks([])
+			plt.savefig(outFile % count, bbox_inches='tight') 
+			count = count + 1
 
 
 if __name__ == "__main__":
 	imSz      = 128
-	exp       = 'rigid'
+	exp       = 'rotObjs'
 	labelType = 'kmedoids30_20' 
 	
 	trainDetails, valDetails, testDetails = get_experiment_details(exp, imSz)
@@ -422,15 +510,15 @@ if __name__ == "__main__":
 			viewCenters = read_view_centers(vcFileName)
 
 	isTrain = True
-	isVal   = False
-	isTest  = True
+	isVal   = True
+	isTest  = False
 
 	if isTrain:	
 		print "Making training Data .."
 		trainDataH5  = get_imH5Name('train', exp, imSz)
 		trainLabelH5 = get_lblH5Name('train', exp, imSz, labelType)
 		trainIdxs, trainIms, trainViews = trainDetails
-		#create_data_images(trainDataH5, trainIms, trainIdxs, imSz)
+		create_data_images(trainDataH5, trainIms, trainIdxs, imSz)
 		viewCenters = create_data_labels(trainLabelH5, trainViews, trainIdxs, labelType, viewCenters)
 		if labelType in ['kmedoids30_20']:
 			save_view_centers(viewCenters, vcFileName)
