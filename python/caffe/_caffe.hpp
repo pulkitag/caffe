@@ -144,6 +144,12 @@ class PyNet {
     return output_blob_names;
   }
 
+
+	//Set the backward parameter for desired layer
+	void set_force_backward(string layerName){
+		net_->SetForceBackwardLayer(layerName);
+	}	
+
   // Input preprocessing configuration attributes. These are public for
   // direct access from Python.
   bp::dict mean_;

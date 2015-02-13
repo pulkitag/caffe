@@ -159,6 +159,9 @@ class Net {
   static bool StateMeetsRule(const NetState& state, const NetStateRule& rule,
       const string& layer_name);
 
+	//To force backward computation in a single layer. 
+	void SetForceBackwardLayer(string layerName);
+
  protected:
   // Helpers for Init.
   /// @brief Append a new input or top blob to the net.

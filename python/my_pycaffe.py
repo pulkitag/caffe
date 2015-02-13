@@ -76,6 +76,38 @@ def init_network(modelFile, defFile, isGPU=True):
 	return net	
 
 
+def preprocess_batch(net, ims, dataLayerName='data'):
+	'''
+		Inputs are assumed to be numIm*h*w*numChannels
+		Preprocess the images
+	'''
+	assert ims.ndim==4, "Images should be 4D"
+	N = ims.shape[0]
+	imOut = []
+	for i in range(N):
+		imOut.append(np.asarray([net.preprocess(dataLayerName, ims[i])]))
+
+	imOut = np.squeeze(np.asarray(imOut))
+	if N ==1:
+		imOut = np.reshape(imOut, (1,imOut.shape[0], imOut.shape[1], imOut.shape[2]))
+	
+	return imOut
+
+
+def deprocess_batch(net, ims, dataLayerName='data'):
+	'''
+		Retrieve the image back
+	'''
+	assert ims.ndim==4, "Images should be 4D"
+	N,ch,h,w = ims.shape
+	imOut = []
+	for i in range(N):
+		imOut.append(net.deprocess(dataLayerName, np.reshape(ims[i],(1,ch,h,w))))
+
+	imOut = np.squeeze(np.asarray(imOut))
+	return imOut
+
+
 def get_batchsz(net):
 	return net.blobs['data'].num
 
@@ -111,6 +143,16 @@ def prepare_image(im, cropSz=[], imMean=[]):
 
 	return im
 
+
+def read_mean(protoFileName):
+	with open(protoFileName,'r') as fid:
+		ss = fid.read()
+		vec = caffe.io.caffe_pb2.BlobProto()
+		vec.ParseFromString(ss)
+		mn = caffe.io.blobproto_to_array(vec)
+
+	mn = np.squeeze(mn)
+	return mn
 
 
 def get_features(net, im, layerName=None, ipLayerName='data'):

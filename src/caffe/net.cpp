@@ -584,6 +584,19 @@ void Net<Dtype>::BackwardFromTo(int start, int end) {
 }
 
 template <typename Dtype>
+void Net<Dtype>::SetForceBackwardLayer(string layerName){
+	const vector<string> layers = layer_names();
+	for (int i=0; i<layers.size(); i++){
+		if (layerName.compare(layers[i])==0){
+			for (int j=0; j<bottom_need_backward_[i].size(); j++)
+				bottom_need_backward_[i][j] = true;
+			std::cout << "Forcing backward computation for: " << layers[i] << "\n";
+		}
+	}
+}	
+
+
+template <typename Dtype>
 void Net<Dtype>::ForwardDebugInfo(const int layer_id) {
   for (int top_id = 0; top_id < top_vecs_[layer_id].size(); ++top_id) {
     const Blob<Dtype>& blob = *top_vecs_[layer_id][top_id];
