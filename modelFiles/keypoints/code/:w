@@ -5,10 +5,8 @@ import matplotlib.pyplot as plt
 import read_picking as rep
 import scipy.misc as scm
 import my_pycaffe as mp
-import scipy.linalg as scl
 
 rootDir = '/data1/pulkitag/projRotate/'
-
 
 def get_paths(sqMask, imSz=256):
 	if sqMask:
@@ -26,7 +24,6 @@ def get_paths(sqMask, imSz=256):
 	#Need to substitute - netName, className, camNum, layerName
 	prms['featFile'] = os.path.join(rootDir, 'features', '%s', suffix, '%s', 'cam%d', '%s.h5') 
 	return prms	
-
 
 def save_masks(camNum, sqMask=False):
 	imSz  = 256
@@ -52,19 +49,6 @@ def save_masks(camNum, sqMask=False):
 			plt.imsave(svName, colDat)
 			
 
-
-def compute_distance(x1, x2, distType='l2'):
-	if distType=='l2':
-		return scl.norm(x1-x2)
-	elif distType=='l2norm':
-		n1   = scl.norm(x1)
-		n2   = scl.norm(x2)
-		dist = scl.norm(x1 - x2)
-		return (dist/(np.sqrt(n1*n2))) 
-	else:
-		assert False, 'DistType not found'
-
-
 def compute_feat_diff(netName='vgg', layerName='pool4', sqMask=True, camNum=5, imSz=256):
 	'''
 		Assumes that features have been precomputed.
@@ -72,30 +56,22 @@ def compute_feat_diff(netName='vgg', layerName='pool4', sqMask=True, camNum=5, i
 	'''
 	#The number of neighbors to consider for computing the distance
 	numNgbhr = 10
-	rots     = range(0,360,3)
+	rots     = np.range(0,360,3)
 	N        = len(rots)
 
 	#Get the paths
 	prms = get_paths(sqMask, imSz=imSz)
 	#ClassNames
 	cls     = rep.get_classNames()
-	rotDiff = np.zeros((len(cls),N,2*numNgbhr-1)) 
+	rotDiff = np.zeros((len(cls),N,2*numNgbhr)) 
 	for (i,cl) in enumerate(cls):
-		print cl
 		#Output Feature File Name 
 		featFile = prms['featFile'] % (cl, netName, camNum, layerName) 
 		featFid  = h5.File(featFile, 'r')
 		for (r,rot) in enumerate(rots):
 			gtFeat = (featFid['rot%d' % rot][:]).flatten()
-			count  = 0
 			for j in range(-numNgbhr + 1, numNgbhr):
-				r2   = np.mod(r + j, N)
-				feat = (featFid['rot%d' % rots[r2]][:]).flatten()
-				dist = compute_distance(gtFeat, feat, 'l2norm') 	
-				rotDiff[i,r,count] = dist
-				count += 1
-
-	return rotDiff
+			
 
 
 def compute_features(netName='vgg', layerName='pool4', sqMask=True, camNum=5):
@@ -142,6 +118,7 @@ def compute_features(netName='vgg', layerName='pool4', sqMask=True, camNum=5):
 				im     = np.reshape(im, (1,im.shape[0],im.shape[1],im.shape[2]))
 				ipDat.append(im)
 			ipDat = np.concatenate(ipDat[:], axis=0)
+			print ipDat.shape
 
 			#Process the batch images
 			ims   = mp.preprocess_batch(net, ipDat, dataLayerName='data')
