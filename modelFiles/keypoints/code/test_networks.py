@@ -48,5 +48,18 @@ def main(expName='rigid', labelType='uniform20', imSz=128):
 	h5ImFile, h5LbFile = get_h5_files(expName, labelType, imSz=imSz)
 	defFile, netFile, meanFile = get_def_files(expName, labelType, imSz=imSz)
 
-	confMat,predLabels,gtLabels = mp.test_network_siamese_h5(h5ImFile, h5LbFile, defFile, netFile, ipLayerName='pair_data',outLblSz=1,lblType=labelType,meanFile=meanFile)
+	maskLastLabel = False
+	if labelType=='uniform20':
+		outFeatSz = 20
+	elif labelType=='kmedoids30_20':
+		outFeatSz = 21
+		maskLastLabel = True
+	else:	
+		print 'Label Type Not Recognized'
+		return
+
+	confMat,predLabels,gtLabels = mp.test_network_siamese_h5(h5ImFile, h5LbFile, defFile, netFile, ipLayerName='pair_data',outLblSz=1,lblType=labelType,meanFile=meanFile, outFeatSz=outFeatSz, maskLastLabel=maskLastLabel)
+	
+	if maskLastLabel:
+		print 'maskLastLabel is True'
 	return confMat	

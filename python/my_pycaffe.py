@@ -27,9 +27,10 @@ class layerSz:
 		self.stridePix = self.stride * self.stridePixPrev
 
 
-
-
 def calculate_size():
+	'''
+		Calculate the receptive field size and the stride of the Alex-Net
+	'''
 	conv1 = layerSz(4,11)
 	conv1.set_prev_prms(1,1)
 	conv1.compute()
@@ -66,15 +67,83 @@ def calculate_size():
 	print 'Pool5: Receptive: %d, Stride: %d ' % (pool5.pixelSz, pool5.stridePix)	
 	
 
-def init_network(modelFile, defFile, isGPU=True):
-	net = caffe.Net(modelFile, defFile)
-	net.set_phase_test()
-	if isGPU:
-		net.set_mode_gpu()
+def get_model_mean_file(netName='vgg'):
+	'''
+		Returns 
+			the model file - the .caffemodel with the weights
+			the mean file of the imagenet data
+	'''
+	if netName   == 'alex':
+		modelFile    = '/data1/pulkitag/caffe_models/caffe_imagenet_train_iter_310000'
+	elif netName == 'vgg':
+		modelFile    = '/data1/pulkitag/caffe_models/VGG_ILSVRC_19_layers.caffemodel'
 	else:
-		net.set_mode_cpu()
+		print 'netName not recognized'
+		return
+
+	imMeanFile = '/data1/pulkitag/caffe_models/ilsvrc2012_mean.binaryproto'
+	return modelFile, imMeanFile
+	
+
+def get_layer_def_files(netName='vgg', layerName='pool4'):
+	'''
+		Returns
+			the architecture definition file of the network uptil layer layerName
+	'''
+	if netName=='vgg':
+		defFile = '/data1/pulkitag/caffe_models/layer_def_files/vgg_19_%s.prototxt' % layerName
+	else:
+		print 'Cannont get files for networks other than VGG'
+	return defFile	
+
+
+def get_input_blob_shape(defFile):
+	'''
+		Get the shape of input blob from the defFile
+	'''
+	blobShape = []
+	with open(defFile,'r') as f:
+		lines  = f.readlines()
+		ipMode = False
+		for l in lines:
+			if 'input:' in l:
+				ipMode = True
+			if ipMode and 'input_dim:' in l:
+				ips = l.split()
+				blobShape.append(int(ips[1]))
+	return blobShape
+				
+
+def init_network(defFile, modelFile, isGPU=True, testMode=True):
+	'''
+		Initialize the network
+	'''
+	net = caffe.Net(defFile, modelFile)
+	if testMode:
+		caffe.set_phase_test()
+	else:
+		caffe.set_phase_train()
+	#Set GPU usage
+	if isGPU:
+		caffe.set_mode_gpu()
+	else:
+		caffe.set_mode_cpu()
 	return net	
 
+
+def net_preprocess_init(net, layerName='data',RGBMode=True, meanDat = []):
+	'''
+		Sets-up preprocessing in layer, layerName. 
+		The n/ws are assumed to take inputs in BGR format. 
+	'''
+	if RGBMode:
+		print 'Enabling input in RGB, the Net works in BGR format'
+		net.set_channel_swap(layerName,(2,1,0))
+
+	if not meanDat==[]:
+		print "Setting Mean.."
+		net.set_mean(layerName, meanDat)
+		
 
 def preprocess_batch(net, ims, dataLayerName='data'):
 	'''
@@ -110,6 +179,24 @@ def deprocess_batch(net, ims, dataLayerName='data'):
 
 def get_batchsz(net):
 	return net.blobs['data'].num
+
+
+def get_blob_shape(net, blobName):
+	assert blobName in net.blobs.keys(), 'Blob Name is not present in the net'
+	blob = net.blobs[blobName]
+	return blob.num, blob.channels, blob.height, blob.width
+
+
+def setup_prototypical_network(netName='vgg', layerName='pool4'):
+	'''
+		Sets up a network in a configuration in which I commonly use it. 
+	'''
+	modelFile, meanFile = get_model_mean_file(netName)
+	defFile             = get_layer_def_files(netName, layerName=layerName)
+	meanDat             = read_mean(meanFile)
+	net                 = init_network(defFile, modelFile)
+	net_preprocess_init(net, layerName='data', meanDat=meanDat)
+	return net	
 
 
 def prepare_image(im, cropSz=[], imMean=[]):
@@ -207,11 +294,14 @@ def compute_error(gtLabels, prLabels, errType='classify'):
 		raise
 	return res	
 
-def feats_2_labels(feats, lblType):
+
+def feats_2_labels(feats, lblType, maskLastLabel=False):
 	#feats are assumed to be numEx * featDims
 	labels = []
-	if lblType == 'uniform20':
+	if lblType in ['uniform20', 'kmedoids30_20']:
 		r,c = feats.shape
+		if maskLastLabel:
+			feats = feats[0:r,0:c-1]
 		labels = np.argmax(feats, axis=1)
 		labels = labels.reshape((r,1))
 	else:
@@ -220,7 +310,11 @@ def feats_2_labels(feats, lblType):
 	return labels
 
 
-def test_network_siamese_h5(imH5File, lbH5File, netFile, defFile, imSz=128, cropSz=112, nCh=3, outLblSz=1, meanFile=[], ipLayerName='data', lblType='uniform20',outFeatSz=20):
+def test_network_siamese_h5(imH5File, lbH5File, netFile, defFile, imSz=128, cropSz=112, nCh=3, outLblSz=1, meanFile=[], ipLayerName='data', lblType='uniform20',outFeatSz=20, maskLastLabel=False):
+	'''
+		maskLastLabel: In some cases it is we may need to compute the error bt ignoring the last label
+									 for example in det - where the last class might be the backgroud class
+	'''
 	print imH5File, lbH5File
 	imFid = h5py.File(imH5File,'r')
 	lbFid = h5py.File(lbH5File,'r')
@@ -264,7 +358,7 @@ def test_network_siamese_h5(imH5File, lbH5File, netFile, defFile, imSz=128, crop
 		predFeat  = predFeat[0:numIm]
 		print numIm
 		try:
-			labels[i : i + numIm, :]    = feats_2_labels(predFeat.reshape((numIm,outFeatSz)), lblType)[0:numIm]
+			labels[i : i + numIm, :]    = feats_2_labels(predFeat.reshape((numIm,outFeatSz)), lblType, maskLastLabel=maskLastLabel)[0:numIm]
 			gtLabels[i : i + numIm, : ] = (lbls[i * lblSz : (i+numIm) * lblSz]).reshape(numIm, lblSz) 
 		except ValueError:
 			print "Value Error found"

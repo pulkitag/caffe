@@ -24,9 +24,10 @@ int main(int argc, char** argv){
 		return 1;
 	}
 
-	int rows, cols;
+	int rows, cols, labelSz;
 	rows = 28;
 	cols = 28;
+	labelSz = 3;
 	//std::string dataPath = "/work4/pulkitag/data_sets/digits/";
 	//std::string filePath = dataPath + "mnist_train.hdf5";
 	std::string filePath(argv[1]);
@@ -64,8 +65,8 @@ int main(int argc, char** argv){
 	assert(imsz==(unsigned long)dims_out[0]);
 	ndims = dataspaceLbl.getSimpleExtentDims( dims_out, NULL);
 	N     = (unsigned long)dims_out[0];
-	assert(imsz == rows * cols * N);
-	std::cout << "Num Images: " << N << " \n";
+	assert(imsz == rows * cols * N / labelSz);
+	std::cout << "Num Images: " << N / labelSz << " \n";
 
 
 	//Define memspaces
@@ -97,7 +98,7 @@ int main(int argc, char** argv){
   unsigned char* pixels = new unsigned char[2 * Nr];
 	unsigned char labels;
   int count = 0;
-	unsigned long num_items = N;
+	unsigned long num_items = N / labelSz;
   const int kMaxKeyLength = 10;
   char key_cstr[kMaxKeyLength];
   std::string value;

@@ -18,7 +18,7 @@ objects_to_download = "all"
 # 'kinbody' contains OpenRAVE kinbodies for each object.
 # See the website for more details.
 #files_to_download = ["rgbd", "rgb_highres", "processed", "kinbody"]
-files_to_download = ["rgbd"]
+files_to_download = ["processed"]
 
 # Extract all files from the downloaded .tgz, and remove .tgz files.
 # If false, will just download all .tgz files to output_directory
