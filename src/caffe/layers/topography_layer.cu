@@ -11,10 +11,10 @@ namespace caffe {
 /// @brief refer to CPU forward -- the BLAS implementation is the same.
 template <typename Dtype>
 void TopographyLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
-      vector<Blob<Dtype>*>* top) {
+      const vector<Blob<Dtype>*>& top) {
   for (int i = 0; i < bottom.size(); ++i) {
     const Dtype* bottom_data = bottom[i]->gpu_data();
-    Dtype* top_data = (*top)[i]->mutable_gpu_data();
+    Dtype* top_data = top[i]->mutable_gpu_data();
     
 		if (smooth_output_){
 			Dtype* col_data = col_buffer_.mutable_gpu_data();
@@ -33,12 +33,12 @@ void TopographyLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
 				 
 					caffe_gpu_gemm<Dtype>(CblasNoTrans, CblasNoTrans, M_, N_, K_,
 						(Dtype)1., weight, col_data,
-						(Dtype)0., top_data + (*top)[i]->offset(n) + top_offset * g);
+						(Dtype)0., top_data + top[i]->offset(n) + top_offset * g);
 					
 				 }
 			}
 		}else{
-			caffe_copy((*top)[i]->count(), bottom_data, top_data); 
+			caffe_copy(top[i]->count(), bottom_data, top_data); 
 		}
   }
 }
@@ -46,7 +46,7 @@ void TopographyLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
 /// @brief refer to CPU backward -- the BLAS implementation is the same.
 template <typename Dtype>
 void TopographyLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
-      const vector<bool>& propagate_down, vector<Blob<Dtype>*>* bottom) {
+      const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom) {
   const Dtype* weight = NULL;
   Dtype* weight_diff = NULL;
   //if (this->param_propagate_down_[0]) {
@@ -64,8 +64,8 @@ void TopographyLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
 			}
 			Dtype* col_data = col_buffer_.mutable_gpu_data();
 			Dtype* col_diff = col_buffer_.mutable_gpu_diff();
-			const Dtype* bottom_data = (*bottom)[i]->gpu_data();
-			Dtype* bottom_diff = (*bottom)[i]->mutable_gpu_diff();
+			const Dtype* bottom_data = bottom[i]->gpu_data();
+			Dtype* bottom_diff = bottom[i]->mutable_gpu_diff();
 		
 			for (int n = 0; n < num_; ++n) {
 				
@@ -74,7 +74,7 @@ void TopographyLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
 					for (int g = 0; g < group_; ++g) {
 						// Since we sory in the forward pass by not storing all col
 						// data, we will need to recompute them.
-					  imchannel2col_gpu(bottom_data + (*bottom)[i]->offset(n) 
+					  imchannel2col_gpu(bottom_data + bottom[i]->offset(n) 
 							+ g * height_ * width_ * channels_ / group_, 
 							channels_ / group_, height_, width_, chHeight_, chWidth_,
 							kernel_h_, kernel_w_, pad_h_, pad_w_, stride_h_, stride_w_,
@@ -102,7 +102,7 @@ void TopographyLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
 						colchannel2im_gpu(col_diff, channels_ / group_ , height_, width_,
 							 chHeight_, chWidth_, kernel_h_, kernel_w_, pad_h_, pad_w_,
 							 stride_h_, stride_w_,
-								bottom_diff + (*bottom)[i]->offset(n) + 
+								bottom_diff + bottom[i]->offset(n) + 
 								g * ( channels_ / group_ ) * height_ * width_ );
 					}
 				}
@@ -112,6 +112,6 @@ void TopographyLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
 }
 
 
-INSTANTIATE_CLASS(TopographyLayer);
+INSTANTIATE_LAYER_GPU_FUNCS(TopographyLayer);
 
 }  // namespace caffe

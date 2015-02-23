@@ -11,7 +11,7 @@ namespace caffe {
 
 template <typename Dtype>
 void TopographyLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
-      vector<Blob<Dtype>*>* top) {
+      const vector<Blob<Dtype>*>& top) {
   // Configure the kernel size, padding, stride, and inputs.
   TopographyParameter top_param = this->layer_param_.topography_param();
   CHECK(top_param.has_kernel_size())
@@ -79,7 +79,7 @@ void TopographyLayer<Dtype>::PrintWeights() const {
 
 template <typename Dtype>
 void TopographyLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
-      vector<Blob<Dtype>*>* top) {
+      const vector<Blob<Dtype>*>& top) {
   num_ = bottom[0]->num();
   height_ = bottom[0]->height();
   width_ = bottom[0]->width();
@@ -101,8 +101,8 @@ void TopographyLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
  	//					<< " stride_w_: " << stride_w_ << " \n "; 
 	width_col_  = (chWidth_ + 2 * pad_w_ - kernel_w_)/stride_w_ + 1;
 	height_col_ = (chHeight_ + 2 * pad_h_ - kernel_h_)/stride_h_ + 1;
-	for (int top_id = 0; top_id < top->size(); ++top_id) {
-    (*top)[top_id]->Reshape(num_, width_col_ * height_col_ * group_ , 
+	for (int top_id = 0; top_id < top.size(); ++top_id) {
+    top[top_id]->Reshape(num_, width_col_ * height_col_ * group_ , 
 						height_out_, width_out_);
   }
 
@@ -119,17 +119,17 @@ void TopographyLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
   top_col_buffer_.Reshape(
       1, 1, 1, width_col_ * height_col_ * height_out_ * width_out_);
 
-	for (int top_id = 0; top_id < top->size(); ++top_id) {
-    (*top)[top_id]->Reshape(num_, channels_, height_out_, width_out_);
+	for (int top_id = 0; top_id < top.size(); ++top_id) {
+    top[top_id]->Reshape(num_, channels_, height_out_, width_out_);
   }
 }
 
 template <typename Dtype>
 void TopographyLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
-      vector<Blob<Dtype>*>* top) {
+      const vector<Blob<Dtype>*>& top) {
   for (int i = 0; i < bottom.size(); ++i) {
     const Dtype* bottom_data = bottom[i]->cpu_data();
-    Dtype* top_data = (*top)[i]->mutable_cpu_data();
+    Dtype* top_data = top[i]->mutable_cpu_data();
 		
 		if (smooth_output_){
 			Dtype* col_data = col_buffer_.mutable_cpu_data();
@@ -149,20 +149,20 @@ void TopographyLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
 					
 					caffe_cpu_gemm<Dtype>(CblasNoTrans, CblasNoTrans, M_, N_, K_,
 						(Dtype)1., weight, col_data,
-						(Dtype)0., top_data + (*top)[i]->offset(n) + top_offset * g);
+						(Dtype)0., top_data + top[i]->offset(n) + top_offset * g);
 
 					//Copy data from top_col buffer to top;
 				}
 			}
 		}else{
-			caffe_copy((*top)[i]->count(), bottom_data, top_data); 
+			caffe_copy(top[i]->count(), bottom_data, top_data); 
 		}	
   }
 }
 
 template <typename Dtype>
 void TopographyLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
-      const vector<bool>& propagate_down, vector<Blob<Dtype>*>* bottom) {
+      const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom) {
   const Dtype* weight = NULL;
   Dtype* weight_diff = NULL;
 	weight = this->blobs_[0]->cpu_data();
@@ -179,15 +179,15 @@ void TopographyLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
       }
       Dtype* col_data = col_buffer_.mutable_cpu_data();
       Dtype* col_diff = col_buffer_.mutable_cpu_diff();
-      const Dtype* bottom_data = (*bottom)[i]->cpu_data();
-      Dtype* bottom_diff = (*bottom)[i]->mutable_cpu_diff();
+      const Dtype* bottom_data = (bottom)[i]->cpu_data();
+      Dtype* bottom_diff = (bottom)[i]->mutable_cpu_diff();
       
 			for (int n = 0; n < num_; ++n) {
 					
 				// gradient w.r.t. weight. Note that we will accumulate diffs.
 				if (this->param_propagate_down_[0]) {
 					for (int g = 0; g < group_; ++g) {
-						imchannel2col_cpu(bottom_data + (*bottom)[i]->offset(n) 
+						imchannel2col_cpu(bottom_data + bottom[i]->offset(n) 
 								+ g * height_ * width_ * channels_ / group_, 
 								channels_ / group_, height_, width_, chHeight_, chWidth_,
 								kernel_h_, kernel_w_, pad_h_, pad_w_, stride_h_, stride_w_,
@@ -214,7 +214,7 @@ void TopographyLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 						// col2im back to the data
 						colchannel2im_cpu(col_diff, channels_ / group_, height_, width_,
 								chHeight_, chWidth_,kernel_h_, kernel_w_, pad_h_, pad_w_,
-								stride_h_, stride_w_, bottom_diff + (*bottom)[i]->offset(n) +
+								stride_h_, stride_w_, bottom_diff + bottom[i]->offset(n) +
 								g * (channels_ / group_) * height_ * width_);
 					}
         }
@@ -228,5 +228,5 @@ STUB_GPU(TopographyLayer);
 #endif
 
 INSTANTIATE_CLASS(TopographyLayer);
-
+REGISTER_LAYER_CLASS(Topography);
 }  // namespace caffe
