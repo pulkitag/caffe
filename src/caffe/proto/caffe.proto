@@ -829,6 +829,7 @@ message V1LayerParameter {
   optional DropoutParameter dropout_param = 12;
   optional DummyDataParameter dummy_data_param = 26;
   optional EltwiseParameter eltwise_param = 24;
+  optional EuclideanLossParameter euclideanloss_param = 2002;
   optional ExpParameter exp_param = 41;
   optional HDF5DataParameter hdf5_data_param = 13;
   optional HDF5OutputParameter hdf5_output_param = 14;
@@ -849,6 +850,7 @@ message V1LayerParameter {
   optional ThresholdParameter threshold_param = 25;
   optional WindowDataParameter window_data_param = 20;
   optional TransformationParameter transform_param = 36;
+  optional TopographyParameter topography_param = 2001;
   optional LossParameter loss_param = 42;
   optional V0LayerParameter layer = 1;
 }

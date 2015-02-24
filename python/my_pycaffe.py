@@ -112,79 +112,129 @@ def get_input_blob_shape(defFile):
 				ips = l.split()
 				blobShape.append(int(ips[1]))
 	return blobShape
+
 				
-
-def init_network(defFile, modelFile, isGPU=True, testMode=True):
+def read_mean(protoFileName):
 	'''
-		Initialize the network
+		Reads mean from the protoFile
 	'''
-	net = caffe.Net(defFile, modelFile)
-	if testMode:
-		caffe.set_phase_test()
-	else:
-		caffe.set_phase_train()
-	#Set GPU usage
-	if isGPU:
-		caffe.set_mode_gpu()
-	else:
-		caffe.set_mode_cpu()
-	return net	
+	with open(protoFileName,'r') as fid:
+		ss = fid.read()
+		vec = caffe.io.caffe_pb2.BlobProto()
+		vec.ParseFromString(ss)
+		mn = caffe.io.blobproto_to_array(vec)
+	mn = np.squeeze(mn)
+	return mn
 
 
-def net_preprocess_init(net, layerName='data',RGBMode=True, meanDat = []):
-	'''
-		Sets-up preprocessing in layer, layerName. 
-		The n/ws are assumed to take inputs in BGR format. 
-	'''
-	if RGBMode:
-		print 'Enabling input in RGB, the Net works in BGR format'
-		net.set_channel_swap(layerName,(2,1,0))
+class MyNet(caffe.Net):
+	def __init__(self, defFile, modelFile, isGPU=True, testMode=True):
+		if testMode:
+			self.net = caffe.Net(defFile, modelFile, caffe.TEST)
+		else:
+			self.net = caffe.Net(defFile, modelFile, caffe.TRAIN)
+		self.set_mode(isGPU)
+		self.transformer = {}
+		self.defFile   = defFile
+		self.modelFile = modelFile
 
-	if not meanDat==[]:
-		print "Setting Mean.."
-		net.set_mean(layerName, meanDat)
-		
 
-def preprocess_batch(net, ims, dataLayerName='data'):
-	'''
-		Inputs are assumed to be numIm*h*w*numChannels
-		Preprocess the images
-	'''
-	assert ims.ndim==4, "Images should be 4D"
-	N = ims.shape[0]
-	imOut = []
-	for i in range(N):
-		imOut.append(np.asarray([net.preprocess(dataLayerName, ims[i])]))
+	def set_mode(self, isGPU=True):
+		if isGPU:
+			caffe.set_mode_gpu()
+		else:
+			caffe.set_mode_cpu()
 
-	imOut = np.squeeze(np.asarray(imOut))
-	if N ==1:
-		imOut = np.reshape(imOut, (1,imOut.shape[0], imOut.shape[1], imOut.shape[2]))
 	
-	return imOut
+	def get_batchsz(self):
+		return self.net.blobs[self.net.inputs[0]].num
 
 
-def deprocess_batch(net, ims, dataLayerName='data'):
-	'''
-		Retrieve the image back
-	'''
-	assert ims.ndim==4, "Images should be 4D"
-	N,ch,h,w = ims.shape
-	imOut = []
-	for i in range(N):
-		imOut.append(net.deprocess(dataLayerName, np.reshape(ims[i],(1,ch,h,w))))
+	def get_blob_shape(self, blobName):
+		assert blobName in self.net.blobs.keys(), 'Blob Name is not present in the net'
+		blob = self.net.blobs[blobName]
+		return blob.num, blob.channels, blob.height, blob.width
 
-	imOut = np.squeeze(np.asarray(imOut))
-	return imOut
+	
+	def set_preprocess(self, ipName='data',chSwap=(2,1,0), meanDat=[], imageDims=None):
+		'''
+			ipName : the blob for which the pre-processing parameters need to be set. 
+			meanDat   : the mean which needs to subtracted
+			imageDims : the size of the images which will be input
+		'''
+		self.transformer[ipName] = caffe.io.Transformer({ipName: self.net.blobs[ipName].data.shape})
+		#So that images are expected in H * W * K format
+		self.transformer[ipName].set_transpose(ipName, (2,0,1))	
+		#Required for eg RGB to BGR conversion.
+		self.transformer[ipName].set_channel_swap(ipName, chSwap)
+		#Crop Dimensions
+		self.cropDims = np.array(self.net.blobs[ipName].data.shape[2:])
+		if not imageDims:
+			imageDims = self.cropDims
+		else:
+			imageDims = np.array([imageDims[0], imageDims[1]])
+		self.imageDims = imageDims
+		self.get_crop_dims()		
+		#Mean Subtraction
+		if not meanDat is None:
+			_,h,w = meanDat.shape
+			assert self.imageDims[0]==h and self.imageDims[1]==w, 'imageDims must match mean Image size'
+			meanDat  = meanDat[:, self.crop[0]:self.crop[2], self.crop[1]:self.crop[3]] 
+			self.transformer[ipName].set_mean(ipName, meanDat)
+	
+	
+	def get_crop_dims(self):
+		# Take center crop.
+		center = np.array(self.imageDims) / 2.0
+		crop = np.tile(center, (1, 2))[0] + np.concatenate([
+				-self.cropDims / 2.0,
+				self.cropDims / 2.0
+		])
+		self.crop = crop
 
 
-def get_batchsz(net):
-	return net.blobs['data'].num
+	def preprocess_batch(self, ims, ipName='data'):	
+		'''
+			ims: iterator over H * W * K sized images (K - number of channels)
+		'''
+		print "ims.shape: " , ims.shape
+		im_ = np.zeros((len(ims), 
+            self.imageDims[0], self.imageDims[1], ims[0].shape[2]),
+            dtype=np.float32)
+		#Resize the images
+		for ix, in_ in enumerate(ims):
+			im_[ix] = caffe.io.resize_image(in_, self.imageDims)
+		print "im_.shape: ", im_.shape
+
+		#Required cropping
+		im_ = im_[:,self.crop[0]:self.crop[2], self.crop[1]:self.crop[3],:]	
+		
+		#Applying the preprocessing
+		caffe_in = np.zeros(np.array(im_.shape)[[0,3,1,2]], dtype=np.float32)
+		print caffe_in.shape
+		for ix, in_ in enumerate(im_):
+			caffe_in[ix] = self.transformer[ipName].preprocess(ipName, in_)
+
+		return caffe_in
 
 
-def get_blob_shape(net, blobName):
-	assert blobName in net.blobs.keys(), 'Blob Name is not present in the net'
-	blob = net.blobs[blobName]
-	return blob.num, blob.channels, blob.height, blob.width
+	def deprocess_batch(self, caffeIn, ipName='data'):	
+		'''
+			ims: iterator over H * W * K sized images (K - number of channels)
+		'''
+		#Applying the deprocessing
+		im_ = np.zeros(np.array(caffeIn.shape)[[0,2,3,1]], dtype=np.float32)
+		for ix, in_ in enumerate(caffeIn):
+			im_[ix] = self.transformer[ipName].deprocess(ipName, in_)
+
+		ims = np.zeros((len(im_), 
+            self.imageDims[0], self.imageDims[1], im_[0].shape[2]),
+            dtype=np.float32)
+		#Resize the images
+		for ix, in_ in enumerate(im_):
+			ims[ix] = caffe.io.resize_image(in_, self.imageDims)
+
+		return ims
 
 
 def setup_prototypical_network(netName='vgg', layerName='pool4'):
@@ -194,10 +244,12 @@ def setup_prototypical_network(netName='vgg', layerName='pool4'):
 	modelFile, meanFile = get_model_mean_file(netName)
 	defFile             = get_layer_def_files(netName, layerName=layerName)
 	meanDat             = read_mean(meanFile)
-	net                 = init_network(defFile, modelFile)
-	net_preprocess_init(net, layerName='data', meanDat=meanDat)
+	net                 = MyNet(defFile, modelFile)
+	net.set_preprocess(ipName='data', meanDat=meanDat, imageDims=(256,256,3))
 	return net	
 
+
+'''
 
 def prepare_image(im, cropSz=[], imMean=[]):
 	#Only take the central crop
@@ -231,16 +283,6 @@ def prepare_image(im, cropSz=[], imMean=[]):
 	return im
 
 
-def read_mean(protoFileName):
-	with open(protoFileName,'r') as fid:
-		ss = fid.read()
-		vec = caffe.io.caffe_pb2.BlobProto()
-		vec.ParseFromString(ss)
-		mn = caffe.io.blobproto_to_array(vec)
-
-	mn = np.squeeze(mn)
-	return mn
-
 
 def get_features(net, im, layerName=None, ipLayerName='data'):
 	dataBlob = net.blobs['data']
@@ -273,6 +315,8 @@ def get_features(net, im, layerName=None, ipLayerName='data'):
 		outFeats[st:en] = feats[outName][0:l]
 
 	return outFeats
+
+'''
 
 
 def compute_error(gtLabels, prLabels, errType='classify'):
