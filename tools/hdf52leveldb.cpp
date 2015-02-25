@@ -4,10 +4,8 @@
 #include <assert.h>
 #include "stdint.h"
 
-//#include "H5Cpp.h"
+#include "H5Cpp.h"
 #include "hdf5.h"
-#include "hdf5_hl.h"
-#include "h5hl_region.h"
 
 #include "glog/logging.h"
 #include "leveldb/db.h"
@@ -47,92 +45,7 @@ int main(int argc, char** argv){
 		nCh = atoi(argv[5]);
 	}
 
-	//Open the File
-	std::string filePath(argv[1]);
-	std::cout << "Reading from: " <<  filePath << "\n";
-	hFid = H5Fopen(filePath, H5F_ACC_RDONLY, H5P_DEFAULT);
-	hsize_t dims[1];
-	herr_t  status;
-	int ndims;
-	unsigned long N,imsz;
-
-	//Get the Size
-	status = H5LTget_dataset_info(file_id,"/images",dims, NULL, NULL);
-	imsz = (unsigned long)dims[0];
-	status = H5LTget_dataset_info(file_id,"/labels",dims, NULL, NULL);
-	N     = (unsigned long)dims[0];
-	assert(imsz == rows * cols * N);
-	std::cout << "Num Images: " << N << " \n";
-	H5Fclose(hFid);
-
-	std::string db_path(argv[2]);
-  leveldb::DB* db;
-  leveldb::Options options;
-  options.error_if_exists = true;
-  options.create_if_missing = true;
-  options.write_buffer_size = 268435456;
-  leveldb::WriteBatch* batch = NULL;
-	LOG(INFO) << "Opening leveldb " << db_path;
-    leveldb::Status status = leveldb::DB::Open(
-        options, db_path.c_str(), &db);
-    CHECK(status.ok()) << "Failed to open leveldb " << db_path
-        << ". Is it already existing?";
-  batch = new leveldb::WriteBatch();
-
-  // Storing to db
-  int count = 0;
-	int numPix = nCh * rows * cols;
-  unsigned char* pixels = new unsigned char[numPix];
-	float labels;
-	unsigned long num_items = N;
-  const int kMaxKeyLength = 10;
-  char key_cstr[kMaxKeyLength];
-  std::string value;
-
-  caffe::Datum datum;
-  datum.set_channels(nCh);
-  datum.set_height(rows);
-  datum.set_width(cols);
-  LOG(INFO) << "A total of " << num_items << " items.";
-  LOG(INFO) << "Rows: " << rows << " Cols: " << cols;
-	hsize_t blockCoord[2];
-  for (int item_id = 0; item_id < num_items; ++item_id) {
-		//Read the image
-		blockCoord[0] = item_id * numPix;
-		blockCoord[1] = blockCoord[0] + numPix;
-  	status = H5LTread_region(filePath, "/images",  H5T_NATIVE_UCHAR, pixels);
-   	//Read the label
-		blockCoord[0] = item_id;
-		blockCoord[1] = blockCoord[0] + 1;
-  	status = H5LTread_region(filePath, "/labels",  H5T_NATIVE_FLOAT, pixels);
-		datum.set_data(pixels, numPix);
-    datum.set_label(labels);
-    snprintf(key_cstr, kMaxKeyLength, "%08d", item_id);
-    datum.SerializeToString(&value);
-    std::string keystr(key_cstr);
-
-    // Put in db
-		batch->Put(keystr, value);
-    if (++count % 1000 == 0) {
-      // Commit txn
-			db->Write(leveldb::WriteOptions(), batch);
-			delete batch;
-			batch = new leveldb::WriteBatch();
-		}
-	}
-  // write the last batch
-  if (count % 1000 != 0) {
-		db->Write(leveldb::WriteOptions(), batch);
-		delete batch;
-		delete db;
-		LOG(ERROR) << "Processed " << count << " files.";
-  }
-  delete pixels;
-	return 0;
-}
-
-/*	
-	const H5std_string fileName(filePath);
+	const H5std_string fileName(argv[1]);
 	const H5std_string dataIm1("images");
 	const H5std_string dataLbl("labels");
 
@@ -229,7 +142,7 @@ int main(int argc, char** argv){
   delete pixels;
 	return 0;
 }
-*/
+
 
 void read_data(H5::DataSet& dataset, H5::DataSpace dataspace,
 						 H5::DataSpace memspace, unsigned char* data_out, 

@@ -98,6 +98,32 @@ def compute_feat_diff(netName='vgg', layerName='pool4', sqMask=True, camNum=5, i
 	return rotDiff
 
 
+def compute_feat_diff_outplane(netName='vgg', rotNum=0, layerName='pool4', sqMask=True, imSz=256):
+	camNum = range(1,5)
+	#Get the paths
+	prms = get_paths(sqMask, imSz=imSz)
+	#ClassNames
+	cls     = rep.get_classNames()
+	
+	rotDiff = np.zeros((len(cls),len(camNum))) 
+	for (i,cl) in enumerate(cls):
+		print cl
+		#Output Feature File Name
+		for c in camNum: 
+			#Load the features
+			featFile1 = prms['featFile'] % (cl, netName, c, layerName) 
+			featFid1  = h5.File(featFile1, 'r')
+			featFile2 = prms['featFile'] % (cl, netName, c + 1, layerName) 
+			featFid2  = h5.File(featFile2, 'r')
+			#Compute the Diff
+			gtFeat = (featFid1['rot%d' % rotNum][:]).flatten()
+			feat   = (featFid2['rot%d' % rotNum][:]).flatten()
+			dist = compute_distance(gtFeat, feat, 'l2norm') 	
+			rotDiff[i,c-1] = dist
+
+	return rotDiff
+
+
 def compute_features(netName='vgg', layerName='pool4', sqMask=True, camNum=5):
 	#Get the Path Prms
 	prms = get_paths(sqMask, imSz=256)
@@ -106,12 +132,12 @@ def compute_features(netName='vgg', layerName='pool4', sqMask=True, camNum=5):
 	modelFile, meanFile = mp.get_model_mean_file(netName)
 	defFile             = mp.get_layer_def_files(netName, layerName=layerName)
 	meanDat             = mp.read_mean(meanFile)
-	net                 = mp.init_network(defFile, modelFile)
+	myNet               = mp.MyNet(defFile, modelFile)
 	ipShape             = mp.get_input_blob_shape(defFile) 
-	mp.net_preprocess_init(net, layerName='data', meanDat=meanDat)  	
+	myNet.set_preprocess(ipName='data', chSwap=(2,1,0), meanDat=meanDat, imageDims=(256, 256,3))  	
 
 	#Get the size of features per image
-	_,ch,h,w = mp.get_blob_shape(net, layerName)
+	_,ch,h,w = myNet.get_blob_shape(layerName)
 	
 	#Compute the features
 	cls = rep.get_classNames()
@@ -144,8 +170,8 @@ def compute_features(netName='vgg', layerName='pool4', sqMask=True, camNum=5):
 			ipDat = np.concatenate(ipDat[:], axis=0)
 
 			#Process the batch images
-			ims   = mp.preprocess_batch(net, ipDat, dataLayerName='data')
-			feats = net.forward_all(blobs=[layerName], data=ims)
+			ims   = myNet.preprocess_batch(net, ipDat, dataLayerName='data')
+			feats = myNet.net.forward_all(blobs=[layerName], data=ims)
 			feats = feats[layerName]
 
 			#Save The Features
