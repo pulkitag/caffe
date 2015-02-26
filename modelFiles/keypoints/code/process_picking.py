@@ -111,9 +111,10 @@ def compute_feat_diff_outplane(netName='vgg', rotNum=0, layerName='pool4', sqMas
 		#Output Feature File Name
 		for c in camNum: 
 			#Load the features
-			featFile1 = prms['featFile'] % (cl, netName, c, layerName) 
-			featFid1  = h5.File(featFile1, 'r')
+			featFile1 = prms['featFile'] % (cl, netName, 1, layerName) 
 			featFile2 = prms['featFile'] % (cl, netName, c + 1, layerName) 
+			print featFile1, featFile2
+			featFid1  = h5.File(featFile1, 'r')
 			featFid2  = h5.File(featFile2, 'r')
 			#Compute the Diff
 			gtFeat = (featFid1['rot%d' % rotNum][:]).flatten()
@@ -147,7 +148,9 @@ def compute_features(netName='vgg', layerName='pool4', sqMask=True, camNum=5):
 		print featFile
 		dirName  = os.path.dirname(featFile)
 		if not os.path.exists(dirName):
-			os.makedirs(dirName)	
+			os.makedirs(dirName)
+		if os.path.exists(featFile):
+			os.remove(featFile)
 		featFid  = h5.File(featFile, 'w')
 	
 		print 'Computing for class: %s' % cl
@@ -170,7 +173,7 @@ def compute_features(netName='vgg', layerName='pool4', sqMask=True, camNum=5):
 			ipDat = np.concatenate(ipDat[:], axis=0)
 
 			#Process the batch images
-			ims   = myNet.preprocess_batch(net, ipDat, dataLayerName='data')
+			ims   = myNet.preprocess_batch(ipDat, ipName='data')
 			feats = myNet.net.forward_all(blobs=[layerName], data=ims)
 			feats = feats[layerName]
 

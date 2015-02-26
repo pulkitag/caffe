@@ -67,6 +67,92 @@ def calculate_size():
 	print 'Pool5: Receptive: %d, Stride: %d ' % (pool5.pixelSz, pool5.stridePix)	
 	
 
+def find_layer(lines):
+	layerName = []
+	for l in lines:
+		if 'type' in l:
+			_,layerName = l.split()
+			return layerName
+
+
+def netdef2siamese(defFile, outFile):
+	outFid = open(outFile,'w')
+	stream1, stream2 = [],[]
+	with open(defFile,'r') as fid:
+		lines     = fid.readlines()
+		layerFlag = 0
+		for (i,l) in enumerate(lines):
+			#Indicates if the line has been added or not
+			addFlag = False
+			if 'layers' in l:
+				layerName = find_layer(lines[i:])
+				print layerName
+				#Go in the state that this a useful layer to model. 
+				if layerName in ['CONVOLUTION', 'INNER_PRODUCT']:
+					layerFlag = 1
+			
+			#Manage the top, bottom and name for the two streams in case of a layer with params. 
+			if 'bottom' in l or 'top' in l or 'name' in l:
+				stream1.append(l)
+				pre, suf = l.split()
+				suf  = suf[0:-1] + '_p"'
+				newL = pre + ' ' + suf + '\n'
+				stream2.append(newL)
+				addFlag = True
+
+			#Store the name of the parameters	
+			if layerFlag > 0 and 'name' in l:
+				_,paramName = l.split()
+				paramName   = paramName[1:-1]
+			
+			#Dont want to overcount '{' multiple times for the line 'layers {'	
+			if (layerFlag > 0) and ('{' in l) and ('layers' not in l):
+				layerFlag += 1	
+			
+			if '}' in l:
+				print layerFlag
+				layerFlag = layerFlag - 1
+				#Before the ending the layer definition inlucde the param
+				if layerFlag == 0:
+					stream1.append('\t param: "%s" \n' % (paramName + '_w'))
+					stream1.append('\t param: "%s" \n' % (paramName + '_b'))
+					stream2.append('\t param: "%s" \n' % (paramName + '_w'))
+					stream2.append('\t param: "%s" \n' % (paramName + '_b'))
+						
+			if not addFlag:
+				stream1.append(l)
+				stream2.append(l)
+
+	#Write the first stream of the siamese net. 
+	for l in stream1:
+		outFid.write('%s' % l)
+
+	#Write the second stream of the siamese net. 
+	skipFlag  = False
+	layerFlag = 0
+	for (i,l) in enumerate(stream2):
+		if 'layers' in l:
+			layerName = find_layer(stream2[i:])
+			#Skip writing the data layers in stream 2
+			if layerName in ['DATA']:
+				skipFlag  = True
+				layerFlag = 1
+		
+		#Dont want to overcount '{' multiple times for the line 'layers {'	
+		if layerFlag > 1 and '{' in l:
+			layerFlag += 1	
+
+		#Write to the out File	
+		if not skipFlag:
+			outFid.write('%s' % l)	
+	
+		if '}' in l:
+			layerFlag = layerFlag - 1
+			if layerFlag == 0:
+				skipFlag = False
+	outFid.close()
+
+
 def get_model_mean_file(netName='vgg'):
 	'''
 		Returns 
@@ -197,21 +283,18 @@ class MyNet(caffe.Net):
 		'''
 			ims: iterator over H * W * K sized images (K - number of channels)
 		'''
-		print "ims.shape: " , ims.shape
 		im_ = np.zeros((len(ims), 
             self.imageDims[0], self.imageDims[1], ims[0].shape[2]),
             dtype=np.float32)
 		#Resize the images
 		for ix, in_ in enumerate(ims):
 			im_[ix] = caffe.io.resize_image(in_, self.imageDims)
-		print "im_.shape: ", im_.shape
 
 		#Required cropping
 		im_ = im_[:,self.crop[0]:self.crop[2], self.crop[1]:self.crop[3],:]	
 		
 		#Applying the preprocessing
 		caffe_in = np.zeros(np.array(im_.shape)[[0,3,1,2]], dtype=np.float32)
-		print caffe_in.shape
 		for ix, in_ in enumerate(im_):
 			caffe_in[ix] = self.transformer[ipName].preprocess(ipName, in_)
 
