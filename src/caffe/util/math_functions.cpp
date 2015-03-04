@@ -216,6 +216,22 @@ void caffe_abs<double>(const int n, const double* a, double* y) {
     vdAbs(n, a, y);
 }
 
+
+template <typename Dtype>
+void caffe_cpu_zero_mean<Dtype>(const int n, const Dtype* a, Dtype* b){
+	Dtype mn;
+	mn = caffe_cpu_asum(n, a);
+	for (int i=0; i<n; i++)
+		b[i] = a[i] - mn;
+}
+
+template
+void caffe_cpu_zero_mean<float>(const int n, const float* a, float* b);
+
+template
+void caffe_cpu_zero_mean<double>(const int n, const double* a, double* b);
+
+
 unsigned int caffe_rng_rand() {
   return (*caffe_rng())();
 }

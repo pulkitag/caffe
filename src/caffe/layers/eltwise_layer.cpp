@@ -72,6 +72,7 @@ void EltwiseLayer<Dtype>::Forward_cpu(
       caffe_axpy(count, coeffs_[i], bottom[i]->cpu_data(), top_data);
     }
     break;
+
   case EltwiseParameter_EltwiseOp_MAX:
     // Initialize
     mask = max_idx_.mutable_cpu_data();

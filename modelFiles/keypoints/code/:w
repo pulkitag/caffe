@@ -5,9 +5,7 @@ import matplotlib.pyplot as plt
 import read_picking as rep
 import scipy.misc as scm
 import my_pycaffe as mp
-import my_pycaffe_io as mpio
 import scipy.linalg as scl
-import pdb
 
 rootDir = '/data1/pulkitag/projRotate/'
 h5Dir   = '/data1/pulkitag/keypoints/h5/'
@@ -42,8 +40,9 @@ def get_paths(sqMask, imSz=256):
 	prms['imH5'] = os.path.join(h5Dir, '%s_images_exp%s_tp%.2f_imSz%d.h5')
 	prms['lbH5'] = os.path.join(h5Dir, '%s_labels_exp%s_tp%.2f_imSz%d.h5')
 	#LevelDB File
-	prms['imldb'] = os.path.join(ldbDir, '%s_images_exp%s_tp%.2f_imSz%d-lmdb')
-	prms['lbldb'] = os.path.join(ldbDir, '%s_labels_exp%s_tp%.2f_imSz%d-lmdb')
+	prms['imldb'] = os.path.join(ldbDir, '%s_images_exp%s_tp%.2f_imSz%d-leveldb')
+	prms['lbldb'] = os.path.join(ldbdir, '%s_labels_exp%s_tp%.2f_imSz%d-leveldb')
+	
 	return prms	
 
 
@@ -77,28 +76,27 @@ def get_polar_data(isTrain=True):
 		of the camera. We have 120 images per polar angle and there are a total of 5 polar angles. 
 	'''
 	clNames         = rep.get_classNames()
-	tp              = 0.7
-	trainCl, testCl = get_train_test_class(trainPercent=tp)
-	expName         = 'picking_polar'
+	trainCl, testCl = get_train_test_class()
 	if isTrain:
 		clNames = [clNames[i] for i in trainCl]
-		setStr  = 'train'
 	else:
 		clNames = [clNames[i] for i in testCl]  
-		setStr  = 'test'
 
+	imFid      = h5.File(imH5File)
+	lbFid      = h5.File(lbH5File)
 	numSamples = 5 * 5 * 120
 	h, w, ch   = 256, 256, 3 
 	N          = h * w * ch
-	prms       = get_paths(sqMask=True, imSz=h)	
-	imFile     = prms['maskFile'] 
 
 	#Initialize the dataspaces
-	dbName = prms['imldb'] % (setStr, expName, tp, h)
-	db     = mpio.dbSaver(dbName)   
+	images1 = imFid.create_dataset("/images1", 'u1', (numSamples * N,))
+	images2 = imFid.create_dataset("/images2", 'u1', (numSamples * N,))
+	labels  = lbFid.create_dataset("/labels", 'f', (numSamples,))
 	
 	#Permutation for saving the images
 	perm    = np.random.permutation(numSamples * len(clNames))
+	prms   = get_paths(sqMask=True, imSz=h)	
+	imFile = prms['maskFile'] 
 	
 	count  = 0
 	for cls in clNames:
@@ -110,13 +108,13 @@ def get_polar_data(isTrain=True):
 					im1  = plt.imread(imF1)
 					im2  = plt.imread(imF2)
 					idx  = perm[count]
-					im1  = im1[:,:,[2,1,0]].transpose((2,0,1))	
-					im2  = im2[:,:,[2,1,0]].transpose((2,0,1))
-					imC  = (np.concatenate((im1, im2))).reshape(1, 2*ch, h, w)
-					lb   = int(cm2 - cm1 + 5) #to make the range 0 to number of images				
-					db.add_batch(imC, labels=np.array([lb]), svIdx=[idx])	
-					count = count + 1
-	db.close()
+					st   = idx * N
+					en   = st + N
+					images1[st:en] = im1[:,:,[2,1,0]].flatten()
+					images2[st:en] = im2[:,:,[2,1,0]].flatten()
+					labels[idx]    = cm2 - cm1
+	imFid.close()
+	lbFid.close()
 
 
 def compute_distance(x1, x2, distType='l2'):

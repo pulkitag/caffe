@@ -138,6 +138,10 @@ def get_experiment_details(expName, imSz=256):
 
 
 def create_data_images(h5DataFile, ims, idxs, imSz):	
+	'''
+		h5DataFile: Name of the output data file
+		ims: the images which need to be stored. 
+	'''
 	h,w,ch = imSz,imSz,3
 	imSz   = h * w * ch
 	numSamples = [len(i) for i in idxs]
@@ -227,7 +231,7 @@ def create_data_labels(h5LabelFile, views, idxs, labelType, viewCenters=[]):
 	#Select the type of label
 	if labelType == '9DRot':
 		labelSz = 9
-	elif labelType == 'angle':
+	elif labelType in ['angle', '3dCamDiff']:
 		labelSz = 1
 	elif labelType == 'uniform20':
 		labelSz = 1
@@ -292,7 +296,11 @@ def create_data_labels(h5LabelFile, views, idxs, labelType, viewCenters=[]):
 					viewDiff,_ = ru.get_cluster_assignments(viewDiff.reshape((1,3,3)), viewCenters)	
 				else:
 					viewDiff = np.array([20])
-
+			elif labelType == '3dCamDiff'
+				viewDiff = view2 - view1
+			else:
+				print "Unknown label type"
+				pdb.set_trace()
 			labels[lSt:lEn] = viewDiff.flatten()
 			indices[count:count+4] = idx,cl,clIdx1,clIdx2
 			count = count + 4

@@ -1,685 +1,793 @@
-#VGGNet
 name: "CaffeNet"
-layers {
+layer {
   name: "pair_data"
-  type: DATA
+  type: "Data"
   top: "pair_data"
-  data_param {
-    source: "/data1/pulkitag/keypoints/leveldb_store/train_images_exprotObjs_imSz128-leveldb"
-    batch_size: 256
+  include {
+    phase: TRAIN
   }
   transform_param {
+    mirror: true
+    crop_size: 112
     mean_file: "/data1/pulkitag/keypoints/leveldb_store/keypoints_im128_mean.binaryproto"
-	crop_size: 112
-	mirror: true
   }
-  include: { phase: TRAIN }
+  data_param {
+    source: "/data1/pulkitag/keypoints/leveldb_store/train_images_exprotObjs_imSz128-leveldb"
+    batch_size: 96
+  }
 }
-layers {
+layer {
   name: "label"
-  type: DATA
+  type: "Data"
   top: "label"
+  include {
+    phase: TRAIN
+  }
   data_param {
     source: "/data1/pulkitag/keypoints/leveldb_store/train_labels_exprotObjs_lblkmedoids30_20_imSz128-leveldb"
-    batch_size: 256
+    batch_size: 96
   }
-  include: { phase: TRAIN }
 }
-layers {
+layer {
   name: "pair_data"
-  type: DATA
+  type: "Data"
   top: "pair_data"
+  include {
+    phase: TEST
+  }
+  transform_param {
+    mirror: false
+    crop_size: 112
+    mean_file: "/data1/pulkitag/keypoints/leveldb_store/keypoints_im128_mean.binaryproto"
+  }
   data_param {
     source: "/data1/pulkitag/keypoints/leveldb_store/val_images_exprotObjs_imSz128-leveldb"
     batch_size: 50
   }
-  transform_param {
-    mean_file: "/data1/pulkitag/keypoints/leveldb_store/keypoints_im128_mean.binaryproto"
- 	crop_size: 112
-	mirror: false
-  }
-  include: { phase: TEST }
 }
-layers {
+layer {
   name: "label"
-  type: DATA
+  type: "Data"
   top: "label"
+  include {
+    phase: TEST
+  }
   data_param {
     source: "/data1/pulkitag/keypoints/leveldb_store/val_labels_exprotObjs_lblkmedoids30_20_imSz128-leveldb"
     batch_size: 50
   }
-  include: { phase: TEST }
 }
-layers {
-	name: "slice_pair"
-	type: SLICE
-	bottom : "pair_data"
-	top:     "data"
-	top:     "data_p"
-	slice_param{
-		slice_dim: 1
-		slice_point: 3
-	}
+layer {
+  name: "slice_pair"
+  type: "Slice"
+  bottom: "pair_data"
+  top: "data"
+  top: "data_p"
+  slice_param {
+    slice_dim: 1
+    slice_point: 3
+  }
 }
-#Stream 1
-layers {
+layer {
+  name: "conv1_1"
+  type: "Convolution"
   bottom: "data"
   top: "conv1_1"
-  name: "conv1_1"
-  type: CONVOLUTION
+  param {
+    name: "conv1_1_w"
+  }
+  param {
+    name: "conv1_1_b"
+  }
   convolution_param {
     num_output: 64
     pad: 1
     kernel_size: 3
   }
-	 param: "conv1_1_w" 
-	 param: "conv1_1_b" 
 }
-layers {
+layer {
+  name: "relu1_1"
+  type: "ReLU"
   bottom: "conv1_1"
   top: "conv1_1"
-  name: "relu1_1"
-  type: RELU
 }
-layers {
+layer {
+  name: "conv1_2"
+  type: "Convolution"
   bottom: "conv1_1"
   top: "conv1_2"
-  name: "conv1_2"
-  type: CONVOLUTION
+  param {
+    name: "conv1_2_w"
+  }
+  param {
+    name: "conv1_2_b"
+  }
   convolution_param {
     num_output: 64
     pad: 1
     kernel_size: 3
   }
-	 param: "conv1_2_w" 
-	 param: "conv1_2_b" 
 }
-layers {
+layer {
+  name: "relu1_2"
+  type: "ReLU"
   bottom: "conv1_2"
   top: "conv1_2"
-  name: "relu1_2"
-  type: RELU
 }
-layers {
+layer {
+  name: "pool1"
+  type: "Pooling"
   bottom: "conv1_2"
   top: "pool1"
-  name: "pool1"
-  type: POOLING
   pooling_param {
     pool: MAX
     kernel_size: 2
     stride: 2
   }
 }
-layers {
+layer {
+  name: "conv2_1"
+  type: "Convolution"
   bottom: "pool1"
   top: "conv2_1"
-  name: "conv2_1"
-  type: CONVOLUTION
+  param {
+    name: "conv2_1_w"
+  }
+  param {
+    name: "conv2_1_b"
+  }
   convolution_param {
     num_output: 128
     pad: 1
     kernel_size: 3
   }
-	 param: "conv2_1_w" 
-	 param: "conv2_1_b" 
 }
-layers {
+layer {
+  name: "relu2_1"
+  type: "ReLU"
   bottom: "conv2_1"
   top: "conv2_1"
-  name: "relu2_1"
-  type: RELU
 }
-layers {
+layer {
+  name: "conv2_2"
+  type: "Convolution"
   bottom: "conv2_1"
   top: "conv2_2"
-  name: "conv2_2"
-  type: CONVOLUTION
+  param {
+    name: "conv2_2_w"
+  }
+  param {
+    name: "conv2_2_b"
+  }
   convolution_param {
     num_output: 128
     pad: 1
     kernel_size: 3
   }
-	 param: "conv2_2_w" 
-	 param: "conv2_2_b" 
 }
-layers {
+layer {
+  name: "relu2_2"
+  type: "ReLU"
   bottom: "conv2_2"
   top: "conv2_2"
-  name: "relu2_2"
-  type: RELU
 }
-layers {
+layer {
+  name: "pool2"
+  type: "Pooling"
   bottom: "conv2_2"
   top: "pool2"
-  name: "pool2"
-  type: POOLING
   pooling_param {
     pool: MAX
     kernel_size: 2
     stride: 2
   }
 }
-layers {
+layer {
+  name: "conv3_1"
+  type: "Convolution"
   bottom: "pool2"
   top: "conv3_1"
-  name: "conv3_1"
-  type: CONVOLUTION
+  param {
+    name: "conv3_1_w"
+  }
+  param {
+    name: "conv3_1_b"
+  }
   convolution_param {
     num_output: 256
     pad: 1
     kernel_size: 3
   }
-	 param: "conv3_1_w" 
-	 param: "conv3_1_b" 
 }
-layers {
+layer {
+  name: "relu3_1"
+  type: "ReLU"
   bottom: "conv3_1"
   top: "conv3_1"
-  name: "relu3_1"
-  type: RELU
 }
-layers {
+layer {
+  name: "conv3_2"
+  type: "Convolution"
   bottom: "conv3_1"
   top: "conv3_2"
-  name: "conv3_2"
-  type: CONVOLUTION
+  param {
+    name: "conv3_2_w"
+  }
+  param {
+    name: "conv3_2_b"
+  }
   convolution_param {
     num_output: 256
     pad: 1
     kernel_size: 3
   }
-	 param: "conv3_2_w" 
-	 param: "conv3_2_b" 
 }
-layers {
+layer {
+  name: "relu3_2"
+  type: "ReLU"
   bottom: "conv3_2"
   top: "conv3_2"
-  name: "relu3_2"
-  type: RELU
 }
-layers {
+layer {
+  name: "conv3_3"
+  type: "Convolution"
   bottom: "conv3_2"
   top: "conv3_3"
-  name: "conv3_3"
-  type: CONVOLUTION
+  param {
+    name: "conv3_3_w"
+  }
+  param {
+    name: "conv3_3_b"
+  }
   convolution_param {
     num_output: 256
     pad: 1
     kernel_size: 3
   }
-	 param: "conv3_3_w" 
-	 param: "conv3_3_b" 
 }
-layers {
+layer {
+  name: "relu3_3"
+  type: "ReLU"
   bottom: "conv3_3"
   top: "conv3_3"
-  name: "relu3_3"
-  type: RELU
 }
-layers {
+layer {
+  name: "conv3_4"
+  type: "Convolution"
   bottom: "conv3_3"
   top: "conv3_4"
-  name: "conv3_4"
-  type: CONVOLUTION
+  param {
+    name: "conv3_4_w"
+  }
+  param {
+    name: "conv3_4_b"
+  }
   convolution_param {
     num_output: 256
     pad: 1
     kernel_size: 3
   }
-	 param: "conv3_4_w" 
-	 param: "conv3_4_b" 
 }
-layers {
+layer {
+  name: "relu3_4"
+  type: "ReLU"
   bottom: "conv3_4"
   top: "conv3_4"
-  name: "relu3_4"
-  type: RELU
 }
-layers {
+layer {
+  name: "pool3"
+  type: "Pooling"
   bottom: "conv3_4"
   top: "pool3"
-  name: "pool3"
-  type: POOLING
   pooling_param {
     pool: MAX
     kernel_size: 2
     stride: 2
   }
 }
-layers {
+layer {
+  name: "conv4_1"
+  type: "Convolution"
   bottom: "pool3"
   top: "conv4_1"
-  name: "conv4_1"
-  type: CONVOLUTION
+  param {
+    name: "conv4_1_w"
+  }
+  param {
+    name: "conv4_1_b"
+  }
   convolution_param {
     num_output: 512
     pad: 1
     kernel_size: 3
   }
-	 param: "conv4_1_w" 
-	 param: "conv4_1_b" 
 }
-layers {
+layer {
+  name: "relu4_1"
+  type: "ReLU"
   bottom: "conv4_1"
   top: "conv4_1"
-  name: "relu4_1"
-  type: RELU
 }
-layers {
+layer {
+  name: "conv4_2"
+  type: "Convolution"
   bottom: "conv4_1"
   top: "conv4_2"
-  name: "conv4_2"
-  type: CONVOLUTION
+  param {
+    name: "conv4_2_w"
+  }
+  param {
+    name: "conv4_2_b"
+  }
   convolution_param {
     num_output: 512
     pad: 1
     kernel_size: 3
   }
-	 param: "conv4_2_w" 
-	 param: "conv4_2_b" 
 }
-layers {
+layer {
+  name: "relu4_2"
+  type: "ReLU"
   bottom: "conv4_2"
   top: "conv4_2"
-  name: "relu4_2"
-  type: RELU
 }
-layers {
+layer {
+  name: "conv4_3"
+  type: "Convolution"
   bottom: "conv4_2"
   top: "conv4_3"
-  name: "conv4_3"
-  type: CONVOLUTION
+  param {
+    name: "conv4_3_w"
+  }
+  param {
+    name: "conv4_3_b"
+  }
   convolution_param {
     num_output: 512
     pad: 1
     kernel_size: 3
   }
-	 param: "conv4_3_w" 
-	 param: "conv4_3_b" 
 }
-layers {
+layer {
+  name: "relu4_3"
+  type: "ReLU"
   bottom: "conv4_3"
   top: "conv4_3"
-  name: "relu4_3"
-  type: RELU
 }
-layers {
+layer {
+  name: "conv4_4"
+  type: "Convolution"
   bottom: "conv4_3"
   top: "conv4_4"
-  name: "conv4_4"
-  type: CONVOLUTION
+  param {
+    name: "conv4_4_w"
+  }
+  param {
+    name: "conv4_4_b"
+  }
   convolution_param {
     num_output: 512
     pad: 1
     kernel_size: 3
   }
-	 param: "conv4_4_w" 
-	 param: "conv4_4_b" 
 }
-layers {
+layer {
+  name: "relu4_4"
+  type: "ReLU"
   bottom: "conv4_4"
   top: "conv4_4"
-  name: "relu4_4"
-  type: RELU
 }
-layers {
+layer {
+  name: "pool4"
+  type: "Pooling"
   bottom: "conv4_4"
   top: "pool4"
-  name: "pool4"
-  type: POOLING
   pooling_param {
     pool: MAX
     kernel_size: 2
     stride: 2
   }
 }
-
-#Stream2
-layers {
-bottom: "data_p"
-top: "conv1_1_p"
-name: "conv1_1_p"
-  type: CONVOLUTION
+layer {
+  name: "conv1_1_p"
+  type: "Convolution"
+  bottom: "data_p"
+  top: "conv1_1_p"
+  param {
+    name: "conv1_1_w"
+  }
+  param {
+    name: "conv1_1_b"
+  }
   convolution_param {
     num_output: 64
     pad: 1
     kernel_size: 3
   }
-	 param: "conv1_1_w" 
-	 param: "conv1_1_b" 
 }
-layers {
-bottom: "conv1_1_p"
-top: "conv1_1_p"
-name: "relu1_1_p"
-  type: RELU
+layer {
+  name: "relu1_1_p"
+  type: "ReLU"
+  bottom: "conv1_1_p"
+  top: "conv1_1_p"
 }
-layers {
-bottom: "conv1_1_p"
-top: "conv1_2_p"
-name: "conv1_2_p"
-  type: CONVOLUTION
+layer {
+  name: "conv1_2_p"
+  type: "Convolution"
+  bottom: "conv1_1_p"
+  top: "conv1_2_p"
+  param {
+    name: "conv1_2_w"
+  }
+  param {
+    name: "conv1_2_b"
+  }
   convolution_param {
     num_output: 64
     pad: 1
     kernel_size: 3
   }
-	 param: "conv1_2_w" 
-	 param: "conv1_2_b" 
 }
-layers {
-bottom: "conv1_2_p"
-top: "conv1_2_p"
-name: "relu1_2_p"
-  type: RELU
+layer {
+  name: "relu1_2_p"
+  type: "ReLU"
+  bottom: "conv1_2_p"
+  top: "conv1_2_p"
 }
-layers {
-bottom: "conv1_2_p"
-top: "pool1_p"
-name: "pool1_p"
-  type: POOLING
+layer {
+  name: "pool1_p"
+  type: "Pooling"
+  bottom: "conv1_2_p"
+  top: "pool1_p"
   pooling_param {
     pool: MAX
     kernel_size: 2
     stride: 2
   }
 }
-layers {
-bottom: "pool1_p"
-top: "conv2_1_p"
-name: "conv2_1_p"
-  type: CONVOLUTION
+layer {
+  name: "conv2_1_p"
+  type: "Convolution"
+  bottom: "pool1_p"
+  top: "conv2_1_p"
+  param {
+    name: "conv2_1_w"
+  }
+  param {
+    name: "conv2_1_b"
+  }
   convolution_param {
     num_output: 128
     pad: 1
     kernel_size: 3
   }
-	 param: "conv2_1_w" 
-	 param: "conv2_1_b" 
 }
-layers {
-bottom: "conv2_1_p"
-top: "conv2_1_p"
-name: "relu2_1_p"
-  type: RELU
+layer {
+  name: "relu2_1_p"
+  type: "ReLU"
+  bottom: "conv2_1_p"
+  top: "conv2_1_p"
 }
-layers {
-bottom: "conv2_1_p"
-top: "conv2_2_p"
-name: "conv2_2_p"
-  type: CONVOLUTION
+layer {
+  name: "conv2_2_p"
+  type: "Convolution"
+  bottom: "conv2_1_p"
+  top: "conv2_2_p"
+  param {
+    name: "conv2_2_w"
+  }
+  param {
+    name: "conv2_2_b"
+  }
   convolution_param {
     num_output: 128
     pad: 1
     kernel_size: 3
   }
-	 param: "conv2_2_w" 
-	 param: "conv2_2_b" 
 }
-layers {
-bottom: "conv2_2_p"
-top: "conv2_2_p"
-name: "relu2_2_p"
-  type: RELU
+layer {
+  name: "relu2_2_p"
+  type: "ReLU"
+  bottom: "conv2_2_p"
+  top: "conv2_2_p"
 }
-layers {
-bottom: "conv2_2_p"
-top: "pool2_p"
-name: "pool2_p"
-  type: POOLING
+layer {
+  name: "pool2_p"
+  type: "Pooling"
+  bottom: "conv2_2_p"
+  top: "pool2_p"
   pooling_param {
     pool: MAX
     kernel_size: 2
     stride: 2
   }
 }
-layers {
-bottom: "pool2_p"
-top: "conv3_1_p"
-name: "conv3_1_p"
-  type: CONVOLUTION
+layer {
+  name: "conv3_1_p"
+  type: "Convolution"
+  bottom: "pool2_p"
+  top: "conv3_1_p"
+  param {
+    name: "conv3_1_w"
+  }
+  param {
+    name: "conv3_1_b"
+  }
   convolution_param {
     num_output: 256
     pad: 1
     kernel_size: 3
   }
-	 param: "conv3_1_w" 
-	 param: "conv3_1_b" 
 }
-layers {
-bottom: "conv3_1_p"
-top: "conv3_1_p"
-name: "relu3_1_p"
-  type: RELU
+layer {
+  name: "relu3_1_p"
+  type: "ReLU"
+  bottom: "conv3_1_p"
+  top: "conv3_1_p"
 }
-layers {
-bottom: "conv3_1_p"
-top: "conv3_2_p"
-name: "conv3_2_p"
-  type: CONVOLUTION
+layer {
+  name: "conv3_2_p"
+  type: "Convolution"
+  bottom: "conv3_1_p"
+  top: "conv3_2_p"
+  param {
+    name: "conv3_2_w"
+  }
+  param {
+    name: "conv3_2_b"
+  }
   convolution_param {
     num_output: 256
     pad: 1
     kernel_size: 3
   }
-	 param: "conv3_2_w" 
-	 param: "conv3_2_b" 
 }
-layers {
-bottom: "conv3_2_p"
-top: "conv3_2_p"
-name: "relu3_2_p"
-  type: RELU
+layer {
+  name: "relu3_2_p"
+  type: "ReLU"
+  bottom: "conv3_2_p"
+  top: "conv3_2_p"
 }
-layers {
-bottom: "conv3_2_p"
-top: "conv3_3_p"
-name: "conv3_3_p"
-  type: CONVOLUTION
+layer {
+  name: "conv3_3_p"
+  type: "Convolution"
+  bottom: "conv3_2_p"
+  top: "conv3_3_p"
+  param {
+    name: "conv3_3_w"
+  }
+  param {
+    name: "conv3_3_b"
+  }
   convolution_param {
     num_output: 256
     pad: 1
     kernel_size: 3
   }
-	 param: "conv3_3_w" 
-	 param: "conv3_3_b" 
 }
-layers {
-bottom: "conv3_3_p"
-top: "conv3_3_p"
-name: "relu3_3_p"
-  type: RELU
+layer {
+  name: "relu3_3_p"
+  type: "ReLU"
+  bottom: "conv3_3_p"
+  top: "conv3_3_p"
 }
-layers {
-bottom: "conv3_3_p"
-top: "conv3_4_p"
-name: "conv3_4_p"
-  type: CONVOLUTION
+layer {
+  name: "conv3_4_p"
+  type: "Convolution"
+  bottom: "conv3_3_p"
+  top: "conv3_4_p"
+  param {
+    name: "conv3_4_w"
+  }
+  param {
+    name: "conv3_4_b"
+  }
   convolution_param {
     num_output: 256
     pad: 1
     kernel_size: 3
   }
-	 param: "conv3_4_w" 
-	 param: "conv3_4_b" 
 }
-layers {
-bottom: "conv3_4_p"
-top: "conv3_4_p"
-name: "relu3_4_p"
-  type: RELU
+layer {
+  name: "relu3_4_p"
+  type: "ReLU"
+  bottom: "conv3_4_p"
+  top: "conv3_4_p"
 }
-layers {
-bottom: "conv3_4_p"
-top: "pool3_p"
-name: "pool3_p"
-  type: POOLING
+layer {
+  name: "pool3_p"
+  type: "Pooling"
+  bottom: "conv3_4_p"
+  top: "pool3_p"
   pooling_param {
     pool: MAX
     kernel_size: 2
     stride: 2
   }
 }
-layers {
-bottom: "pool3_p"
-top: "conv4_1_p"
-name: "conv4_1_p"
-  type: CONVOLUTION
+layer {
+  name: "conv4_1_p"
+  type: "Convolution"
+  bottom: "pool3_p"
+  top: "conv4_1_p"
+  param {
+    name: "conv4_1_w"
+  }
+  param {
+    name: "conv4_1_b"
+  }
   convolution_param {
     num_output: 512
     pad: 1
     kernel_size: 3
   }
-	 param: "conv4_1_w" 
-	 param: "conv4_1_b" 
 }
-layers {
-bottom: "conv4_1_p"
-top: "conv4_1_p"
-name: "relu4_1_p"
-  type: RELU
+layer {
+  name: "relu4_1_p"
+  type: "ReLU"
+  bottom: "conv4_1_p"
+  top: "conv4_1_p"
 }
-layers {
-bottom: "conv4_1_p"
-top: "conv4_2_p"
-name: "conv4_2_p"
-  type: CONVOLUTION
+layer {
+  name: "conv4_2_p"
+  type: "Convolution"
+  bottom: "conv4_1_p"
+  top: "conv4_2_p"
+  param {
+    name: "conv4_2_w"
+  }
+  param {
+    name: "conv4_2_b"
+  }
   convolution_param {
     num_output: 512
     pad: 1
     kernel_size: 3
   }
-	 param: "conv4_2_w" 
-	 param: "conv4_2_b" 
 }
-layers {
-bottom: "conv4_2_p"
-top: "conv4_2_p"
-name: "relu4_2_p"
-  type: RELU
+layer {
+  name: "relu4_2_p"
+  type: "ReLU"
+  bottom: "conv4_2_p"
+  top: "conv4_2_p"
 }
-layers {
-bottom: "conv4_2_p"
-top: "conv4_3_p"
-name: "conv4_3_p"
-  type: CONVOLUTION
+layer {
+  name: "conv4_3_p"
+  type: "Convolution"
+  bottom: "conv4_2_p"
+  top: "conv4_3_p"
+  param {
+    name: "conv4_3_w"
+  }
+  param {
+    name: "conv4_3_b"
+  }
   convolution_param {
     num_output: 512
     pad: 1
     kernel_size: 3
   }
-	 param: "conv4_3_w" 
-	 param: "conv4_3_b" 
 }
-layers {
-bottom: "conv4_3_p"
-top: "conv4_3_p"
-name: "relu4_3_p"
-  type: RELU
+layer {
+  name: "relu4_3_p"
+  type: "ReLU"
+  bottom: "conv4_3_p"
+  top: "conv4_3_p"
 }
-layers {
-bottom: "conv4_3_p"
-top: "conv4_4_p"
-name: "conv4_4_p"
-  type: CONVOLUTION
+layer {
+  name: "conv4_4_p"
+  type: "Convolution"
+  bottom: "conv4_3_p"
+  top: "conv4_4_p"
+  param {
+    name: "conv4_4_w"
+  }
+  param {
+    name: "conv4_4_b"
+  }
   convolution_param {
     num_output: 512
     pad: 1
     kernel_size: 3
   }
-	 param: "conv4_4_w" 
-	 param: "conv4_4_b" 
 }
-layers {
-bottom: "conv4_4_p"
-top: "conv4_4_p"
-name: "relu4_4_p"
-  type: RELU
+layer {
+  name: "relu4_4_p"
+  type: "ReLU"
+  bottom: "conv4_4_p"
+  top: "conv4_4_p"
 }
-layers {
-bottom: "conv4_4_p"
-top: "pool4_p"
-name: "pool4_p"
-  type: POOLING
+layer {
+  name: "pool4_p"
+  type: "Pooling"
+  bottom: "conv4_4_p"
+  top: "pool4_p"
   pooling_param {
     pool: MAX
     kernel_size: 2
     stride: 2
   }
 }
-layers{
-	name: "concat"
-	type: CONCAT
-	concat_param{
-		concat_dim: 1
-	}
-	bottom: "pool4"
-	bottom: "pool4_p"
-	top:    "concat"
+layer {
+  name: "concat"
+  type: "Concat"
+  bottom: "pool4"
+  bottom: "pool4_p"
+  top: "concat"
+  concat_param {
+    concat_dim: 1
+  }
 }
-layers {
+layer {
   name: "rot_fc5"
-  type: INNER_PRODUCT
+  type: "InnerProduct"
   bottom: "concat"
   top: "rot_fc5"
-  blobs_lr: 1.
-  blobs_lr: 2.
-  weight_decay: 1.
-  weight_decay: 0.
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
   inner_product_param {
     num_output: 2048
     weight_filler {
-	  type: "gaussian"
-	  std: 0.005
-	}
-	bias_filler {
-	  type: "constant"
-	  value: 1.
-	}
+      type: "gaussian"
+      std: 0.005
+    }
+    bias_filler {
+      type: "constant"
+      value: 1
+    }
   }
 }
-layers {
+layer {
   name: "relu5"
-  type: RELU
+  type: "ReLU"
   bottom: "rot_fc5"
   top: "rot_fc5"
 }
-
-layers {
+layer {
   name: "rot_fc6"
-  type: INNER_PRODUCT
+  type: "InnerProduct"
   bottom: "rot_fc5"
   top: "rot_fc6"
-  blobs_lr: 1.
-  blobs_lr: 2.
-  weight_decay: 1.
-  weight_decay: 0.
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
   inner_product_param {
     num_output: 21
     weight_filler {
-	  type: "gaussian"
-	  std: 0.005
-	}
-	bias_filler {
-	  type: "constant"
-	  value: 1.
-	}
+      type: "gaussian"
+      std: 0.005
+    }
+    bias_filler {
+      type: "constant"
+      value: 1
+    }
   }
 }
-layers {
+layer {
   name: "accuracy"
-  type: ACCURACY
+  type: "Accuracy"
   bottom: "rot_fc6"
   bottom: "label"
   top: "accuracy"
-  include: {phase: TEST}
+  include {
+    phase: TEST
+  }
 }
-layers {
+layer {
   name: "loss"
-  type: SOFTMAX_LOSS
+  type: "SoftmaxWithLoss"
   bottom: "rot_fc6"
   bottom: "label"
   top: "loss"
 }
-

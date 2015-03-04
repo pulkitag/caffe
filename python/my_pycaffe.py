@@ -255,7 +255,7 @@ class MyNet(caffe.Net):
 		self.transformer[ipName].set_channel_swap(ipName, chSwap)
 		#Crop Dimensions
 		self.cropDims = np.array(self.net.blobs[ipName].data.shape[2:])
-		if not imageDims:
+		if imageDims is None:
 			imageDims = self.cropDims
 		else:
 			imageDims = np.array([imageDims[0], imageDims[1]])
@@ -283,6 +283,11 @@ class MyNet(caffe.Net):
 		'''
 			ims: iterator over H * W * K sized images (K - number of channels)
 		'''
+		#The image necessary needs to be float - otherwise caffe.io.resize fucks up.
+		ims = ims.astype(np.float32)
+		if np.max(ims)<=1.0:
+			print "There maybe issues with image scaling. The maximum pixel value is 1.0 and not 255.0"
+
 		im_ = np.zeros((len(ims), 
             self.imageDims[0], self.imageDims[1], ims[0].shape[2]),
             dtype=np.float32)
