@@ -69,6 +69,7 @@ class dbSaver:
 		if labels is not None:
 			assert labels.dtype == np.int or labels.dtype==np.long
 		else:
+			N      = ims.shape[0]
 			labels = np.zeros((N,)).astype(np.int)
 
 		if svIdx is not None:
@@ -81,7 +82,6 @@ class dbSaver:
 				im    = im.astype(np.uint8)
 			imDat = caffe.io.array_to_datum(im, label=lb)
 			aa    = imDat.SerializeToString()
-			print idx, lb, len(aa), imDat.channels, imDat.height, imDat.width
 			self.txn.put('{:0>10d}'.format(idx), imDat.SerializeToString())
 		self.txn.commit()
 		self.count = self.count + ims.shape[0]
@@ -90,28 +90,128 @@ class dbSaver:
 		self.db.close()
 
 
-class dbReader:
-	def __init__(self, dbName, isLMDB=True, readahead=True):
-		#For large LMDB set readahead to be False
-		self.db  = lmdb.open(dbName, readonly=True, readahead=readahead)
-		self.txn = self.db.begin(write=False) 
-		self.cursor = self.txn.cursor()		
-		self.itr    = self.cursor.iternext()
+
+class DoubleDbSaver:
+	'''
+		Useful for example when storing images and labels in two different dbs
+	'''
+	def __init__(self, dbName1, dbName2, isLMDB=True):
+		self.dbs_ = []
+		self.dbs_.append(dbSaver(dbName1, isLMDB=isLMDB))
+		self.dbs_.append(dbSaver(dbName2, isLMDB=isLMDB))
 
 	def __del__(self):
-		self.txn.commit()
-		self.db.close()
+		for db in self.dbs_:
+			db.__del__()
+
+	def close(self):
+		for db in self.dbs_:
+			db.close()
+
+	def add_batch(self, ims, labels=(None,None), imAsFloat=(False,False), svIdx=(None,None)):
+		for (i,db) in enumerate(self.dbs_):
+			im = ims[i]
+			db.add_batch(ims[i], labels[i], imAsFloat=imAsFloat[i], svIdx=svIdx[i])	
+
+
+class DbReader:
+	def __init__(self, dbName, isLMDB=True, readahead=True):
+		#For large LMDB set readahead to be False
+		self.db_     = lmdb.open(dbName, readonly=True, readahead=readahead)
+		self.txn_    = self.db_.begin(write=False) 
+		self.cursor_ = self.txn_.cursor()		
+		self.itr_    = self.cursor_.iternext()
+
+	def __del__(self):
+		self.txn_.commit()
+		self.db_.close()
 		
 	def read_next(self):
-		key, dat = self.itr.next()
+		if self.cursor_.next():
+			key, dat = self.itr_.next()
+		else:
+			return None, None
 		datum  = caffe.io.caffe_pb2.Datum()
 		datStr = datum.FromString(dat)
 		data   = caffe.io.datum_to_array(datStr)
-		return data
+		label  = datStr.label
+		return data, label
+
+	def read_batch(self, batchSz):
+		data, label = [], []
+		for b in range(batchSz):
+			dat, lb = self.read_next()
+			if dat is None:
+				break
+			else:
+				ch, h, w = dat.shape
+				dat = np.reshape(dat,(1,ch,h,w))
+				data.append(dat)
+				label.append(lb)
+		data  = np.concatenate(data[:])
+		label = np.array(label)
+		label = label.reshape((len(label),1))
+		return data, label 
+		 
+	def get_label_stats(self, maxLabels):
+		countArr  = np.zeros((maxLabels,))
+		countFlag = True
+		while countFlag:
+			_,lb     = self.read_next()	
+			if lb is not None:
+				countArr[lb] += 1
+			else:
+				countFlag = False
+		return countArr				
 
 	def close(self):
-		self.txn.commit()
-		self.db.close()
+		self.txn_.commit()
+		self.db_.close()
+
+
+class SiameseDbReader(DbReader):
+	def get_next_pair(self, flipColor=True):
+		imDat,label  = self.read_next()
+		ch,h,w = imDat.shape
+		assert np.mod(ch,2)==0
+		ch = ch / 2
+		imDat  = np.transpose(imDat,(1,2,0))
+		im1    = imDat[:,:,0:ch]
+		im2    = imDat[:,:,ch:2*ch]
+		if flipColor:
+			im1 = im1[:,:,[2,1,0]]
+			im2 = im2[:,:,[2,1,0]]
+		return im1, im2, label
+			 
+
+class DoubleDbReader:
+	def __init__(self, dbNames, isLMDB=True, readahead=True):
+		#For large LMDB set readahead to be False
+		self.dbs_ = []
+		for d in dbNames:
+			self.dbs_.append(DbReader(d), isLMDB=isLMDB, readahed=readahed)	
+
+	def __del__(self):
+		for db in self.dbs_:
+			db.__del__()
+		
+	def read_next(self):
+		data = []
+		for db in self.dbs_:
+			dat,_ = db.read_next()
+			data.append(dat)
+		return data[0], data[1]
+
+	def read_batch(self, batchSz):
+		data = []
+		for db in self.dbs_:
+			dat,_ = db.read_batch(batchSz)
+			data.append(dat)
+		return data[0], data[1]
+	
+	def close(self):
+		for db in self.dbs_:
+			db.close()
 
 
 def save_lmdb_images(ims, dbFileName, labels=None, asFloat=False):

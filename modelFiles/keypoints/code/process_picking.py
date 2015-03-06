@@ -119,6 +119,105 @@ def get_polar_data(isTrain=True):
 	db.close()
 
 
+def get_polar_azimuth_data(isTrain=True):
+	'''
+		Get the examples for polar and azimuth data.
+		polar data can be from any of the -4,4 since we have 5 camera. 
+		rotation data can be from -45, 45 angles. 
+	'''
+	clNames         = rep.get_classNames()
+	tp              = 0.7
+	trainCl, testCl = get_train_test_class(trainPercent=tp)
+	expName         = 'picking_polar_azimuth'
+	if isTrain:
+		clNames = [clNames[i] for i in trainCl]
+		setStr  = 'train'
+		nSPerClass = 10000
+	else:
+		clNames = [clNames[i] for i in testCl]  
+		setStr  = 'test'
+		nSPerClass = 1000
+
+	h, w, ch   = 256, 256, 3 
+	N          = h * w * ch
+	prms       = get_paths(sqMask=True, imSz=h)	
+	imFile     = prms['maskFile'] 
+
+	rotRange = np.arange(-60,60)
+	numRots  = len(rotRange)
+	mnRot    = -45/3
+	mxRot    = 45/3
+	mnIdx, mxIdx = np.where(rotRange==mnRot)[0][0], np.where(rotRange==mxRot)[0][0]
+	
+	if isTrain:
+		#I want to sample in a manner that number of rotations chosen out of rotation range are equal
+		#to any single elemnt in the rotation range. 
+		probSample = np.zeros((numRots,))
+		probSample[mnIdx:mxIdx+1] = 1.
+		probSum    = np.sum(probSample)
+		numOthers  = numRots - (mxIdx - mnIdx + 1)
+		probOthers = 1.0/numOthers
+		probSample[0:mnIdx]  = probOthers
+		probSample[mxIdx+1:] = probOthers
+	else:
+		probSample = np.ones((numRots,))
+	probSample   = probSample/sum(probSample)
+
+	#Permutation for saving the images
+	perm    = np.random.permutation(nSPerClass * len(clNames))
+
+	#The db in which to store
+	imDbName = prms['imldb'] % (setStr, expName, tp, h)
+	lbDbName = prms['lbldb'] % (setStr, expName, tp, h)
+	print imDbName, lbDbName
+	db = mpio.doubleDbSaver(imDbName, lbDbName)
+	
+	count = 0
+	for cl in clNames:
+		print cl
+		for i in range(nSPerClass):	
+			#The Polar Angle
+			cm1     = np.floor(5 * min(0.99,np.random.random())) + 1 
+			cm2     = np.floor(5 * min(0.99,np.random.random())) + 1 
+			camLbl  = cm2 - cm1 + 4
+			#The Azimuth
+			rot1    = np.floor(numRots * min(0.9999, np.random.random()))
+			rotDiff = np.random.choice(rotRange, p=probSample)
+			rot2    = np.mod(rot1 + rotDiff, 120) 
+			rotLbl  = rotDiff + 60
+			assert rotLbl >=0 and camLbl >=0, "rot:%d, cam:%d" % (rotLbl, camLbl) 
+
+			#Get the image files and save to dbs
+			imF1 = imFile % (cl, cm1, rot1*3)
+			imF2 = imFile % (cl, cm2, rot2*3)
+			im1  = plt.imread(imF1)
+			im2  = plt.imread(imF2)
+			idx  = perm[count]
+			im1  = im1[:,:,[2,1,0]].transpose((2,0,1))	
+			im2  = im2[:,:,[2,1,0]].transpose((2,0,1))
+			imC  = (np.concatenate((im1, im2))).reshape(1, 2*ch, h, w)
+			lb   = np.array([camLbl, rotLbl]).reshape(1,2,1,1)				
+			db.add_batch((imC,lb), svIdx=([idx],[idx]))	
+			count = count + 1
+	db.close()
+
+
+def test_network(expStr='polar',svImg=False):
+	defFile = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/keypoints/exp/picking_%s_finetune_pool5/caffenet_siamese_deploy.prototxt' % expStr
+	netFile = '/data1/pulkitag/projRotate/snapshots/picking/exp%s/caffenet_pool5_finetune_siamese_iter_40000.caffemodel' % expStr
+	mnFile = '/data1/pulkitag/keypoints/leveldb_store/picking_polar_im256_mean.binaryproto'
+	tp       = 0.7
+	imSz     = 256
+	expName  = 'picking_%s' % expStr
+	prms     = get_paths(sqMask=True, imSz=imSz)	
+	#Get the LMDB
+	dbName = prms['imldb'] % ('test', expName, tp, imSz)
+	db     = mpio.dbReader(dbName)   
+	confMat = mp.test_network_siamese_h5(netFile=netFile, defFile=defFile, meanFile=mnFile, imSz=imSz, ipLayerName='pair_data', outFeatSz=10, db=db, svImg=svImg) 		
+
+	return confMat
+
+
 def compute_distance(x1, x2, distType='l2'):
 	if distType=='l2':
 		return scl.norm(x1-x2)

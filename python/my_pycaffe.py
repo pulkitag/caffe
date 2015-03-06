@@ -3,7 +3,6 @@ import h5py
 import caffe
 import pdb
 
-
 class layerSz:
 	def __init__(self, stride, filterSz):
 		self.imSzPrev = [] #We will assume square images for now
@@ -213,7 +212,7 @@ def read_mean(protoFileName):
 	return mn
 
 
-class MyNet(caffe.Net):
+class MyNet:
 	def __init__(self, defFile, modelFile, isGPU=True, testMode=True):
 		if testMode:
 			self.net = caffe.Net(defFile, modelFile, caffe.TEST)
@@ -223,6 +222,7 @@ class MyNet(caffe.Net):
 		self.transformer = {}
 		self.defFile   = defFile
 		self.modelFile = modelFile
+		self.batchSz   = self.get_batchsz()
 
 
 	def set_mode(self, isGPU=True):
@@ -242,25 +242,32 @@ class MyNet(caffe.Net):
 		return blob.num, blob.channels, blob.height, blob.width
 
 	
-	def set_preprocess(self, ipName='data',chSwap=(2,1,0), meanDat=[], imageDims=None):
+	def set_preprocess(self, ipName='data',chSwap=(2,1,0), meanDat=[], imageDims=None, isBlobFormat=False):
 		'''
-			ipName : the blob for which the pre-processing parameters need to be set. 
+			isBlobFormat: if the images are already coming in blobFormat or not. 
+			ipName    : the blob for which the pre-processing parameters need to be set. 
 			meanDat   : the mean which needs to subtracted
-			imageDims : the size of the images which will be input
+			imageDims : the size of the images as H * W * K where K is the number of channels
 		'''
 		self.transformer[ipName] = caffe.io.Transformer({ipName: self.net.blobs[ipName].data.shape})
-		#So that images are expected in H * W * K format
+		#Note blobFormat will be so used that finally the image will need to be flipped. 
 		self.transformer[ipName].set_transpose(ipName, (2,0,1))	
-		#Required for eg RGB to BGR conversion.
-		self.transformer[ipName].set_channel_swap(ipName, chSwap)
+		if chSwap is not None:
+			#Required for eg RGB to BGR conversion.
+			self.transformer[ipName].set_channel_swap(ipName, chSwap)
+		
 		#Crop Dimensions
-		self.cropDims = np.array(self.net.blobs[ipName].data.shape[2:])
+		ipDims            = np.array(self.net.blobs[ipName].data.shape)
+		self.cropDims     = ipDims[2:]
+		self.isBlobFormat = isBlobFormat 
 		if imageDims is None:
-			imageDims = self.cropDims
+			imageDims = np.array([ipDims[2], ipDims[3], ipDims[1]])
 		else:
-			imageDims = np.array([imageDims[0], imageDims[1]])
+			assert len(imageDims)==3
+			imageDims = np.array([imageDims[0], imageDims[1], imageDims[2]])
 		self.imageDims = imageDims
 		self.get_crop_dims()		
+		
 		#Mean Subtraction
 		if not meanDat is None:
 			_,h,w = meanDat.shape
@@ -271,7 +278,7 @@ class MyNet(caffe.Net):
 	
 	def get_crop_dims(self):
 		# Take center crop.
-		center = np.array(self.imageDims) / 2.0
+		center = np.array(self.imageDims[0:2]) / 2.0
 		crop = np.tile(center, (1, 2))[0] + np.concatenate([
 				-self.cropDims / 2.0,
 				self.cropDims / 2.0
@@ -279,21 +286,36 @@ class MyNet(caffe.Net):
 		self.crop = crop
 
 
+	def resize_batch(self, ims):
+		if ims.shape[0] == self.batchSz:
+			return ims
+		print "Adding Zero Images to fix the batch, Size: %d" % ims.shape[0]
+		N,ch,h,w = ims.shape
+		imZ      = np.zeros((self.batchSz - N, ch, h, w))
+		ims      = np.concatenate((ims, imZ))
+		return ims 
+		
+
 	def preprocess_batch(self, ims, ipName='data'):	
 		'''
-			ims: iterator over H * W * K sized images (K - number of channels)
+			ims: iterator over H * W * K sized images (K - number of channels) or K * H * W format. 
 		'''
 		#The image necessary needs to be float - otherwise caffe.io.resize fucks up.
 		ims = ims.astype(np.float32)
 		if np.max(ims)<=1.0:
 			print "There maybe issues with image scaling. The maximum pixel value is 1.0 and not 255.0"
+	
+		assert ipName in self.transformer.keys()
 
 		im_ = np.zeros((len(ims), 
-            self.imageDims[0], self.imageDims[1], ims[0].shape[2]),
+            self.imageDims[0], self.imageDims[1], self.imageDims[2]),
             dtype=np.float32)
 		#Resize the images
 		for ix, in_ in enumerate(ims):
-			im_[ix] = caffe.io.resize_image(in_, self.imageDims)
+			if self.isBlobFormat:
+				im_[ix] = caffe.io.resize_image(in_.transpose((1,2,0)), self.imageDims[0:2])
+			else:
+				im_[ix] = caffe.io.resize_image(in_, self.imageDims[0:2])
 
 		#Required cropping
 		im_ = im_[:,self.crop[0]:self.crop[2], self.crop[1]:self.crop[3],:]	
@@ -303,9 +325,11 @@ class MyNet(caffe.Net):
 		for ix, in_ in enumerate(im_):
 			caffe_in[ix] = self.transformer[ipName].preprocess(ipName, in_)
 
+		#Resize the batch appropriately
+		caffe_in = self.resize_batch(caffe_in)
 		return caffe_in
 
-
+	
 	def deprocess_batch(self, caffeIn, ipName='data'):	
 		'''
 			ims: iterator over H * W * K sized images (K - number of channels)
@@ -338,40 +362,6 @@ def setup_prototypical_network(netName='vgg', layerName='pool4'):
 
 
 '''
-
-def prepare_image(im, cropSz=[], imMean=[]):
-	#Only take the central crop
-	shp = im.shape
-	w,h = shp[-1],shp[-2]
-	
-	if np.ndim(im) == 3:
-		im = im.reshape(shp[0],1,h,w)
-	elif not np.ndim(im) == 4:
-		pdb.set_trace()
-		print "Incorrect image dimensions"
-		raise
-
-	if not cropSz==[]:
-		assert cropSz <= w and cropSz <= h
-		wSt = int((w - cropSz)/2.0)
-		wEn = wSt + cropSz
-		hSt = int((h - cropSz)/2.0)
-		hEn = hSt + cropSz
-		im  = im[:,:,hSt:hEn,wSt:wEn]
-	else:
-		wSt,wEn = 0,w
-		hSt,hEn = 0,h
-
-	if not imMean==[]:
-		assert imMean.ndim ==4
-		assert imMean.shape[0] == 1
-		imMean = imMean[:,:,wSt:wEn,hSt:hEn]
-		im = im - imMean
-
-	return im
-
-
-
 def get_features(net, im, layerName=None, ipLayerName='data'):
 	dataBlob = net.blobs['data']
 	batchSz  = dataBlob.num
@@ -442,60 +432,124 @@ def feats_2_labels(feats, lblType, maskLastLabel=False):
 	return labels
 
 
-def test_network_siamese_h5(imH5File, lbH5File, netFile, defFile, imSz=128, cropSz=112, nCh=3, outLblSz=1, meanFile=[], ipLayerName='data', lblType='uniform20',outFeatSz=20, maskLastLabel=False):
+def save_image(ims, gtLb, pdLb, svFileStr, stCount=0, isSiamese=False):
 	'''
+		Saves the images
+		ims: N * nCh * H * W 
+		gtLb: Ground Truth Label
+		pdLb: Predicted Label
+		svFileStr: Path should contain (%s, %d) - which will be filled in by correct/incorrect and count
+	'''
+	N = ims.shape[0]
+	ims = ims.transpose((0,2,3,1))
+	fig = plt.figure()
+	for i in range(N):
+		im  = ims[i]
+		plt.title('Gt-Label: %d, Predicted-Label: %d' %(gtLb[i], pdLb[i]))
+		gl, pl = gtLb[i], pdLb[i]
+		if gl==pl:
+			fStr = 'correct'
+		else:
+			fStr = 'mistake'
+		if isSiamese:
+			im1  = im[:,:,0:3]
+			im2  = im[:,:,3:]
+			im1  = im1[:,:,[2,1,0]]
+			im2  = im2[:,:,[2,1,0]]
+			plt.subplot(1,2,1)
+			plt.imshow(im1)
+			plt.subplot(1,2,2)
+			plt.imshow(im2)
+			fName = svFileStr % (fStr, i + stCount)
+			if not os.path.exists(os.path.basename(fName)):
+				os.path.makedirs(os.path.basename(fName))
+			plt.savefig(fName)
+		
+
+def test_network_siamese_h5(imH5File=[], lbH5File=[], netFile=[], defFile=[], imSz=128, cropSz=112, nCh=3, outLblSz=1, meanFile=[], ipLayerName='data', lblType='uniform20',outFeatSz=20, maskLastLabel=False, db=None, svImg=False, svImFileStr=None):
+	'''
+		defFile: Architecture prototxt
+		netFile : The model weights
 		maskLastLabel: In some cases it is we may need to compute the error bt ignoring the last label
 									 for example in det - where the last class might be the backgroud class
+		db: instead of h5File, provide a dbReader 
 	'''
-	print imH5File, lbH5File
-	imFid = h5py.File(imH5File,'r')
-	lbFid = h5py.File(lbH5File,'r')
-	ims1 = imFid['images1/']
-	ims2 = imFid['images2/']
-	lbls = lbFid['labels/']
+	isBlobFormat = True
+	if db is None:
+		isBlobFormat = False
+		print imH5File, lbH5File
+		imFid = h5py.File(imH5File,'r')
+		lbFid = h5py.File(lbH5File,'r')
+		ims1 = imFid['images1/']
+		ims2 = imFid['images2/']
+		lbls = lbFid['labels/']
+		
+		#Get Sizes
+		imSzSq = imSz * imSz
+		assert(ims1.shape[0] % imSzSq == 0 and ims2.shape[0] % imSzSq ==0)
+		N     = ims1.shape[0]/(imSzSq * nCh)
+		assert(lbls.shape[0] % N == 0)
+		lblSz = outLblSz
 
-	#Initialize network
-	net  = init_network(netFile, defFile)
-	
 	#Get the mean
 	imMean = []
 	if not meanFile == []:
-		imMean = read_mean_txt(meanFile)	
-		imMean = imMean.reshape((1,2 * nCh,imSz,imSz))
+		imMean = read_mean(meanFile)	
 
-	#Get Sizes
-	imSzSq = imSz * imSz
-	assert(ims1.shape[0] % imSzSq == 0 and ims2.shape[0] % imSzSq ==0)
-	N     = ims1.shape[0]/(imSzSq * nCh)
-	assert(lbls.shape[0] % N == 0)
-	lblSz = outLblSz
-
-	#Initialize variables
-	batchSz  = get_batchsz(net)
-	ims      = np.zeros((batchSz, 2 * nCh, imSz, imSz))
-	labels   = np.zeros((N, lblSz))
-	gtLabels = np.zeros((N, lblSz)) 
-	count   = 0
-
-	#Loop through the images
-	for i in np.arange(0,N,batchSz):
-		st = i * nCh * imSzSq 
-		en = min(N, i + batchSz) * nCh * imSzSq
-		numIm = min(N, i + batchSz) - i
-		ims[0:batchSz] = 0
-		ims[0:numIm,0:nCh,:,:] = ims1[st:en].reshape((numIm,nCh,imSz,imSz))
-		ims[0:numIm,nCh:2*nCh,:,:] = ims2[st:en].reshape((numIm,nCh,imSz,imSz))
-		imsPrep   = prepare_image(ims, cropSz, imMean)  
-		predFeat  = get_features(net, imsPrep, ipLayerName=ipLayerName)
-		predFeat  = predFeat[0:numIm]
-		print numIm
-		try:
-			labels[i : i + numIm, :]    = feats_2_labels(predFeat.reshape((numIm,outFeatSz)), lblType, maskLastLabel=maskLastLabel)[0:numIm]
-			gtLabels[i : i + numIm, : ] = (lbls[i * lblSz : (i+numIm) * lblSz]).reshape(numIm, lblSz) 
-		except ValueError:
-			print "Value Error found"
-			pdb.set_trace()
+	#Initialize network
+	net  = MyNet(defFile, netFile)
+	net.set_preprocess(chSwap=None, meanDat=imMean,imageDims=(imSz, imSz, 2*nCh), isBlobFormat=isBlobFormat, ipName='data')
 	
+	#Initialize variables
+	batchSz  = net.get_batchsz()
+	ims      = np.zeros((batchSz, 2 * nCh, imSz, imSz))
+	count    = 0
+
+	if db is None:	
+		labels   = np.zeros((N, lblSz))
+		gtLabels = np.zeros((N, lblSz)) 
+		#Loop through the images
+		for i in np.arange(0,N,batchSz):
+			st = i * nCh * imSzSq 
+			en = min(N, i + batchSz) * nCh * imSzSq
+			numIm = min(N, i + batchSz) - i
+			ims[0:batchSz] = 0
+			ims[0:numIm,0:nCh,:,:] = ims1[st:en].reshape((numIm,nCh,imSz,imSz))
+			ims[0:numIm,nCh:2*nCh,:,:] = ims2[st:en].reshape((numIm,nCh,imSz,imSz))
+			imsPrep   = prepare_image(ims, cropSz, imMean)  
+			predFeat  = get_features(net, imsPrep, ipLayerName=ipLayerName)
+			predFeat  = predFeat[0:numIm]
+			print numIm
+			try:
+				labels[i : i + numIm, :]    = feats_2_labels(predFeat.reshape((numIm,outFeatSz)), lblType, maskLastLabel=maskLastLabel)[0:numIm]
+				gtLabels[i : i + numIm, : ] = (lbls[i * lblSz : (i+numIm) * lblSz]).reshape(numIm, lblSz) 
+			except ValueError:
+				print "Value Error found"
+				pdb.set_trace()
+	else:
+		labels, gtLabels = [], []
+		runFlag = True
+		while runFlag:
+			count = count + 1
+			print "Processing Batch: ", count
+			dat, lbl = db.read_batch(batchSz)
+			N        = dat.shape[0]
+			print N
+			if N < batchSz:
+				runFlag = False
+			batchDat  = net.preprocess_batch(dat, ipName='data')
+			dataLayer = {}
+			dataLayer[ipLayerName] = batchDat
+			feats     = net.net.forward(**dataLayer)
+			feats     = feats[feats.keys()[0]][0:N]	
+			gtLabels.append(lbl)	
+			predLabels = feats_2_labels(feats.reshape((N,outFeatSz)), lblType)
+			labels.append(predLabels)
+			if svImg:
+				save_images(dat, lbl, predLabels, svImFileStr)
+		labels   = np.concatenate(labels)
+		gtLabels = np.concatenate(gtLabels) 
+		
 	confMat = compute_error(gtLabels, labels, 'classify')
 	return confMat, labels, gtLabels	
 
