@@ -17,7 +17,7 @@ layer {
   }
   convolution_param {
     num_output: 20
-    kernel_size: 5
+    kernel_size: 7
     stride: 1
     weight_filler {
       type: "xavier"
@@ -51,7 +51,7 @@ layer {
   }
   convolution_param {
     num_output: 50
-    kernel_size: 5
+    kernel_size: 7
     stride: 1
     weight_filler {
       type: "xavier"
@@ -84,7 +84,7 @@ layer {
     lr_mult: 2
   }
   inner_product_param {
-    num_output: 500
+    num_output: 32
     weight_filler {
       type: "xavier"
     }
@@ -120,9 +120,4 @@ layer {
     }
   }
 }
-layer {
-  name: "prob"
-  type: "Softmax"
-  bottom: "ip2"
-  top: "prob"
-}
+

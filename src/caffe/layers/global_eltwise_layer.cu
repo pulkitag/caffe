@@ -16,7 +16,7 @@ void GlobalEltwiseLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
     for (int i = 0; i < bottom.size(); ++i) {
 			Dtype* top_data = top[i]->mutable_gpu_data();
 			caffe_gpu_set(count, Dtype(0.), top_data);
-      caffe_gpu_scale(count, coeffs_[i], top_data, bottom[i]->gpu_data(), top_data);
+      caffe_gpu_scale(count, coeffs_[i], bottom[i]->gpu_data(), top_data);
     }
     break;
   case EltwiseParameter_EltwiseOp_SUM:

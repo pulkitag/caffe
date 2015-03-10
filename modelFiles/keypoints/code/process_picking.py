@@ -23,11 +23,17 @@ def get_train_test_class(trainPercent=0.7):
 	return trainIdx, testIdx	
 
 
-def get_paths(sqMask, imSz=256):
-	if sqMask:
-		suffix = 'imSq%d' % imSz
+def get_paths(sqMask, imSz=256, noBg=False):
+	if noBg:
+		if sqMask:
+			suffix = 'imNoBgSq%d' % imSz
+		else:
+			suffix = 'imNoBg%d' % imSz 
 	else:
-		suffix = 'im%d' % imSz 
+		if sqMask:
+			suffix = 'imSq%d' % imSz
+		else:
+			suffix = 'im%d' % imSz 
 	#Get the naming convention for storing these files.
 	cls      = rep.get_classNames() 
 	obj      = rep.PickDat(cls[0])
@@ -47,13 +53,11 @@ def get_paths(sqMask, imSz=256):
 	return prms	
 
 
-def save_masks(camNum, sqMask=False):
-	imSz  = 256
-	if sqMask:
-		svDir = os.path.join(rootDir, 'object_masks', 'imSq%d' % imSz)
-	else:
-		svDir = os.path.join(rootDir, 'object_masks', 'im%d' % imSz)
-	cls   = rep.get_classNames()
+def save_masks(camNum, sqMask=False, imSz=256, noBg=False):
+	prms     = get_paths(sqMask, imSz=imSz, noBg=noBg)
+	maskFile = prms['maskFile']
+	svDir    = os.path.dirname(maskFile) 
+	cls      = rep.get_classNames()
 	for cl in cls:
 		print 'Processing Class: %s' % cl 
 		obj   = rep.PickDat(cl)
@@ -63,7 +67,7 @@ def save_masks(camNum, sqMask=False):
 		for rot in range(0,360,3):
 			#Read and segment the image
 			obj.read(camNum, rot)
-			colDat = obj.colSeg(sqCrop=sqMask)
+			colDat = obj.colSeg(sqCrop=sqMask, noBg=noBg)
 			colDat = scm.imresize(colDat, (imSz, imSz))
 			#Save the outout
 			baseName = os.path.basename(obj.colFile % (camNum, rot))
@@ -119,7 +123,7 @@ def get_polar_data(isTrain=True):
 	db.close()
 
 
-def get_polar_azimuth_data(isTrain=True):
+def get_polar_azimuth_data(isTrain=True, azimuthStep=12):
 	'''
 		Get the examples for polar and azimuth data.
 		polar data can be from any of the -4,4 since we have 5 camera. 
@@ -128,7 +132,7 @@ def get_polar_azimuth_data(isTrain=True):
 	clNames         = rep.get_classNames()
 	tp              = 0.7
 	trainCl, testCl = get_train_test_class(trainPercent=tp)
-	expName         = 'picking_polar_azimuth'
+	expName         = 'picking_polar_azimuth%d' % azimuthStep
 	if isTrain:
 		clNames = [clNames[i] for i in trainCl]
 		setStr  = 'train'
@@ -143,10 +147,10 @@ def get_polar_azimuth_data(isTrain=True):
 	prms       = get_paths(sqMask=True, imSz=h)	
 	imFile     = prms['maskFile'] 
 
-	rotRange = np.arange(-60,60)
+	rotRange = np.arange(-180/3, 180/3)
 	numRots  = len(rotRange)
-	mnRot    = -45/3
-	mxRot    = 45/3
+	mnRot    = -48/3
+	mxRot    = 48/3
 	mnIdx, mxIdx = np.where(rotRange==mnRot)[0][0], np.where(rotRange==mxRot)[0][0]
 	
 	if isTrain:
@@ -170,7 +174,7 @@ def get_polar_azimuth_data(isTrain=True):
 	imDbName = prms['imldb'] % (setStr, expName, tp, h)
 	lbDbName = prms['lbldb'] % (setStr, expName, tp, h)
 	print imDbName, lbDbName
-	db = mpio.doubleDbSaver(imDbName, lbDbName)
+	db = mpio.DoubleDbSaver(imDbName, lbDbName)
 	
 	count = 0
 	for cl in clNames:
@@ -184,7 +188,7 @@ def get_polar_azimuth_data(isTrain=True):
 			rot1    = np.floor(numRots * min(0.9999, np.random.random()))
 			rotDiff = np.random.choice(rotRange, p=probSample)
 			rot2    = np.mod(rot1 + rotDiff, 120) 
-			rotLbl  = rotDiff + 60
+			rotLbl  = int((rotDiff + 60) * (3.0/azimuthStep))  
 			assert rotLbl >=0 and camLbl >=0, "rot:%d, cam:%d" % (rotLbl, camLbl) 
 
 			#Get the image files and save to dbs
@@ -202,18 +206,19 @@ def get_polar_azimuth_data(isTrain=True):
 	db.close()
 
 
-def test_network(expStr='polar',svImg=False):
+def test_network(expStr='polar',svImg=False, deviceId=2):
 	defFile = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/keypoints/exp/picking_%s_finetune_pool5/caffenet_siamese_deploy.prototxt' % expStr
 	netFile = '/data1/pulkitag/projRotate/snapshots/picking/exp%s/caffenet_pool5_finetune_siamese_iter_40000.caffemodel' % expStr
-	mnFile = '/data1/pulkitag/keypoints/leveldb_store/picking_polar_im256_mean.binaryproto'
+	mnFile      = '/data1/pulkitag/keypoints/leveldb_store/picking_polar_im256_mean.binaryproto'
+	svImFileStr = '/data1/pulkitag/projRotate/vis/exp%s/%s/im%s.png' % (expStr, '%s', '%d') 
 	tp       = 0.7
 	imSz     = 256
 	expName  = 'picking_%s' % expStr
 	prms     = get_paths(sqMask=True, imSz=imSz)	
 	#Get the LMDB
 	dbName = prms['imldb'] % ('test', expName, tp, imSz)
-	db     = mpio.dbReader(dbName)   
-	confMat = mp.test_network_siamese_h5(netFile=netFile, defFile=defFile, meanFile=mnFile, imSz=imSz, ipLayerName='pair_data', outFeatSz=10, db=db, svImg=svImg) 		
+	db     = mpio.DbReader(dbName)   
+	confMat = mp.test_network_siamese_h5(netFile=netFile, defFile=defFile, meanFile=mnFile, imSz=imSz, ipLayerName='pair_data', outFeatSz=10, db=db, svImg=svImg, svImFileStr=svImFileStr, deviceId=deviceId) 		
 
 	return confMat
 

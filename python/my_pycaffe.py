@@ -2,6 +2,8 @@ import numpy as np
 import h5py
 import caffe
 import pdb
+import matplotlib.pyplot as plt
+import os
 
 class layerSz:
 	def __init__(self, stride, filterSz):
@@ -160,13 +162,17 @@ def get_model_mean_file(netName='vgg'):
 	'''
 	if netName   == 'alex':
 		modelFile    = '/data1/pulkitag/caffe_models/caffe_imagenet_train_iter_310000'
+		imMeanFile = '/data1/pulkitag/caffe_models/ilsvrc2012_mean.binaryproto'
 	elif netName == 'vgg':
 		modelFile    = '/data1/pulkitag/caffe_models/VGG_ILSVRC_19_layers.caffemodel'
+		imMeanFile = '/data1/pulkitag/caffe_models/ilsvrc2012_mean.binaryproto'
+	elif netName  == 'lenet':
+		modelFile  = '/data1/pulkitag/mnist/snapshots/lenet_iter_20000.caffemodel'
+		imMeanFile = None
 	else:
 		print 'netName not recognized'
 		return
 
-	imMeanFile = '/data1/pulkitag/caffe_models/ilsvrc2012_mean.binaryproto'
 	return modelFile, imMeanFile
 	
 
@@ -213,24 +219,29 @@ def read_mean(protoFileName):
 
 
 class MyNet:
-	def __init__(self, defFile, modelFile, isGPU=True, testMode=True):
-		if testMode:
-			self.net = caffe.Net(defFile, modelFile, caffe.TEST)
-		else:
-			self.net = caffe.Net(defFile, modelFile, caffe.TRAIN)
-		self.set_mode(isGPU)
+	def __init__(self, defFile, modelFile, isGPU=True, testMode=True, deviceId=None):
+		self.defFile_   = defFile
+		self.modelFile_ = modelFile
+		self.testMode_  = testMode
+		self.setup_network()
+		self.set_mode(isGPU, deviceId=deviceId)
 		self.transformer = {}
-		self.defFile   = defFile
-		self.modelFile = modelFile
+
+
+	def setup_network(self):
+		if self.testMode_:
+			self.net = caffe.Net(self.defFile_, self.modelFile_, caffe.TEST)
+		else:
+			self.net = caffe.Net(self.defFile_, self.modelFile_, caffe.TRAIN)
 		self.batchSz   = self.get_batchsz()
 
-
-	def set_mode(self, isGPU=True):
+	def set_mode(self, isGPU=True, deviceId=None):
 		if isGPU:
 			caffe.set_mode_gpu()
 		else:
 			caffe.set_mode_cpu()
-
+		if deviceId is not None:
+			caffe.set_device(deviceId)
 	
 	def get_batchsz(self):
 		return self.net.blobs[self.net.inputs[0]].num
@@ -242,7 +253,7 @@ class MyNet:
 		return blob.num, blob.channels, blob.height, blob.width
 
 	
-	def set_preprocess(self, ipName='data',chSwap=(2,1,0), meanDat=[], imageDims=None, isBlobFormat=False):
+	def set_preprocess(self, ipName='data',chSwap=(2,1,0), meanDat=None, imageDims=None, isBlobFormat=False):
 		'''
 			isBlobFormat: if the images are already coming in blobFormat or not. 
 			ipName    : the blob for which the pre-processing parameters need to be set. 
@@ -287,6 +298,8 @@ class MyNet:
 
 
 	def resize_batch(self, ims):
+		if ims.shape[0] > self.batchSz:
+			assert False, "More input images than the batch sz"
 		if ims.shape[0] == self.batchSz:
 			return ims
 		print "Adding Zero Images to fix the batch, Size: %d" % ims.shape[0]
@@ -432,7 +445,7 @@ def feats_2_labels(feats, lblType, maskLastLabel=False):
 	return labels
 
 
-def save_image(ims, gtLb, pdLb, svFileStr, stCount=0, isSiamese=False):
+def save_images(ims, gtLb, pdLb, svFileStr, stCount=0, isSiamese=False):
 	'''
 		Saves the images
 		ims: N * nCh * H * W 
@@ -461,12 +474,13 @@ def save_image(ims, gtLb, pdLb, svFileStr, stCount=0, isSiamese=False):
 			plt.subplot(1,2,2)
 			plt.imshow(im2)
 			fName = svFileStr % (fStr, i + stCount)
-			if not os.path.exists(os.path.basename(fName)):
-				os.path.makedirs(os.path.basename(fName))
+			if not os.path.exists(os.path.dirname(fName)):
+				os.makedirs(os.path.dirname(fName))
+			print fName
 			plt.savefig(fName)
 		
 
-def test_network_siamese_h5(imH5File=[], lbH5File=[], netFile=[], defFile=[], imSz=128, cropSz=112, nCh=3, outLblSz=1, meanFile=[], ipLayerName='data', lblType='uniform20',outFeatSz=20, maskLastLabel=False, db=None, svImg=False, svImFileStr=None):
+def test_network_siamese_h5(imH5File=[], lbH5File=[], netFile=[], defFile=[], imSz=128, cropSz=112, nCh=3, outLblSz=1, meanFile=[], ipLayerName='data', lblType='uniform20',outFeatSz=20, maskLastLabel=False, db=None, svImg=False, svImFileStr=None, deviceId=None):
 	'''
 		defFile: Architecture prototxt
 		netFile : The model weights
@@ -497,13 +511,14 @@ def test_network_siamese_h5(imH5File=[], lbH5File=[], netFile=[], defFile=[], im
 		imMean = read_mean(meanFile)	
 
 	#Initialize network
-	net  = MyNet(defFile, netFile)
+	net  = MyNet(defFile, netFile, deviceId=deviceId)
 	net.set_preprocess(chSwap=None, meanDat=imMean,imageDims=(imSz, imSz, 2*nCh), isBlobFormat=isBlobFormat, ipName='data')
 	
 	#Initialize variables
 	batchSz  = net.get_batchsz()
 	ims      = np.zeros((batchSz, 2 * nCh, imSz, imSz))
 	count    = 0
+	imCount  = 0
 
 	if db is None:	
 		labels   = np.zeros((N, lblSz))
@@ -546,7 +561,8 @@ def test_network_siamese_h5(imH5File=[], lbH5File=[], netFile=[], defFile=[], im
 			predLabels = feats_2_labels(feats.reshape((N,outFeatSz)), lblType)
 			labels.append(predLabels)
 			if svImg:
-				save_images(dat, lbl, predLabels, svImFileStr)
+				save_images(dat, lbl, predLabels, svImFileStr, stCount=imCount, isSiamese=True)
+			imCount = imCount + N
 		labels   = np.concatenate(labels)
 		gtLabels = np.concatenate(gtLabels) 
 		

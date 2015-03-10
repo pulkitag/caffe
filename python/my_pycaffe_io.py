@@ -5,7 +5,7 @@ import pdb
 import os
 import lmdb
 
-def ims2hdf5(im, labels, batchSz, batchPath, isColor=True, batchStNum=1, isUInt8=True, scale=None):
+def ims2hdf5(im, labels, batchSz, batchPath, isColor=True, batchStNum=1, isUInt8=True, scale=None, newLabels=False):
 	'''
 		Converts an image dataset into hdf5
 	'''
@@ -42,10 +42,14 @@ def ims2hdf5(im, labels, batchSz, batchPath, isColor=True, batchStNum=1, isUInt8
 		h5File    = os.path.join(batchPath, 'batch%d.h5' % count)
 		h5Fid     = h5.File(h5File, 'w')
 		imBatch = np.zeros((N, ch, h, w), dType) 
-		imH5      = h5Fid.create_dataset('/data',(batchSz, ch, h, w), dtype=h5DType) 
-		lbH5 = h5Fid.create_dataset('/label', (batchSz,1,1,1), dtype='f')
+		imH5      = h5Fid.create_dataset('/data',(batchSz, ch, h, w), dtype=h5DType)
 		imH5[0:batchSz] = im[st:en]
-		lbH5[0:batchSz] = labels[st:en].reshape((batchSz,1,1,1))
+		if newLabels:
+			lbH5 = h5Fid.create_dataset('/label', (batchSz,), dtype='f')
+			lbH5[0:batchSz] = labels[st:en].reshape((batchSz,))
+		else: 
+			lbH5 = h5Fid.create_dataset('/label', (batchSz,1,1,1), dtype='f')
+			lbH5[0:batchSz] = labels[st:en].reshape((batchSz,1,1,1))
 		h5Fid.close()
 		strFid.write('%s \n' % h5File)
 		count += 1	
@@ -189,7 +193,7 @@ class DoubleDbReader:
 		#For large LMDB set readahead to be False
 		self.dbs_ = []
 		for d in dbNames:
-			self.dbs_.append(DbReader(d), isLMDB=isLMDB, readahed=readahed)	
+			self.dbs_.append(DbReader(d, isLMDB=isLMDB, readahead=readahead))	
 
 	def __del__(self):
 		for db in self.dbs_:
@@ -213,7 +217,7 @@ class DoubleDbReader:
 		for db in self.dbs_:
 			db.close()
 
-
+	
 def save_lmdb_images(ims, dbFileName, labels=None, asFloat=False):
 	'''
 		Assumes ims are numEx * ch * h * w

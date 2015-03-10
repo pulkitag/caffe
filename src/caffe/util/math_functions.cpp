@@ -218,7 +218,7 @@ void caffe_abs<double>(const int n, const double* a, double* y) {
 
 
 template <typename Dtype>
-void caffe_cpu_zero_mean<Dtype>(const int n, const Dtype* a, Dtype* b){
+void caffe_cpu_zero_mean(const int n, const Dtype* a, Dtype* b){
 	Dtype mn;
 	mn = caffe_cpu_asum(n, a);
 	for (int i=0; i<n; i++)

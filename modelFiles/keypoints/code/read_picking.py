@@ -91,12 +91,44 @@ class PickDat:
 		return xmin, xmax, ymin, ymax
 		
 
-	def colSeg(self, sqCrop=False):
-		if sqCrop:
-			xmin,xmax,ymin,ymax = self.get_square_crop()			
-		else:
+	def colSeg(self, sqCrop=False, noBg=False):
+		'''
+			noBG: If true, then the background is removed. 
+		'''
+		if noBg:
 			xmin,xmax,ymin,ymax = self.get_crop()			
-		return np.copy(self.colDat[ymin:ymax, xmin:xmax])
+			if sqCrop:
+				xminSq,xmaxSq,yminSq,ymaxSq = self.get_square_crop()		
+				mx = int(max(xmaxSq - xminSq, ymaxSq - yminSq))	
+				colDat = (255*np.ones((mx, mx, 3))).astype(np.uint8)
+				x1     = int(np.floor((xmin - xminSq)/2.0))
+				x2     = int(x1 + (xmax - xmin))
+				y1     = int(np.floor((ymin - yminSq)/2.0))
+				y2     = int(y1 + (ymax - ymin))
+				colDat[y1:y2,x1:x2,:] = self.colDat[ymin:ymax, xmin:xmax,:]
+				#Pad the image in a special way by considering the last pixel row/col.
+				if y1>0:
+					padRow = (colDat[y1,x1:x2,:]).reshape(1,(x2-x1),3)
+					colDat[0:y1,x1:x2,:] = np.tile(padRow, (y1,1,1))
+				if y2 < mx:
+					padRow = colDat[y2-1,x1:x2,:].reshape(1,(x2-x1),3)
+					colDat[y2:mx,x1:x2,:] = np.tile(padRow, (mx-y2,1,1))
+				if x1>0:
+					padCol = (colDat[y1:y2,x1,:]).reshape((y2-y1),1,3)
+					colDat[y1:y2,0:x1,:] = np.tile(padCol, (1,x1,1))
+				if x2 < mx:
+					padCol = (colDat[y1:y2,x2-1,:]).reshape((y2-y1),1,3)
+					colDat[y1:y2,x2:mx,:] = np.tile(padCol, (1,mx-x2,1))
+			else:
+				colDat =  np.copy(self.colDat[ymin:ymax, xmin:xmax])
+		else:
+			if sqCrop:
+				xmin,xmax,ymin,ymax = self.get_square_crop()			
+			else:
+				xmin,xmax,ymin,ymax = self.get_crop()			
+			colDat =  np.copy(self.colDat[ymin:ymax, xmin:xmax])
+		return colDat
+
 
 	def depthSeg(self, sqCrop=False):
 		if sqCrop:

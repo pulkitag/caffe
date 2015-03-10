@@ -47,7 +47,7 @@ void GlobalEltwiseLayer<Dtype>::Forward_cpu(
   switch (op_) {
   case EltwiseParameter_EltwiseOp_PROD:
     for (int i = 0; i < bottom.size(); ++i) {
-      caffe_cpu_scale(count, coeffs_[i], top_data, bottom[i]->cpu_data(), top[i]->mutable_cpu_data());
+      caffe_cpu_scale(count, coeffs_[i], bottom[i]->cpu_data(), top[i]->mutable_cpu_data());
     }
     break;
   case EltwiseParameter_EltwiseOp_SUM:
