@@ -7,13 +7,16 @@ import scipy.io as sio
 
 def zf_saliency(net, imBatch, numOutputs, opName, ipName='data', stride=2, patchSz=11):
 	'''
-		Takes as input a network and some image im
+		Takes as input a network and set of images imBatch
+		net: Instance of MyNet
+		imBatch: the images for which saliency needs to be computed. (expects: N * ch * h * w)
 		Produces the saliency map of im
 		net is of type MyNet
 	'''
 
 	assert(np.mod(patchSz,2)==1), 'patchSz needs to an odd Num'
 	p = int(np.floor(patchSz/2.0))
+	N = imBatch.shape[0]
 
 	#Transform the image
 	imT = net.preprocess_batch(imBatch)
@@ -23,13 +26,13 @@ def zf_saliency(net, imBatch, numOutputs, opName, ipName='data', stride=2, patch
 	dataLayer[ipName] = imT
 	origScore = np.copy(net.net.forward(**dataLayer)[opName])
 	
-	N,ch,nr,nc = imT.shape
+	batchSz,ch,nr,nc = imT.shape
 	dType      = imT.dtype
 	nrNew     = len(range(p, nr-p-1, stride))
 	ncNew     = len(range(p, nc-p-1, stride)) 
 	imSalient = np.zeros((N, numOutputs, nrNew, ncNew))
  
-	for (imCount,im) in enumerate(imT):
+	for (imCount,im) in enumerate(imT[0:N]):
 		count   = 0
 		imIdx   = []
 		ims     = np.zeros(imT.shape).astype(dType)
@@ -42,12 +45,12 @@ def zf_saliency(net, imBatch, numOutputs, opName, ipName='data', stride=2, patch
 				imIdx.append((ir,ic))
 				count += 1
 				#If count is batch size compute the features
-				if count==N or (ir == nrNew-1 and ic == ncNew-1):
+				if count==batchSz or (ir == nrNew-1 and ic == ncNew-1):
 					dataLayer = {}
 					dataLayer[ipName] = net.preprocess_batch(ims)
 					scores = net.net.forward(**dataLayer)[opName]
-					scores = origScore[imCount] - scores[0:N]
-					scores = scores.reshape((N, numOutputs))
+					scores = origScore[imCount] - scores[0:count]
+					scores = scores.reshape((batchSz, numOutputs))
 					for idx,coords in enumerate(imIdx):
 						y, x = coords
 						imSalient[imCount, :, y, x] = scores[idx,:].reshape(numOutputs,)

@@ -4,6 +4,7 @@ import caffe
 import pdb
 import matplotlib.pyplot as plt
 import os
+from six import string_types
 
 class layerSz:
 	def __init__(self, stride, filterSz):
@@ -160,9 +161,14 @@ def get_model_mean_file(netName='vgg'):
 			the model file - the .caffemodel with the weights
 			the mean file of the imagenet data
 	'''
+	modelDir = '/data1/pulkitag/caffe_models/'
+	bvlcDir  = modelDir + 'bvlc_reference/'
 	if netName   == 'alex':
-		modelFile    = '/data1/pulkitag/caffe_models/caffe_imagenet_train_iter_310000'
-		imMeanFile = '/data1/pulkitag/caffe_models/ilsvrc2012_mean.binaryproto'
+		modelFile  = modelDir + 'caffe_imagenet_train_iter_310000'
+		imMeanFile = modelDir + 'ilsvrc2012_mean.binaryproto'
+	if netName == 'bvlcAlexNet':
+		modelFile  = bvlcDir + 'bvlc_reference_caffenet.caffemodel'
+		imMeanFile = bvlcDir + 'imagenet_mean.binaryproto'  
 	elif netName == 'vgg':
 		modelFile    = '/data1/pulkitag/caffe_models/VGG_ILSVRC_19_layers.caffemodel'
 		imMeanFile = '/data1/pulkitag/caffe_models/ilsvrc2012_mean.binaryproto'
@@ -181,8 +187,12 @@ def get_layer_def_files(netName='vgg', layerName='pool4'):
 		Returns
 			the architecture definition file of the network uptil layer layerName
 	'''
+	modelDir = '/data1/pulkitag/caffe_models/'
+	bvlcDir  = modelDir + 'bvlc_reference/'
 	if netName=='vgg':
-		defFile = '/data1/pulkitag/caffe_models/layer_def_files/vgg_19_%s.prototxt' % layerName
+		defFile = modelDir + 'layer_def_files/vgg_19_%s.prototxt' % layerName
+	elif netName == 'bvlcAlexNet':
+		defFile = bvlcDir + 'caffenet_deploy_%s.prototxt' % layerName
 	else:
 		print 'Cannont get files for networks other than VGG'
 	return defFile	
@@ -253,7 +263,7 @@ class MyNet:
 		return blob.num, blob.channels, blob.height, blob.width
 
 	
-	def set_preprocess(self, ipName='data',chSwap=(2,1,0), meanDat=None, imageDims=None, isBlobFormat=False):
+	def set_preprocess(self, ipName='data',chSwap=(2,1,0), meanDat=None, imageDims=None, isBlobFormat=False, rawScale=None):
 		'''
 			isBlobFormat: if the images are already coming in blobFormat or not. 
 			ipName    : the blob for which the pre-processing parameters need to be set. 
@@ -263,10 +273,14 @@ class MyNet:
 		self.transformer[ipName] = caffe.io.Transformer({ipName: self.net.blobs[ipName].data.shape})
 		#Note blobFormat will be so used that finally the image will need to be flipped. 
 		self.transformer[ipName].set_transpose(ipName, (2,0,1))	
+	
 		if chSwap is not None:
 			#Required for eg RGB to BGR conversion.
 			self.transformer[ipName].set_channel_swap(ipName, chSwap)
-		
+	
+		if rawScale is not None:
+			self.transformer[ipName].set_raw_scale(ipName, rawScale)
+	
 		#Crop Dimensions
 		ipDims            = np.array(self.net.blobs[ipName].data.shape)
 		self.cropDims     = ipDims[2:]
@@ -281,8 +295,10 @@ class MyNet:
 		
 		#Mean Subtraction
 		if not meanDat is None:
+			if isinstance(meanDat, string_types):
+				meanDat = read_mean(meanDat)
 			_,h,w = meanDat.shape
-			assert self.imageDims[0]==h and self.imageDims[1]==w, 'imageDims must match mean Image size'
+			assert self.imageDims[0]==h and self.imageDims[1]==w, 'imageDims must match mean Image size, (h,w), (imH, imW): (%d, %d), (%d,%d)' % (h,w,self.imageDims[0],self.imageDims[1])
 			meanDat  = meanDat[:, self.crop[0]:self.crop[2], self.crop[1]:self.crop[3]] 
 			self.transformer[ipName].set_mean(ipName, meanDat)
 	
@@ -328,6 +344,7 @@ class MyNet:
 			if self.isBlobFormat:
 				im_[ix] = caffe.io.resize_image(in_.transpose((1,2,0)), self.imageDims[0:2])
 			else:
+				print in_.shape
 				im_[ix] = caffe.io.resize_image(in_, self.imageDims[0:2])
 
 		#Required cropping
