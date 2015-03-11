@@ -50,7 +50,8 @@ def zf_saliency(net, imBatch, numOutputs, opName, ipName='data', stride=2, patch
 					dataLayer[ipName] = net.preprocess_batch(ims)
 					scores = net.net.forward(**dataLayer)[opName]
 					scores = origScore[imCount] - scores[0:count]
-					scores = scores.reshape((batchSz, numOutputs))
+					print scores.shape
+					scores = scores.reshape((count, numOutputs))
 					for idx,coords in enumerate(imIdx):
 						y, x = coords
 						imSalient[imCount, :, y, x] = scores[idx,:].reshape(numOutputs,)
