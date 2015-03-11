@@ -4,12 +4,20 @@
 #include <iostream>
 #include <string>
 #include <vector>	
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/highgui/highgui_c.h>
+#include <opencv2/imgproc/imgproc.hpp>
+
 
 #include "caffe/data_transformer.hpp"
 #include "caffe/proto/caffe.pb.h"
 #include "caffe/common.hpp"
 #include "caffe/layer.hpp"
 #include "caffe/util/io.hpp"
+
+
+	
 
 void write_image(std::string file_name, float* data, int count);
 
@@ -48,7 +56,7 @@ int main(int argc, char** argv){
 
 	//Transformation parameters
   caffe::TransformationParameter transform_param;
- 	caffe::DataTransformer<float> data_transformer(transform_param);
+ 	caffe::DataTransformer<float> data_transformer(transform_param, caffe::TEST);
 
   int nr,nc,nd,label; 
   leveldb::Iterator* it = db_temp->NewIterator(leveldb::ReadOptions());
@@ -67,17 +75,22 @@ int main(int argc, char** argv){
 	}
 
 	std::cout << "Starting Iteration \n";
+	int imSz = nr * nc * nd;
 
   for (it->SeekToFirst(); it->Valid(); it->Next()) {
     //std::cout << it->key().ToString() << ": "  << it->value().ToString() << std::endl;
 		datum.ParseFromString(it->value().ToString());
-		data_transformer.Transform(0, datum, mean, data);
-	
+		const std::string& datString = datum.data();	
+		//data_transformer.Transform(datum, data);
+		for (int k=0; k<imSz; k++){
+			data[k] = static_cast<float>(static_cast<uint8_t>(datString[k]));
+		}	
+
 		std::cout << "Writing File \n";	
 		char buffer[50];
 		int len = sprintf(buffer, "tmp/count%08d.txt", count);
 		std::string file_name(buffer, 0 , len);
-		write_image(file_name, data, nr * nc * nd);
+		write_image(file_name, data, imSz);
 
 		label = datum.label();
 		count = count + 1;

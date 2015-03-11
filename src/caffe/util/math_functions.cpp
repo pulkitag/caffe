@@ -216,6 +216,22 @@ void caffe_abs<double>(const int n, const double* a, double* y) {
     vdAbs(n, a, y);
 }
 
+
+template <typename Dtype>
+void caffe_cpu_zero_mean(const int n, const Dtype* a, Dtype* b){
+	Dtype mn;
+	mn = caffe_cpu_asum(n, a);
+	for (int i=0; i<n; i++)
+		b[i] = a[i] - mn;
+}
+
+template
+void caffe_cpu_zero_mean<float>(const int n, const float* a, float* b);
+
+template
+void caffe_cpu_zero_mean<double>(const int n, const double* a, double* b);
+
+
 unsigned int caffe_rng_rand() {
   return (*caffe_rng())();
 }
@@ -369,9 +385,6 @@ template <>
 double caffe_cpu_asum<double>(const int n, const double* x) {
   return cblas_dasum(n, x, 1);
 }
-
-INSTANTIATE_CAFFE_CPU_UNARY_FUNC(sign);
-INSTANTIATE_CAFFE_CPU_UNARY_FUNC(sgnbit);
 
 template <>
 void caffe_cpu_scale<float>(const int n, const float alpha, const float *x,

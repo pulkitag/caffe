@@ -76,7 +76,6 @@ int main(int argc, char** argv){
 	memDims[0] = N;
 	H5::DataSpace memspaceLbl(1, memDims);
 
-	
 	//leveldb
 	//std::string db_path = dataPath + "mnist_leveldb";
 	std::string db_path(argv[2]);
