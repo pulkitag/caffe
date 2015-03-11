@@ -23,7 +23,7 @@ display: 20
 max_iter: 310000
 # snapshot intermediate results
 snapshot: 10000
-snapshot_prefix: "/data1/pulkitag/snapshots/keypoints/exprigid_lbluniform20/keypoints_siamese"
+snapshot_prefix: "/data1/pulkitag/snapshots/keypoints/exprigid_lbllimit30_3/keypoints_siamese"
 # solver mode: CPU or GPU
 solver_mode: GPU
 device_id: 1

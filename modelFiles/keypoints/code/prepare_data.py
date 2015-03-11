@@ -66,6 +66,7 @@ def get_experiment_details(expName, imSz=256):
 	#Load the raw data
 	for cl in classNames:
 		fileName = rawDir + cl + '.mat'
+		print fileName
 		data     = h5py.File(fileName)
 		ims.append(np.transpose(data['ims'], axes=(3,2,1,0)))
 		view.append(np.transpose(data['view'], axes=(2,1,0)))
@@ -254,7 +255,7 @@ def h52db(exp, labelType, imSz, lblOnly=False):
 
 
 if __name__ == "__main__":
-	imSz      = 128
+	imSz      = 256
 	exp       = 'rigid'
 	labelType = 'limited30_3' 
 	
@@ -264,7 +265,7 @@ if __name__ == "__main__":
 	trainDataH5  = get_imH5Name('train', exp, imSz)
 	trainLabelH5 = get_lblH5Name('train', exp, imSz, labelType)
 	trainIdxs, trainIms, trainViews = trainDetails
-	#create_data_images(trainDataH5, trainIms, trainIdxs, imSz)
+	create_data_images(trainDataH5, trainIms, trainIdxs, imSz)
 	create_data_labels(trainLabelH5, trainViews, trainIdxs, labelType)
 
 	print "Making Validation Data.."
