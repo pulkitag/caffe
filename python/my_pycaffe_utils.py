@@ -50,7 +50,6 @@ def zf_saliency(net, imBatch, numOutputs, opName, ipName='data', stride=2, patch
 					dataLayer[ipName] = net.preprocess_batch(ims)
 					scores = net.net.forward(**dataLayer)[opName]
 					scores = origScore[imCount] - scores[0:count]
-					print scores.shape
 					scores = scores.reshape((count, numOutputs))
 					for idx,coords in enumerate(imIdx):
 						y, x = coords
@@ -128,4 +127,5 @@ class ILSVRC12Reader:
 		self.count_ += 1
 		return im, lb, syn, words
 
-			
+	def word_label(self, lb):
+		return self.words_[self.synsets_[lb]]	
