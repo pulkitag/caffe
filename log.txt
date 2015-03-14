@@ -1,0 +1,47 @@
+Cuda number of devices: 3
+Current device id: 0
+[==========] Running 12 tests from 4 test cases.
+[----------] Global test environment set-up.
+[----------] 3 tests from CrossConvolutionLayerTest/0, where TypeParam = caffe::FloatCPU
+[ RUN      ] CrossConvolutionLayerTest/0.TestSetup
+[       OK ] CrossConvolutionLayerTest/0.TestSetup (269 ms)
+[ RUN      ] CrossConvolutionLayerTest/0.TestSimpleCrossConvolution
+8
+[       OK ] CrossConvolutionLayerTest/0.TestSimpleCrossConvolution (1 ms)
+[ RUN      ] CrossConvolutionLayerTest/0.TestGradient
+[       OK ] CrossConvolutionLayerTest/0.TestGradient (17 ms)
+[----------] 3 tests from CrossConvolutionLayerTest/0 (288 ms total)
+
+[----------] 3 tests from CrossConvolutionLayerTest/1, where TypeParam = caffe::DoubleCPU
+[ RUN      ] CrossConvolutionLayerTest/1.TestSetup
+[       OK ] CrossConvolutionLayerTest/1.TestSetup (0 ms)
+[ RUN      ] CrossConvolutionLayerTest/1.TestSimpleCrossConvolution
+8
+[       OK ] CrossConvolutionLayerTest/1.TestSimpleCrossConvolution (1 ms)
+[ RUN      ] CrossConvolutionLayerTest/1.TestGradient
+[       OK ] CrossConvolutionLayerTest/1.TestGradient (16 ms)
+[----------] 3 tests from CrossConvolutionLayerTest/1 (17 ms total)
+
+[----------] 3 tests from CrossConvolutionLayerTest/2, where TypeParam = caffe::FloatGPU
+[ RUN      ] CrossConvolutionLayerTest/2.TestSetup
+[       OK ] CrossConvolutionLayerTest/2.TestSetup (0 ms)
+[ RUN      ] CrossConvolutionLayerTest/2.TestSimpleCrossConvolution
+8
+[       OK ] CrossConvolutionLayerTest/2.TestSimpleCrossConvolution (4 ms)
+[ RUN      ] CrossConvolutionLayerTest/2.TestGradient
+[       OK ] CrossConvolutionLayerTest/2.TestGradient (501 ms)
+[----------] 3 tests from CrossConvolutionLayerTest/2 (505 ms total)
+
+[----------] 3 tests from CrossConvolutionLayerTest/3, where TypeParam = caffe::DoubleGPU
+[ RUN      ] CrossConvolutionLayerTest/3.TestSetup
+[       OK ] CrossConvolutionLayerTest/3.TestSetup (0 ms)
+[ RUN      ] CrossConvolutionLayerTest/3.TestSimpleCrossConvolution
+8
+[       OK ] CrossConvolutionLayerTest/3.TestSimpleCrossConvolution (1 ms)
+[ RUN      ] CrossConvolutionLayerTest/3.TestGradient
+[       OK ] CrossConvolutionLayerTest/3.TestGradient (559 ms)
+[----------] 3 tests from CrossConvolutionLayerTest/3 (561 ms total)
+
+[----------] Global test environment tear-down
+[==========] 12 tests from 4 test cases ran. (1371 ms total)
+[  PASSED  ] 12 tests.

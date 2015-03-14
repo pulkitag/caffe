@@ -227,20 +227,20 @@ class CrossConvolutionLayer : public Layer<Dtype> {
  private:
   // wrap im2col/col2im so we don't have to remember the (long) argument lists
   inline void crossconv_getweights_cpu(const Dtype* data, Dtype* col_buff) {
-    im2col_cpu(data, channels_in_, height_in_, width_in_,
+    im2filtercol_cpu(data, channels_in_, height_in_, width_in_,
         kernel_h_, kernel_w_, pad_h_, pad_w_, stride_h_, stride_w_, col_buff);
   }
   inline void crossconv_col2im_cpu(const Dtype* col_buff, Dtype* data) {
-    col2im_cpu(col_buff, channels_in_, height_in_, width_in_,
+    filtercol2im_cpu(col_buff, channels_in_, height_in_, width_in_,
         kernel_h_, kernel_w_, pad_h_, pad_w_, stride_h_, stride_w_, data);
   }
 #ifndef CPU_ONLY
   inline void crossconv_getweights_gpu(const Dtype* data, Dtype* col_buff) {
-    im2col_gpu(data, channels_in_, height_in_, width_in_,
+    im2filtercol_gpu(data, channels_in_, height_in_, width_in_,
         kernel_h_, kernel_w_, pad_h_, pad_w_, stride_h_, stride_w_, col_buff);
   }
   inline void crossconv_col2im_gpu(const Dtype* col_buff, Dtype* data) {
-    col2im_gpu(col_buff, channels_in_, height_in_, width_in_,
+    filtercol2im_gpu(col_buff, channels_in_, height_in_, width_in_,
         kernel_h_, kernel_w_, pad_h_, pad_w_, stride_h_, stride_w_, data);
   }
 #endif

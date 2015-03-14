@@ -86,6 +86,9 @@ void CrossConvolutionLayer<Dtype>::LayerSetUp(
 	CHECK_EQ(height_in_, height2) << "Height-MisMatch";
 	CHECK_EQ(width_in_, width2)   << "Width-MisMatch";
 
+	LOG(INFO) << num_in_ << "\t" <<  channels_in_ << "\t" <<
+		height_in_ << "\t" << width_in_;
+
 	num_out_    = num_in_;
 	size_in_    = channels_in_ * height_in_ * width_in_; 
 	this->compute_conv_num_samples();	
@@ -107,10 +110,18 @@ void CrossConvolutionLayer<Dtype>::LayerSetUp(
   conv_top_vec_.push_back(&conv_top_);
   conv_layer_->SetUp(conv_bottom_vec_, conv_top_vec_);
 
-
 	this->param_propagate_down_.resize(2, true);
 
+	/*
+	this->blobs_.resize(2);
+	this->blobs_[0].reset(new Blob<Dtype>(
+			channels_out_, channels_in_, kernel_h_, kernel_w_));
+	this->blobs_[1].reset(new Blob<Dtype>(
+			1, channels_in_, height_in_, width_in_));
+	*/
+
 }
+
 
 template <typename Dtype>
 void CrossConvolutionLayer<Dtype>::Reshape(
@@ -139,7 +150,7 @@ void CrossConvolutionLayer<Dtype>::Reshape(
 	}
 
 	//Set shape of col_buffer
-	col_buffer_.Reshape(1, channels_out_, kernel_h_, kernel_w_);
+	col_buffer_.Reshape(channels_out_, channels_in_, kernel_h_, kernel_w_);
 	
 }
 
@@ -168,17 +179,13 @@ void CrossConvolutionLayer<Dtype>::Forward_cpu(
 template <typename Dtype>
 void CrossConvolutionLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
     const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom) {
-  if (propagate_down[1]) {
-    LOG(FATAL) << this->type()
-               << " Layer cannot backpropagate to label inputs.";
-  }
-  if (propagate_down[0]) {
+	if (propagate_down[0]) {
 		//This is for weights
 		//Construct the filter from one sample location at a time.
 		const Dtype* bottom_data_0 = bottom[0]->cpu_data();
 		const Dtype* bottom_data_1 = bottom[1]->cpu_data();
 		const Dtype* top_diff      = top[0]->cpu_diff();
-		Dtype* bottom_diff_0 = bottom[0]->mutable_cpu_data();
+		Dtype* bottom_diff_0 = bottom[0]->mutable_cpu_diff();
 		Dtype* bottom_diff_1 = bottom[1]->mutable_cpu_diff();
 		Dtype* ipData       = conv_bottom_vec_[0]->mutable_cpu_data();
 		Dtype* col_buff     = col_buffer_.mutable_cpu_diff();
@@ -187,22 +194,26 @@ void CrossConvolutionLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
 
 		for (int n=0; n < num_in_; n++){
 			//Load the weights from the bottom[0]
-			crossconv_getweights_cpu(bottom_data_0 + bottom[0]->offset(n), conv_layer_blobs[0]->mutable_cpu_data());
+			crossconv_getweights_cpu(bottom_data_0, conv_layer_blobs[0]->mutable_cpu_data());
 			//Copy the data of bottom[1]
-			caffe_copy(size_in_, bottom_data_1 + bottom[1]->offset(n), ipData);
+			caffe_copy(size_in_, bottom_data_1, ipData);
 			//Copy the diff from the top
- 			caffe_copy(size_out_, top_diff + top[0]->offset(n), conv_top_vec_[0]->mutable_cpu_diff()); 
+ 			caffe_copy(size_out_, top_diff, conv_top_vec_[0]->mutable_cpu_diff());
 			//Perform the backward pass
-			conv_layer_->Backward(conv_bottom_vec_, propagate_down, conv_top_vec_);
+			conv_layer_->Backward(conv_top_vec_, propagate_down, conv_bottom_vec_);
 			//Copy the gradients wrt to weights, i.e. bottom[0] into a buffer 
-			caffe_copy(size_out_, conv_layer_blobs[0]->mutable_cpu_diff(), col_buff);
+			caffe_copy(conv_layer_blobs[0]->count(), conv_layer_blobs[0]->cpu_diff(), col_buff);
 			//Transform the buffer into diff
-			crossconv_col2im_cpu(col_buff, bottom_diff_0 + bottom[0]->offset(n));
+			crossconv_col2im_cpu(col_buff, bottom_diff_0);
 			if (propagate_down[1]){
 				//Copy the gradients for bottom[1]
-				caffe_copy(size_out_, conv_bottom_vec_[0]->mutable_cpu_diff(), bottom_diff_1 + bottom[1]->offset(n));
+				caffe_copy(size_in_, conv_bottom_vec_[0]->cpu_diff(), bottom_diff_1);
 			}
- 
+			bottom_data_0 += bottom[0]->offset(1);
+			bottom_data_1 += bottom[1]->offset(1);
+			bottom_diff_0 += bottom[0]->offset(1);
+			bottom_diff_1 += bottom[1]->offset(1);
+			top_diff      += top[0]->offset(1);
 		}
 	}
 }
