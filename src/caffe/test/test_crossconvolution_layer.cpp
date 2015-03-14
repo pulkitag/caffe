@@ -323,17 +323,34 @@ TYPED_TEST(CrossConvolutionLayerTest, TestGradient) {
       this->blob_top_vec_);
 }
 
-/*
+TYPED_TEST(CrossConvolutionLayerTest, TestGradientPad) {
+  typedef typename TypeParam::Dtype Dtype;
+  LayerParameter layer_param;
+  ConvolutionParameter* convolution_param =
+      layer_param.mutable_convolution_param();
+  this->blob_bottom_vec_.push_back(this->blob_bottom_2_);
+  convolution_param->set_kernel_size(3);
+  convolution_param->set_stride(2);
+  convolution_param->set_pad(1);
+  convolution_param->set_num_output(0);
+  convolution_param->set_bias_term(false);
+  CrossConvolutionLayer<Dtype> layer(layer_param);
+  GradientChecker<Dtype> checker(1e-2, 1e-3);
+  checker.CheckGradientExhaustive(&layer, this->blob_bottom_vec_,
+      this->blob_top_vec_);
+}
+
+
 TYPED_TEST(CrossConvolutionLayerTest, Test1x1Gradient) {
   typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
   ConvolutionParameter* convolution_param =
       layer_param.mutable_convolution_param();
   this->blob_bottom_vec_.push_back(this->blob_bottom_2_);
-  this->blob_top_vec_.push_back(this->blob_top_2_);
   convolution_param->set_kernel_size(1);
   convolution_param->set_stride(1);
-  convolution_param->set_num_output(2);
+  convolution_param->set_num_output(0);
+  convolution_param->set_bias_term(false);
   convolution_param->mutable_weight_filler()->set_type("gaussian");
   convolution_param->mutable_bias_filler()->set_type("gaussian");
   CrossConvolutionLayer<Dtype> layer(layer_param);
@@ -342,6 +359,7 @@ TYPED_TEST(CrossConvolutionLayerTest, Test1x1Gradient) {
       this->blob_top_vec_);
 }
 
+/*
 TYPED_TEST(CrossConvolutionLayerTest, TestGradientGroup) {
   typedef typename TypeParam::Dtype Dtype;
   LayerParameter layer_param;
