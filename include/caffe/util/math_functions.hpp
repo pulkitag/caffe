@@ -95,7 +95,7 @@ template <typename Dtype>
 Dtype caffe_cpu_dot(const int n, const Dtype* x, const Dtype* y);
 
 template <typename Dtype>
-void caffe_cpu_zero_mean(const int n, const Dtype* a, Dtype* b);
+void caffe_cpu_zero_mean(const int N, Dtype* Y);
 
 template <typename Dtype>
 Dtype caffe_cpu_strided_dot(const int n, const Dtype* x, const int incx,
@@ -249,6 +249,9 @@ void caffe_gpu_fabs(const int n, const Dtype* x, Dtype* y);
 
 template <typename Dtype>
 void caffe_gpu_scale(const int n, const Dtype alpha, const Dtype *x, Dtype* y);
+
+template <typename Dtype>
+void caffe_gpu_zero_mean(const int N, Dtype* Y);
 
 int caffe_cpu_modulus(int a, int b);
 __device__ int caffe_gpu_modulus(int a, int b);
