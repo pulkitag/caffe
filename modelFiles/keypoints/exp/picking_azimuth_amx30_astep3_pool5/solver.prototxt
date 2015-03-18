@@ -23,7 +23,7 @@ display: 20
 max_iter: 310000
 # snapshot intermediate results
 snapshot: 10000
-snapshot_prefix: "/data1/pulkitag/projRotate/snapshots/picking/expazimuth/caffenet_pool5_siamese"
+snapshot_prefix: "/data1/pulkitag/projRotate/snapshots/picking/expazimuth_amx30_astep3/caffenet_pool5_siamese"
 # solver mode: CPU or GPU
 solver_mode: GPU
-device_id: 1
+device_id: 0

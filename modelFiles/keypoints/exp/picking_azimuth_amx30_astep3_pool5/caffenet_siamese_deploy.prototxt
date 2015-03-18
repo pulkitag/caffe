@@ -1,67 +1,9 @@
 name: "CaffeNet"
-layer {
-  name: "pair_data"
-  type: "Data"
-  top: "pair_data"
-  include {
-    phase: TRAIN
-  }
-  transform_param {
-    mirror: true
-    crop_size: 227
-    mean_file: "/home/eecs/pulkitag/Documents/projRotate/leveldb_store/picking_polar_im256_mean.binaryproto"
-  }
-  data_param {
-    source: "/home/eecs/pulkitag/Documents/projRotate/leveldb_store/train_images_exppicking_polar_azimuth12_tp0.70_imSz256_new-lmdb"
-    batch_size: 128
-		backend: LMDB
-  }
-}
-layer {
-  name: "pair_label"
-  type: "Data"
-  top: "pair_label"
-  include {
-    phase: TRAIN
-  }
-  data_param {
-    source: "/home/eecs/pulkitag/Documents/projRotate/leveldb_store/train_labels_exppicking_polar_azimuth12_tp0.70_imSz256_new-lmdb"
-    batch_size: 128
-		backend: LMDB
-  }
-}
-layer {
-  name: "pair_data"
-  type: "Data"
-  top: "pair_data"
-  include {
-    phase: TEST
-  }
-  transform_param {
-    mirror: false
-    crop_size: 227
-    mean_file: "/home/eecs/pulkitag/Documents/projRotate/leveldb_store/picking_polar_im256_mean.binaryproto"
-  }
-  data_param {
-    source: "/home/eecs/pulkitag/Documents/projRotate/leveldb_store/test_images_exppicking_polar_azimuth12_tp0.70_imSz256_new-lmdb"
-    batch_size: 50
-		backend: LMDB
-  }
-}
-layer {
-  name: "pair_label"
-  type: "Data"
-  top: "pair_label"
-  include {
-    phase: TEST
-  }
-  data_param {
-    source: "/home/eecs/pulkitag/Documents/projRotate/leveldb_store/test_labels_exppicking_polar_azimuth12_tp0.70_imSz256_new-lmdb"
-    batch_size: 50
-		backend: LMDB
-  }
-}
-
+input: "pair_data"
+input_dim: 128
+input_dim: 6
+input_dim: 227
+input_dim: 227
 layer {
   name: "slice_pair"
   type: "Slice"
@@ -71,17 +13,6 @@ layer {
   slice_param {
     slice_dim: 1
     slice_point: 3
-  }
-}
-layer {
-  name: "slice_label"
-  type: "Slice"
-  bottom: "pair_label"
-  top: "polar_label"
-  top: "azimuth_label"
-  slice_param {
-    slice_dim: 1
-    slice_point: 1
   }
 }
 layer {
@@ -528,19 +459,14 @@ layer {
   bottom: "conv5_p"
   top: "conv5_p"
 }
-
 layer {
   name: "concat"
-  type: "CrossConvolution"
+  type: "Concat"
   bottom: "conv5"
   bottom: "conv5_p"
   top: "concat"
-  convolution_param {
-    kernel_size: 3
-		pad: 1
-		stride: 2
-		num_output: 0
-		bias_term: false	
+  concat_param {
+    concat_dim: 1
   }
 }
 layer {
@@ -559,7 +485,8 @@ layer {
   inner_product_param {
     num_output: 2048
     weight_filler {
-      type: "xavier"
+      type: "gaussian"
+      std: 0.005
     }
     bias_filler {
       type: "constant"
@@ -574,86 +501,27 @@ layer {
   top: "rot_fc6"
 }
 layer {
-  name: "polar_fc7"
+  name: "rot_fc7"
   type: "InnerProduct"
   bottom: "rot_fc6"
-  top: "polar_fc7"
+  top: "rot_fc7"
   param {
-    lr_mult: 10
+    lr_mult: 1
     decay_mult: 1
   }
   param {
-    lr_mult: 20
-    decay_mult: 0
-  }
-  inner_product_param {
-    num_output: 9
-    weight_filler {
-      type: "xavier"
-    }
-    bias_filler {
-      type: "constant"
-      value: 1
-    }
-  }
-}
-layer {
-  name: "azimuth_fc7"
-  type: "InnerProduct"
-  bottom: "rot_fc6"
-  top: "azimuth_fc7"
-  param {
-    lr_mult: 10
-    decay_mult: 1
-  }
-  param {
-    lr_mult: 20
+    lr_mult: 2
     decay_mult: 0
   }
   inner_product_param {
     num_output: 10
     weight_filler {
-      type: "xavier"
+      type: "gaussian"
+      std: 0.005
     }
     bias_filler {
       type: "constant"
       value: 1
     }
   }
-}
-
-layer {
-  name: "polar_accuracy"
-  type: "Accuracy"
-  bottom: "polar_fc7"
-  bottom: "polar_label"
-  top: "polar_accuracy"
-  include {
-    phase: TEST
-  }
-}
-layer {
-  name: "azimith_accuracy"
-  type: "Accuracy"
-  bottom: "azimuth_fc7"
-  bottom: "azimuth_label"
-  top: "azimuth_accuracy"
-  include {
-    phase: TEST
-  }
-}
-
-layer {
-  name: "polar_loss"
-  type: "SoftmaxWithLoss"
-  bottom: "polar_fc7"
-  bottom: "polar_label"
-  top: "polar_loss"
-}
-layer {
-  name: "azimuth_loss"
-  type: "SoftmaxWithLoss"
-  bottom: "azimuth_fc7"
-  bottom: "azimuth_label"
-  top: "azimuth_loss"
 }

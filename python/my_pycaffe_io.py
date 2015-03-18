@@ -4,6 +4,7 @@ import caffe
 import pdb
 import os
 import lmdb
+import shutil
 
 def ims2hdf5(im, labels, batchSz, batchPath, isColor=True, batchStNum=1, isUInt8=True, scale=None, newLabels=False):
 	'''
@@ -58,6 +59,9 @@ def ims2hdf5(im, labels, batchSz, batchPath, isColor=True, batchStNum=1, isUInt8
 
 class dbSaver:
 	def __init__(self, dbName, isLMDB=True):
+		if os.path.exists(dbName):
+			print "%s already existed, but not anymore ..removing.." % dbName
+			shutil.rmtree(dbName)
 		self.db    = lmdb.open(dbName, map_size=int(1e12))
 		self.count = 0
 
@@ -79,7 +83,7 @@ class dbSaver:
 		if svIdx is not None:
 			itrtr = zip(svIdx, ims, labels)
 		else:
-			itrtr = zip(range(count, count + ims.shape[0]), ims, labels)
+			itrtr = zip(range(self.count, self.count + ims.shape[0]), ims, labels)
 
 		for idx, im, lb in itrtr:
 			if not imAsFloat:
