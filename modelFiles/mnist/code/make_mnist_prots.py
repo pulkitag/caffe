@@ -8,7 +8,7 @@ HOSTNAME = socket.gethostname()
 if HOSTNAME in ['c82','c83','c84']:
 	TOOLS_DIR = '/home/eecs/pulkitag/Research/codes/codes/projCaffe/caffe-v2-2/build/tools/'
 else:
-	TOOLS_DIR = '/work4/pulkitag-code/pkgs/projCaffe/caffe-v2-2/build/tools/'
+	TOOLS_DIR = '/work4/pulkitag-code/pkgs/caffe-v2-2/build/tools/'
 
 def modify_source(lines, traindb, testdb):
 	count = 0
