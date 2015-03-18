@@ -8,7 +8,7 @@ import sys
 import os
 
 def load_images(setName = 'train'):
-	dataPath = '/work4/pulkitag/data_sets/mnist/'
+	dataPath = '/data1/pulkitag/mnist/raw/'
 	if setName == 'train':
 		dataFile = dataPath + 'trainImages.pkl'
 	else:
@@ -21,7 +21,38 @@ def load_images(setName = 'train'):
 
 	return im, label
 
-def make_rotations(im, N, outFile, numBins=20):
+
+def transform_im(im, deltaX, deltaY, theta):
+	'''
+		Rotate by theta
+		Translate by deltaX, deltaY
+		First Rotate and then translate
+		Translation is by done by padding. 	
+		Currently only works for MNIST/Gray scale images
+	'''
+	assert im.ndim == 2, 'Only 2D images are considered'
+	nr, nc = im.shape
+	
+	#Rotate the image
+	im     = scm.imrotate(im, theta)
+
+	#Translate the image	
+	if deltaX >= 0:
+		col    = im[:,0]
+		tileIm = np.tile(col,(1,deltaX))
+		im[deltaX:,:]  = im[0:-deltaX,:]
+		im[0:deltaX,:] = tileIm
+	else:
+		deltaX = -deltaX
+		col    = im[:,-1]
+		tileIm = np.tile(col,(1,deltaX))
+		im[0:-deltaX,:]  = im[deltaX:,:]
+		im[-deltaX:,:]   = tileIm
+
+	return im
+
+
+def save_rotations_h5(im, N, outFile, numBins=20):
     bins = np.linspace(-180,180,numBins,endpoint=False)
     fid  = h5py.File(outFile,'w')
     imSet1 = fid.create_dataset("/images1", (N*28*28,), dtype='u1')
@@ -111,8 +142,7 @@ if __name__ == "__main__":
 			if not os.path.exists(dirName):
 				os.makedirs(dirName)
 		else:
-			dirName = './'
-
+			dirName = '/data1/pulkitag/mnist_rotation/'
 
 		trainStr = ''
 		valStr = ''
@@ -132,8 +162,8 @@ if __name__ == "__main__":
 				im,label    = load_images()
 				trainIm = [im[i] for i in range(len(label)) if label[i] in trainDigits]
 				valIm   = [im[i] for i in range(len(label)) if label[i] in valDigits]
-				make_rotations(trainIm, numTrain, trainFile)
-				make_rotations(valIm, numVal, valFile)
+				save_rotations_h5(trainIm, numTrain, trainFile)
+				save_rotations_h5(valIm, numVal, valFile)
 		else: 
 				check_hdf5(valFile)
 
