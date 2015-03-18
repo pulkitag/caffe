@@ -22,7 +22,7 @@ display: 20
 # The maximum number of iterations
 max_iter: 310000
 # snapshot intermediate results
-snapshot: 50000
+snapshot: 10000
 snapshot_prefix: "/scratch/pulkitag/snapshots/caffenet_conv7_fc2048_op2_coeff0.1/caffenet_conv7_fc2048_op2_coeff0.1"
 # solver mode: CPU or GPU
 solver_mode: GPU

@@ -219,10 +219,10 @@ TYPED_TEST(TopographyLayerTest, TestSimpleConvolution) {
       new TopographyLayer<Dtype>(layer_param));
  
 	std::cout << "Seeting Layer \n";
-	 layer->SetUp(this->blob_bottom_vec_, &(this->blob_top_vec_));
+	 layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
 
 	std::cout << "Forward Pass \n";
-	layer->Forward(this->blob_bottom_vec_, &(this->blob_top_vec_));
+	layer->Forward(this->blob_bottom_vec_, this->blob_top_vec_);
  
 	std::cout <<"Reference calculation \n";	
   // Check against reference convolution.
@@ -266,10 +266,10 @@ TYPED_TEST(TopographyLayerTest, TestNonSmoothOp) {
       new TopographyLayer<Dtype>(layer_param));
  
 	std::cout << "Seeting Layer \n";
-	 layer->SetUp(this->blob_bottom_vec_, &(this->blob_top_vec_));
+	 layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
 
 	std::cout << "Forward Pass \n";
-	layer->Forward(this->blob_bottom_vec_, &(this->blob_top_vec_));
+	layer->Forward(this->blob_bottom_vec_, this->blob_top_vec_);
  
 	std::cout <<"Reference calculation \n";	
   // Check against reference convolution.
@@ -435,7 +435,7 @@ TYPED_TEST(TopographyLayerTest, TestRotation) {
 
 	 shared_ptr<Layer<Dtype> > layer(
       new TopographyLayer<Dtype>(layer_param));
-	 layer->SetUp(this->blob_bottom_vec_, &(this->blob_top_vec_));
+	 layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
 
 	layer->blobs().resize(1);
   layer->blobs()[0].reset(new Blob<Dtype>(1, 1, 3, 3));
@@ -459,7 +459,7 @@ TYPED_TEST(TopographyLayerTest, TestRotation) {
   std::cout << "Weights Filled \n";
 
 	std::cout << "Forward Pass \n";
-	layer->Forward((this->blob_bottom_vec_), &(this->blob_top_vec_));
+	layer->Forward(this->blob_bottom_vec_, this->blob_top_vec_);
 
 	std::cout << "###### Bottom ########## \n";
 	const Dtype* bottom = this->blob_bottom_vec_[0]->cpu_data();
@@ -560,8 +560,8 @@ TYPED_TEST(TopographyLayerTest, TestGradient) {
   topography_param->mutable_weight_filler()->set_type("gaussian");
   TopographyLayer<Dtype> layer(layer_param);
   GradientChecker<Dtype> checker(1e-2, 1e-3);
-  checker.CheckGradientExhaustive(&layer, &(this->blob_bottom_vec_),
-      &(this->blob_top_vec_));
+  checker.CheckGradientExhaustive(&layer, this->blob_bottom_vec_,
+      this->blob_top_vec_);
 }
 // */
 

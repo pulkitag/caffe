@@ -298,8 +298,8 @@ layers {
   type: TOPOGRAPHY
   bottom: "fc7"
   top:    "top7"
-  blobs_lr: 0.01
-  weight_decay: 0.01
+  blobs_lr: 0.0
+  weight_decay: 0.0
   topography_param {
 	kernel_size: 3
 	stride: 1

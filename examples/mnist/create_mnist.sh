@@ -3,7 +3,7 @@
 # depending on the value assigned to $BACKEND.
 
 EXAMPLE=/data1/pulkitag/mnist/leveldb_store
-DATA=/work4/pulkitag/data_sets/digits
+DATA=/data1/pulkitag/data_sets/digits
 BUILD=build/examples/mnist
 
 #BACKEND="lmdb"

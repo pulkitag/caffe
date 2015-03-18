@@ -304,6 +304,27 @@ void caffe_gpu_abs<double>(const int N, const double* a, double* y) {
 
 
 template <typename Dtype>
+__global__ void exp_kernel(const int n, const Dtype* a, Dtype* y) {
+  CUDA_KERNEL_LOOP(index, n) {
+    y[index] = exp(a[index]);
+  }
+}
+
+template <>
+void caffe_gpu_exp<float>(const int N, const float* a, float* y) {
+  // NOLINT_NEXT_LINE(whitespace/operators)
+  exp_kernel<float><<<CAFFE_GET_BLOCKS(N), CAFFE_CUDA_NUM_THREADS>>>(
+      N, a, y);
+}
+
+template <>
+void caffe_gpu_exp<double>(const int N, const double* a, double* y) {
+  // NOLINT_NEXT_LINE(whitespace/operators)
+  exp_kernel<double><<<CAFFE_GET_BLOCKS(N), CAFFE_CUDA_NUM_THREADS>>>(
+      N, a, y);
+}
+
+template <typename Dtype>
 __global__ void powx_kernel(const int n, const Dtype* a,
     const Dtype alpha, Dtype* y) {
   CUDA_KERNEL_LOOP(index, n) {
@@ -427,5 +448,15 @@ __device__ int caffe_gpu_modulus(int a, int b){
 	}else
 		return a % b;	
 }
+
+template <typename Dtype>
+void caffe_gpu_zero_mean(const int N, Dtype* Y){
+	Dtype mn;
+	caffe_gpu_asum(N, Y, &mn);
+	mn = -(mn / N);
+	caffe_gpu_add_scalar(N, mn, Y);		
+}
+template void caffe_gpu_zero_mean<float>(const  int N, float* Y);
+template void caffe_gpu_zero_mean<double>(const int N, double* Y);
 
 }  // namespace caffe

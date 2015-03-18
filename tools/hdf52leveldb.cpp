@@ -5,6 +5,7 @@
 #include "stdint.h"
 
 #include "H5Cpp.h"
+#include "hdf5.h"
 
 #include "glog/logging.h"
 #include "leveldb/db.h"
@@ -18,20 +19,33 @@ void read_data(H5::DataSet& dataset, H5::DataSpace dataspace,
 
 
 int main(int argc, char** argv){
+	/*
+		Assumes hdf5 file has two datafields:
+			1. images - containing images - flattened out in (ch, height, width) - fastest dimension is imRow
+			2. labels - as many labels as the number of images
+	*/
 
 	if (argc < 3){
-		std::cout << "Usage: ./convert_dataset_rotation HDF5_FILE_NAME LEVELDB_NAME \n";
+		std::cout << "Usage: ./hdf52leveldb HDF5_FILE_NAME LEVELDB_NAME NUM_ROWS NUM_COLS NUM_CHANNELS\n";
 		return 1;
 	}
-
+	//The size of the image
 	int rows, cols;
-	rows = 28;
-	cols = 28;
-	//std::string dataPath = "/work4/pulkitag/data_sets/digits/";
-	//std::string filePath = dataPath + "mnist_train.hdf5";
-	std::string filePath(argv[1]);
-	std::cout << filePath << "\n";
-	const H5std_string fileName(filePath);
+	if (argc < 5){
+		rows = 28;
+		cols = 28;
+	}
+	else{
+		rows = atoi(argv[3]);
+		cols = atoi(argv[4]);
+	}
+	//Number of channels - grayscale or color image
+	int nCh = 3;
+	if (argc>=6){
+		nCh = atoi(argv[5]);
+	}
+
+	const H5std_string fileName(argv[1]);
 	const H5std_string dataIm1("images");
 	const H5std_string dataLbl("labels");
 

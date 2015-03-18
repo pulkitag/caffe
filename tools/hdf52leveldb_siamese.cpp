@@ -76,7 +76,6 @@ int main(int argc, char** argv){
 	memDims[0] = N;
 	H5::DataSpace memspaceLbl(1, memDims);
 
-	
 	//leveldb
 	//std::string db_path = dataPath + "mnist_leveldb";
 	std::string db_path(argv[2]);
@@ -111,7 +110,7 @@ int main(int argc, char** argv){
   LOG(INFO) << "Rows: " << rows << " Cols: " << cols;
   for (int item_id = 0; item_id < num_items; ++item_id) {
     read_data(im1, dataspace1, memspace1, pixels, item_id, Nr);
-    read_data(im2, dataspace1, memspace1, pixels + Nr, item_id, Nr);
+    read_data(im2, dataspace2, memspace2, pixels + Nr, item_id, Nr);
     read_data(lbl, dataspaceLbl, memspaceLbl, &labels, item_id, 1);
 		datum.set_data(pixels, 2 * rows * cols);
     datum.set_label(labels);

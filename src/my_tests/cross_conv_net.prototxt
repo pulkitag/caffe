@@ -1,0 +1,40 @@
+name: "CrossNet"
+input: "data"
+input_dim: 1
+input_dim: 2
+input_dim: 87
+input_dim: 87
+
+layer {
+	name: "ipchannel"
+	type: "Slice"
+	bottom: "data"
+	top   : "ip_channel_1"
+	top   : "ip_channel_2"
+	slice_param{
+		slice_dim: 1
+		slice_point: 1
+	}
+}
+
+layer {
+	name: "cross"
+	type: "CrossConvolution"
+	bottom: "ip_channel_1"
+	bottom: "ip_channel_2"
+	top:    "cross"
+	param {
+		lr_mult: 1
+	}
+	param {
+		lr_mult: 1
+	}
+	convolution_param{
+		num_output: 0
+		bias_term:  false
+		kernel_size: 28
+		stride: 28
+	}
+}
+
+

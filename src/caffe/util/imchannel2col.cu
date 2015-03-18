@@ -155,7 +155,7 @@ __global__ void colchannel2im_gpu_kernel(const int n, const Dtype* data_col,
     int h_col_start = (ch_h - patch_h) / stride_h + 1;
     int h_col_end   = ch_h / stride_h + 1;
 	  
-		int q;
+		//int q;
 		for (int h_col = h_col_start; h_col < h_col_end; ++h_col) {
       for (int w_col = w_col_start; w_col < w_col_end; ++w_col) {
 				int offset = 0;

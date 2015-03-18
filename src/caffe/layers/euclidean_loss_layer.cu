@@ -9,7 +9,7 @@ namespace caffe {
 
 template <typename Dtype>
 void EuclideanLossLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
-    vector<Blob<Dtype>*>* top) {
+    const vector<Blob<Dtype>*>& top) {
   int count = bottom[0]->count();
   caffe_gpu_sub(
       count,
@@ -18,27 +18,46 @@ void EuclideanLossLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
       diff_.mutable_gpu_data());
   Dtype dot;
   caffe_gpu_dot(count, diff_.gpu_data(), diff_.gpu_data(), &dot);
+
+	if (is_normalize_){
+		Dtype nrmlz;
+		caffe_gpu_dot(count, bottom[nc_]->gpu_data(), bottom[nc_]->gpu_data(), &nrmlz);
+		if (nrmlz > 0){
+			dot = dot / nrmlz;
+		}
+	}
+
   Dtype loss = dot / bottom[0]->num() / Dtype(2);
-  (*top)[0]->mutable_cpu_data()[0] = loss;
+  top[0]->mutable_cpu_data()[0] = loss;
 }
 
 template <typename Dtype>
 void EuclideanLossLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
-    const vector<bool>& propagate_down, vector<Blob<Dtype>*>* bottom) {
+    const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom) {
   for (int i = 0; i < 2; ++i) {
     if (propagate_down[i]) {
       const Dtype sign = (i == 0) ? 1 : -1;
-      const Dtype alpha = sign * top[0]->cpu_diff()[0] / (*bottom)[i]->num();
-      caffe_gpu_axpby(
-          (*bottom)[i]->count(),              // count
+      const Dtype alpha = sign * top[0]->cpu_diff()[0] / (bottom)[i]->num();
+		
+			Dtype nrmlz       = 1.0;      
+			int count = (bottom)[0]->count();
+      if (is_normalize_){
+				caffe_gpu_dot(count,bottom[nc_]->gpu_data(), (bottom)[nc_]->gpu_data(), &nrmlz);
+				if (nrmlz>0){
+					caffe_gpu_scale(count, Dtype(1)/nrmlz, diff_.gpu_data(), diff_.mutable_gpu_data());
+				}
+			}
+
+			caffe_gpu_axpby(
+          (bottom)[i]->count(),              // count
           alpha,                              // alpha
           diff_.gpu_data(),                   // a
           Dtype(0),                           // beta
-          (*bottom)[i]->mutable_gpu_diff());  // b
+          bottom[i]->mutable_gpu_diff());  // b
     }
   }
 }
 
-INSTANTIATE_CLASS(EuclideanLossLayer);
+INSTANTIATE_LAYER_GPU_FUNCS(EuclideanLossLayer);
 
 }  // namespace caffe

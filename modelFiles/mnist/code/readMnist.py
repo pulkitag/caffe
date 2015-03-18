@@ -111,21 +111,29 @@ def check_leveldb_siamese(dirName='./'):
 	'''
 	numFiles = 10
 	fig   = plt.figure()
+  #h,w,ch = 28,28,2
+	h,w,ch  = 256, 256, 3
 	for i in range(numFiles):
 		filename = dirName + 'count%08d.txt' % i
 		outName  = dirName + 'im%08d.png' % i
 		with open(filename,'r') as f:
 			lines = f.readlines()
-			lines = [int(l) for l in lines]
-			im    = np.array(lines).reshape((2,28,28))
-			print np.max(im.flatten())
+			lines = [int(float(l.split()[0])) for l in lines]
+			im    = np.array(lines).reshape((2*ch,h,w))
+			im    = im.astype('uint8')
+			print np.max(im.flatten()), np.min(im.flatten())
 			plt.subplot(2,1,1)
-			plt.imshow(im[0])
+			im1 = np.transpose(im[0:ch,:,:],(1, 2, 0))
+			count = 0
+			imRot1 = im1[:,:,(2, 1, 0)]
+			plt.imshow(imRot1)
 			plt.subplot(2,1,2)
-			plt.imshow(im[1])
+			im2 = np.transpose(im[ch:2*ch,:,:],(1, 2, 0))
+			plt.imshow(im2[:,:,(2, 1, 0)])
 			plt.savefig(outName,bbox_inches='tight')	
 
-
+	return imRot1
+	plt.close(fig)
 if __name__ == "__main__":
     if isTrain:
         fileName  = digitsDir + 'train-images-idx3-ubyte'
