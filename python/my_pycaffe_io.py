@@ -57,7 +57,7 @@ def ims2hdf5(im, labels, batchSz, batchPath, isColor=True, batchStNum=1, isUInt8
 	strFid.close()
 
 
-class dbSaver:
+class DbSaver:
 	def __init__(self, dbName, isLMDB=True):
 		if os.path.exists(dbName):
 			print "%s already existed, but not anymore ..removing.." % dbName
@@ -105,8 +105,8 @@ class DoubleDbSaver:
 	'''
 	def __init__(self, dbName1, dbName2, isLMDB=True):
 		self.dbs_ = []
-		self.dbs_.append(dbSaver(dbName1, isLMDB=isLMDB))
-		self.dbs_.append(dbSaver(dbName2, isLMDB=isLMDB))
+		self.dbs_.append(DbSaver(dbName1, isLMDB=isLMDB))
+		self.dbs_.append(DbSaver(dbName2, isLMDB=isLMDB))
 
 	def __del__(self):
 		for db in self.dbs_:

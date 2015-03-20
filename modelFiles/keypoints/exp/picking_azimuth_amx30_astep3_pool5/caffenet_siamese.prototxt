@@ -590,9 +590,6 @@ layer {
   bottom: "azimuth_fc7"
   bottom: "label"
   top: "azimuth_accuracy"
-  include {
-    phase: TEST
-  }
 }
 
 layer {

@@ -1,0 +1,31 @@
+import numpy as np
+import my_pycaffe as mp
+import my_pycaffe_utils as mpu
+import pdb
+import os
+
+def get_paths():
+	dirName = '/data1/pulkitag/data_sets/kitti/'
+	prms    = {}
+	prms['odoPath']  = os.path.join(dirName, 'odometry')
+	prms['poseFile'] = os.path.join(prms['odoPath'], 'dataset', 'poses', '%02d.txt')
+	return prms
+
+
+def read_poses(seqNum=0):
+	paths  = get_paths()
+	psFile = paths['poseFile'] % seqNum
+
+	fid     = open(psFile, 'r')
+	lines   = fid.readlines()
+	allVals = np.zeros((len(lines), 3 , 4)).astype(float)
+	for (i,l) in enumerate(lines):
+		vals       = [float(v) for v in l.split()]
+		allVals[i] = np.array(vals).reshape((3,4))
+	fid.close()
+	return vals
+	
+	
+ 
+
+ 

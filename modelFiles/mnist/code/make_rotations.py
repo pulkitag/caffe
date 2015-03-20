@@ -6,20 +6,105 @@ import h5py
 import matplotlib.pyplot as plt
 import sys
 import os
+import my_pycaffe_io as mpio
+import pdb
 
 def load_images(setName = 'train'):
-	dataPath = '/data1/pulkitag/mnist/raw/'
+	#dataPath = '/data1/pulkitag/mnist/raw/'
+	dataPath = '/data1/pulkitag/data_sets/mnist/'
 	if setName == 'train':
-		dataFile = dataPath + 'trainImages.pkl'
+		dataFile  = dataPath + 'trainImages.pkl'
+		labelFile = dataPath + 'trainLabels.pkl' 
+	elif setName=='test':
+		dataFile  = dataPath + 'testImages.pkl'
+		labelFile = dataPath + 'testLabels.pkl' 
 	else:
-		dataFile = dataPath + 'testImages.pkl'
+		raise Exception('Unrecognized dataset')
 
 	with open(dataFile,'r') as f:
-		data = pickle.load(f)
-		im     = data['im']
-		label  = data['label']
-
+		im = pickle.load(f)
+	
+	with open(labelFile, 'r') as f:
+		label = pickle.load(f)
+	
 	return im, label
+
+
+def get_lmdb_name(expName, setName):
+	dbDir = '/data1/pulkitag/mnist/lmdb-store/' 
+	if setName == 'train':
+		dbDir = os.path.join(dbDir, 'train')
+	elif setName == 'test':
+		dbDir = os.path.join(dbDir, 'test')
+	else:
+		raise Exception('Unrecognized Set Name')
+
+	if expName in ['normal', 'null_transform']:
+		imFile = os.path.join(dbDir, 'images_labels_' + expName + '-lmdb')
+		lbFile = []
+	else:
+		imFile = os.path.join(dbDir, 'images_' + expName + '-lmdb')
+		lbFile = os.path.join(dbDir, 'labels_' + expName + '-lmdb')
+	return imFile, lbFile
+
+
+def make_normal_lmdb(setName='test'):
+	'''
+		The Standard MNIST LMDBs
+	'''
+	expName = 'normal'	
+	dbFile, [] = get_lmdb_name('normal', setName)
+	db  = mpio.DbSaver(dbFile)
+	im, label = load_images(setName)
+	N, nr, nc = im.shape
+	im        = im.reshape((N, 1, nr, nc))
+	label     = label.squeeze()
+	label     = label.astype(np.int)
+	db.add_batch(im, label)	
+
+
+def make_null_transform_lmdb(setName='test'):
+	'''
+		The LMDB with standard Images - but in a siamese way. 
+	'''
+	expName = 'null_transform'
+	dbFile, [] = get_lmdb_name(expName, setName)
+	db  = mpio.DbSaver(dbFile)
+	im, label = load_images(setName)
+	#Arrange the labels
+	label     = label.squeeze()
+	label     = label.astype(np.int)
+	#Arrange the images
+	N, nr, nc = im.shape
+	ims       = np.zeros((2, N, nr, nc)).astype(im.dtype)
+	ims[0]    = im
+	ims[1]    = im
+	ims       = ims.transpose((1,0,2,3))
+	print ims.shape
+	ims       = ims.reshape((N, 2, nr, nc))
+	db.add_batch(ims, label)	
+
+
+def make_same_transform_lmdb(setName='test', maxDeltaTrans=3, maxRot=10):
+	'''
+		The LMDB with standard Images - but in a siamese way and transformed by the same parameter. 
+	'''
+	expName = 'same_transform_trn%d_mxRot%d' % (maxDeltaTrans, maxRot)
+	dbFile,_ = get_lmdb_name(expName, setName)
+	db  = mpio.DbSaver(dbFile)
+	im, label = load_images(setName)
+	#Arrange the labels
+	label     = label.squeeze()
+	label     = label.astype(np.int)
+	#Arrange the images
+	N, nr, nc = im.shape
+	ims       = np.zeros((N, 2, nr, nc)).astype(im.dtype)
+	for i in range(N):
+		x1, y1, r1 = sample_transform(maxDeltaTrans), sample_transform(maxDeltaTrans), sample_transform(maxRot)
+		ims[i,0,:,:]  = transform_im(im[i], x1, y1, r1)
+		ims[i,1,:,:]  = transform_im(im[i], x1, y1, r1)
+	
+	db.add_batch(ims, label)	
 
 
 def transform_im(im, deltaX, deltaY, theta):
@@ -36,20 +121,168 @@ def transform_im(im, deltaX, deltaY, theta):
 	#Rotate the image
 	im     = scm.imrotate(im, theta)
 
-	#Translate the image	
-	if deltaX >= 0:
-		col    = im[:,0]
-		tileIm = np.tile(col,(1,deltaX))
-		im[deltaX:,:]  = im[0:-deltaX,:]
-		im[0:deltaX,:] = tileIm
-	else:
+	#Translate the image
+	#deltaY	
+	if deltaY > 0:
+		col    = im[0, :].reshape((1, nc))
+		tileIm = np.tile(col, (deltaY, 1))
+		im[deltaY:,:]  = im[0:-deltaY,:]
+		im[0:deltaY,:] = tileIm
+	elif deltaY < 0:
+		deltaY = -deltaY
+		col    = im[-1, :].reshape((1, nc))
+		tileIm = np.tile(col, (deltaY, 1))
+		im[0:-deltaY,:]  = im[deltaY:,:]
+		im[-deltaY:,:]   = tileIm
+
+	if deltaX > 0:
+		col    = im[:, 0].reshape((nr, 1))
+		tileIm = np.tile(col, (1, deltaX))
+		im[:, deltaX:]  = im[:, 0:-deltaX]
+		im[:, 0:deltaX] = tileIm
+	elif deltaX < 0:
 		deltaX = -deltaX
-		col    = im[:,-1]
-		tileIm = np.tile(col,(1,deltaX))
-		im[0:-deltaX,:]  = im[deltaX:,:]
-		im[-deltaX:,:]   = tileIm
+		col    = im[:, -1].reshape((nr, 1))
+		tileIm = np.tile(col, (1, deltaX))
+		im[:, 0:-deltaX]  = im[:, deltaX:]
+		im[:, -deltaX:]   = tileIm
 
 	return im
+
+
+def sample_transform(maxVal):
+	val = int(round(np.random.random() * maxVal))
+	rnd = np.random.random()
+	if rnd > 0.5:
+		sgn = 1
+	else:
+		sgn = -1
+	return sgn * val
+
+
+
+def make_transform_label_db(setName='train',numLabels=1000, 
+														maxDeltaRot=5, maxDeltaTrans=3, maxRot=5, numEx=None):
+	'''
+		setName: Train or Test
+		numLabels: number of examples for which the ground truth labels are provided. 
+		maxDeltaRot  : The maximum amount of Delta in rotation (in degrees)
+		maxDeltaTrans: The maximum amoubt of Delta in translation (in pixels)
+		maxRot       : The maximum baseline rotation. The Delta Rotation is applied after maxRot 	
+		numEx        : Number of examples to include
+	'''
+	ims, lbs  = load_images(setName=setName)
+	N, nr, nc = ims.shape
+
+	#The ignore label
+	ignoreLabel = 10
+
+	if numEx is None:
+		if setName=='train':
+			numEx = 2e+5
+		elif setName=='test':
+			numEx = N
+		else:
+			raise Exception("Inavlid setName")
+
+	if setName=='test':
+		assert numLabels==N, 'In Testing we use labels for all the examples'
+
+	#Set the Seed
+	np.random.seed(3)
+
+	#Determine the examples for which labels are provided
+	perm = np.random.permutation(range(N))
+	perm = perm[0:numLabels]
+
+	#Experiment Name
+	expName = 'mnist_transform_classify_%s_dRot%d_dTrn%d_mxRot%d_nLbl%.0e_numEx%.0e' % (setName, maxDeltaRot, maxDeltaTrans, maxRot, numLabels, numEx)
+	
+	idxs = np.random.random_integers(0, N-1, numEx)
+
+	#dbReader
+	imFile, lbFile = get_lmdb_name(expName, setName)
+	db     = mpio.DoubleDbSaver(imFile, lbFile)
+
+	#Start Writing the data
+	count   = 0
+	batchSz = 1000
+	imBatch = np.zeros((batchSz, 2, nr, nc)).astype(np.uint8)
+	lbBatch = np.zeros((batchSz, 4, 1, 1)).astype(np.float)
+	for (i,idx) in enumerate(idxs):
+		im = ims[idx]
+		lb = lbs[idx]	
+
+		#Use the Ignore Label if needed
+		if idx not in perm:
+			lb = ignoreLabel
+
+		#Get the Transformation
+		x1, y1, r1 = sample_transform(maxDeltaTrans), sample_transform(maxDeltaTrans), sample_transform(maxDeltaRot)
+
+		delx, dely, delr = sample_transform(maxDeltaTrans), sample_transform(maxDeltaTrans), sample_transform(maxDeltaRot)
+
+		x2, y2, r2 = x1 + delx, y1 + dely, r1 + delr
+
+		delx, dely, delr = np.float32(delx), np.float32(dely), np.float32(delr)
+		delx, dely, delr = delx / maxDeltaTrans, dely / maxDeltaTrans, delr / maxDeltaRot
+	
+		#Transform the image
+		imBatch[count,0,:,:]  = transform_im(im, x1, y1, r1)
+		imBatch[count,1,:,:]  = transform_im(im, x2, y2, r2)
+		lbBatch[count,:,:,:]  = np.asarray([np.float(lb), delx, dely, delr]).reshape((4,1,1)) 
+		count += 1
+
+		if count==batchSz or i == len(idxs)-1:
+			print 'Processed %d files' % i
+			imBatch = imBatch[0:count]
+			lbBatch = lbBatch[0:count]
+			db.add_batch((imBatch, lbBatch), imAsFloat=(False, True))
+			count = 0
+			imBatch = np.zeros((batchSz, 2, nr, nc)).astype(np.uint8)
+			lbBatch = np.zeros((batchSz, 4, 1, 1)).astype(np.float)
+
+
+def get_lmdb(setName='test', maxDeltaRot=5, maxDeltaTrans=2,
+						 maxRot=5, numLabels=1000, numEx=2e+5, expName=None):
+	if expName is None:
+		expName = 'mnist_transform_classify_%s_dRot%d_dTrn%d_mxRot%d_nLbl%.0e_numEx%.0e' % (setName, maxDeltaRot, maxDeltaTrans, maxRot, numLabels, numEx)
+
+	if 'same_transform' in expName:
+		expName = 'same_transform_trn%d_mxRot%d' % (maxDeltaTrans, maxRot)
+	
+	imFile, lbFile = get_lmdb_name(expName, setName)
+	if expName in ['normal', 'null_transform'] or 'same_transform' in expName:
+		db     = mpio.DbReader(imFile)
+	else:
+		db     = mpio.DoubleDbReader((imFile, lbFile))
+	return db
+
+
+def vis_lmdb(db, fig=None):
+	data, lb = db.read_next()
+	ch,h,w = data.shape
+	im1      = data[0,:,:]
+	im2      = data[1,:,:]
+	
+	if isinstance(lb, np.ndarray):
+		lb       = np.squeeze(lb)
+		lbStr = 'Class: %f, delx: %f, dely: %f, delr: %f' % (lb[0], lb[1], lb[2], lb[3])
+	else:
+		lbStr = 'Label: %d' % lb		
+
+	#Plot
+	plt.ion()
+	if fig is None:
+		fig = plt.figure()
+	else:
+		plt.figure(fig.number)
+	plt.subplot(2,1,1)
+	plt.imshow(im1)
+	plt.subplot(2,1,2)
+	plt.imshow(im2)
+	plt.suptitle(lbStr)
+	return fig	
 
 
 def save_rotations_h5(im, N, outFile, numBins=20):
@@ -60,7 +293,6 @@ def save_rotations_h5(im, N, outFile, numBins=20):
     labels = fid.create_dataset("/labels",  (N,),       dtype='u1')
     theta1 = fid.create_dataset("/theta1",  (N,),       dtype='f')
     theta2 = fid.create_dataset("/theta2",  (N,),       dtype='f')
-    
     
     numIm =  len(im)
     print "Number of images: %d" % numIm 
@@ -99,6 +331,7 @@ def save_rotations_h5(im, N, outFile, numBins=20):
         theta2[i] = ang2
 
     fid.close()
+
 
 def check_hdf5(fileName):
     f = h5py.File(fileName,'r')

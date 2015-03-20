@@ -505,6 +505,10 @@ def compute_features(netName='vgg', layerName='pool4', sqMask=True, camNum=5):
 
 
 def plot_siamese_db(db, fig=None, dbType='ap', subFactor=4):
+	'''
+		dbType: 'ap': Azimuth Polar, 'a': For Azimuth Only
+	'''
+
 	data, lb = db.read_next()
 	ch,h,w = data.shape
 	im1      = data[0:3,:,:].transpose((1,2,0))
@@ -517,10 +521,14 @@ def plot_siamese_db(db, fig=None, dbType='ap', subFactor=4):
 		lb = lb.reshape(1,)
 	lbStr = ''
 	for (i,l) in enumerate(lb):
-		if i ==0:
-			lbStr = lbStr + 'Polar: ' + str(l - subFactor) + ','
-		else:
-			lbStr = lbStr + ' Azimuth: ' + str(l - subFactor) + ','
+		if dbType =='ap':
+			if i ==0:
+				lbStr = lbStr + 'Polar: ' + str(l - subFactor) + ','
+			else:
+				lbStr = lbStr + ' Azimuth: ' + str(l - subFactor) + ','
+		elif dbType == 'a':
+			lbStr = 'Azimuth: ' + str(l - subFactor)
+
 	#Plot
 	plt.ion()
 	if fig is None:
@@ -535,10 +543,9 @@ def plot_siamese_db(db, fig=None, dbType='ap', subFactor=4):
 	return fig	
 
 
-def test_azimuth_db():
+def test_azimuth_db(setStr='test'):
 	azimuthStep   =  3
 	mxAzimuthDiff = 30 
-	setStr   = 'test'
 	h        = 256
 	tp       = 0.7
 	expName  = 'picking_azimuth_amx%d_astep%d' % (mxAzimuthDiff, azimuthStep) 
