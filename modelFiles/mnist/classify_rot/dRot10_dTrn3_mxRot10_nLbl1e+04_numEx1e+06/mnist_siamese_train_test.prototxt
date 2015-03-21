@@ -1,15 +1,27 @@
-name: "mnist_test"
+name: "mnist_siamese_train_test"
 ######### Images ##########
 layer {
-  name: "data"
+  name: "pair_data"
   type: "Data"
   top: "pair_data"
-	top: "classify_label"
   data_param {
-		#source: "/data1/pulkitag/mnist/lmdb-store/test/images_labels_null_transform-lmdb"   
-		source: "/data1/pulkitag/mnist/lmdb-store/test/images_same_transform_trn3_mxRot10-lmdb"   
-    batch_size: 100
+		source: "/data1/pulkitag/mnist/lmdb-store/train/images_mnist_transform_classify_train_dRot10_dTrn3_mxRot10_nLbl1e+04_numEx1e+06-lmdb"   
+    batch_size: 64
 		backend: LMDB
+  }
+	transform_param{
+	  scale: 0.00390625
+	}
+  include: { phase: TRAIN }
+}
+layer {
+  name: "pair_data"
+  type: "Data"
+  top: "pair_data"
+  data_param {
+		source: "/data1/pulkitag/mnist/lmdb-store/test/images_mnist_transform_classify_test_dRot10_dTrn3_mxRot10_nLbl1e+04_numEx1e+04-lmdb"   
+   batch_size: 100
+	 backend: LMDB
   }
 	transform_param{
 	  scale: 0.00390625
@@ -27,6 +39,41 @@ layer {
         slice_point: 1
     }
 }
+###### Labels #############
+layer {
+  name: "pair_labels"
+  type: "Data"
+  top: "pair_labels"
+  data_param {
+		source: "/data1/pulkitag/mnist/lmdb-store/train/labels_mnist_transform_classify_train_dRot10_dTrn3_mxRot10_nLbl1e+04_numEx1e+06-lmdb"   
+    batch_size: 64
+		backend: LMDB
+  }
+  include: { phase: TRAIN }
+}
+layer {
+  name: "pair_labels"
+  type: "Data"
+  top:  "pair_labels"
+  data_param {
+		source: "/data1/pulkitag/mnist/lmdb-store/test/labels_mnist_transform_classify_test_dRot10_dTrn3_mxRot10_nLbl1e+04_numEx1e+04-lmdb"   
+   batch_size: 100
+	 backend: LMDB
+  }
+  include: { phase: TEST }
+}
+layer {
+    name: "slice_label"
+    type: "Slice"
+    bottom: "pair_labels"
+    top: "classify_label"
+    top: "transform_label"
+    slice_param {
+        slice_dim: 1
+        slice_point: 1
+    }
+}
+##### Computational Layer ######
 layer {
   name: "conv1"
   type: "Convolution"
@@ -307,11 +354,6 @@ layer {
   }
 }
 layer {
-	name: "silence_transform"
-	type: "Silence"
-	bottom: "transform_feat"
-}
-layer {
   name: "classify_feat"
   type: "InnerProduct"
   bottom: "feat1"
@@ -344,7 +386,15 @@ layer {
 		ignore_label: 10
 		normalize: false
 	}
-	loss_weight: 2
+	loss_weight: 10
+}
+layer {
+  name: "transform_loss"
+  type: "EuclideanLoss"
+  bottom: "transform_feat"
+  bottom: "transform_label"
+  top: "transform_loss"
+	loss_weight: 1
 }
 layer {
   name: "classify_accuracy"

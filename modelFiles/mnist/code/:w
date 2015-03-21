@@ -170,7 +170,6 @@ def make_transform_label_db(setName='train',numLabels=1000,
 		maxDeltaTrans: The maximum amoubt of Delta in translation (in pixels)
 		maxRot       : The maximum baseline rotation. The Delta Rotation is applied after maxRot 	
 		numEx        : Number of examples to include
-		baseLineMode : If this is true then only save images that have classification labels
 	'''
 	ims, lbs  = load_images(setName=setName)
 	N, nr, nc = ims.shape
@@ -197,11 +196,8 @@ def make_transform_label_db(setName='train',numLabels=1000,
 	perm = perm[0:numLabels]
 
 	#Experiment Name
-	if baseLineMode:
-		expName = 'mnist_baseline_transform_classify_%s_dRot%d_dTrn%d_mxRot%d_nLbl%.0e_numEx%.0e' % (setName, maxDeltaRot, maxDeltaTrans, maxRot, numLabels, numEx)
-	else:
-		expName = 'mnist_transform_classify_%s_dRot%d_dTrn%d_mxRot%d_nLbl%.0e_numEx%.0e' % (setName, maxDeltaRot, maxDeltaTrans, maxRot, numLabels, numEx)
-		
+	expName = 'mnist_transform_classify_%s_dRot%d_dTrn%d_mxRot%d_nLbl%.0e_numEx%.0e' % (setName, maxDeltaRot, maxDeltaTrans, maxRot, numLabels, numEx)
+	
 	idxs = np.random.random_integers(0, N-1, numEx)
 
 	#dbReader
@@ -220,8 +216,6 @@ def make_transform_label_db(setName='train',numLabels=1000,
 		#Use the Ignore Label if needed
 		if idx not in perm:
 			lb = ignoreLabel
-			if baseLineMode:
-				continue
 
 		#Get the Transformation
 		x1, y1, r1 = sample_transform(maxDeltaTrans), sample_transform(maxDeltaTrans), sample_transform(maxDeltaRot)

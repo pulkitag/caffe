@@ -6,8 +6,8 @@ layer {
   top: "pair_data"
 	top: "classify_label"
   data_param {
-		#source: "/data1/pulkitag/mnist/lmdb-store/test/images_labels_null_transform-lmdb"   
-		source: "/data1/pulkitag/mnist/lmdb-store/test/images_same_transform_trn3_mxRot10-lmdb"   
+		source: "/data1/pulkitag/mnist/lmdb-store/test/images_labels_null_transform-lmdb"   
+		#source: "/data1/pulkitag/mnist/lmdb-store/test/images_same_transform_trn3_mxRot10-lmdb"   
     batch_size: 100
 		backend: LMDB
   }
