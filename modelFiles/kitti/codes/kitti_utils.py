@@ -10,7 +10,7 @@ import os
 
 def get_paths():
 	dirName = '/data1/pulkitag/data_sets/kitti/'
-	svDir   = '/data0/pulkitag/projRotate/kitti/'
+	svDir   = '/data0/pulkitag/kitti/'
 	prms    = {}
 	prms['odoPath']     = os.path.join(dirName, 'odometry')
 	prms['poseFile']    = os.path.join(prms['odoPath'], 'dataset', 'poses', '%02d.txt')
@@ -30,8 +30,30 @@ def get_lmdb_names(expName, setName='train'):
 
 
 def get_num_images():
+	#seq0: 
+	#seq1: Driving on highway
+	#seq2: Driving through countryside.  
+	#seq3: Driving through countryside. 
+	#seq4: City wide streets
+	#seq5: Narrow streets within city and lots of houses
+	#seq6: Similar to 5, but wider streets. 
+	#seq7: Similar to 5 but a lot more other moving cars. 
+  #seq8: Country Side and houses 
+	#seq9: Country side and houses. More simialr to 8.
+	#seq10: Narrow streets wihtin city + lots of trees and houses 
+	#seq11: Narrow steets with houses + some narrow highway.
 	allNum = [4541, 1101, 4661, 801, 271, 2761, 1101, 1101, 4071, 1591, 1201]
 	return allNum
+
+
+def get_train_test_seqnum(setName):
+	if setName=='train':
+		seq = [0,1,2,3,4,5,7,8,10]
+	elif setName=='test':
+		seq  = [6, 9]
+	else:
+		raise Exception('Unrecognized setName')
+	return seq
 
 
 def read_poses(seqNum=0):
@@ -53,6 +75,78 @@ def read_poses(seqNum=0):
 	fid.close()
 	return allVals
 
+
+def plot_pose(seqNum='all', poseType='euler'):
+	'''
+		Plots the pose information for the Kitti dataset. 
+	'''	
+	allNum = get_num_images()
+	if isinstance(seqNum,int):
+		seqNum = [seqNum]
+		N      = allNum[seqNum]
+	elif seqNum=='all':
+		seqNum = range(0,11)
+		N      = sum(allNum)
+
+	#Define the colors for the plots
+	colors = ['black','yellow','cyan', 'r','g','b']
+	names  = ['X', 'Y', 'Z', 'thetaZ', 'thetaY', 'thetaX']
+
+	#Get Pose Statistics
+	mu, sd, sc  = get_pose_stats(poseType) 
+	mu, sd, sc  = mu.reshape(1,6), sd.reshape(1,6), sc.reshape(1,6)
+	
+	poses = []
+	for seq in seqNum:
+		poses.append(read_poses(seq))
+
+	poseLabels = []
+	for seq in seqNum:
+		tmpN         = allNum[seq]
+		tmpPoseLabel = np.zeros((tmpN-1,6))
+		for i in range(tmpN-1):
+			tmpPoseLabel[i] = get_pose_label(poses[seq][i], poses[seq][i+1], poseType).reshape(6,)
+		poseLabels.append(tmpPoseLabel)
+
+
+	poses      = np.concatenate(poses)
+	poseLabels = np.concatenate(poseLabels) 
+	poseLabels  = poseLabels - mu
+	poseLabels  = poseLabels / sd
+	poseLabels  = poseLabels * sc 
+
+	L   = poseLabels.shape[0]
+	cumNum = np.cumsum(np.array(allNum))
+	figT = plt.figure()
+	plt.title('Relative Translations')
+	yMx = np.max(poseLabels[:,0:3])
+	yMn = np.min(poseLabels[:,0:3]) 
+	for i in range(3):
+		plt.plot(range(L), poseLabels[:,i], colors[i], label=names[i])
+	for s in seqNum: 
+		plt.plot(cumNum[s] * np.ones((100,1)), np.linspace(yMn,yMx,100), 'gray', linewidth=4.0)	
+	plt.legend(fontsize='large')
+
+	figR = plt.figure()
+	plt.title('Relative Rotations')
+	yMx = np.max(poseLabels[:,3:])
+	yMn = np.min(poseLabels[:,3:]) 
+	for i in range(3):
+		plt.plot(range(L), poseLabels[:,i+3], colors[i+3], label=names[i+3])
+	for s in seqNum: 
+		plt.plot(cumNum[s] * np.ones((100,1)), np.linspace(yMn,yMx,100), 'gray', linewidth=4.0)	
+	plt.legend(fontsize='large')
+	
+	figAt = plt.figure()
+	plt.title('Absolute Translation')
+	trans  = poses[:,:,3]
+	for i in range(3):
+		plt.plot(range(poses.shape[0]), trans[:,i], colors[i], label=names[i])
+	plt.legend(fontsize='large')
+
+	plt.ion()
+	plt.show()
+	 
 
 def read_images(seqNum=0, cam='left', imSz=256):
 	'''
@@ -114,14 +208,17 @@ def get_pose_stats(poseType):
 	return muPose, sdPose, scaleFactor
 
 
-def make_consequent_lmdb(poseType='euler', imSz=256, nrmlz='zScoreScale'):
+def make_consequent_lmdb(poseType='euler', imSz=256, nrmlz='zScoreScaleSeperate', setName='train'):
 	'''
 		Take left and right images from all the sequences, get the poses and make the lmdb.
+		Testing sequences are 6 and 9
 	'''
 	expName = 'consequent_pose-%s_nrmlz-%s_imSz%d' % (poseType, nrmlz, imSz) 
-	imF, lbF = get_lmdb_names(expName, 'train')
+	imF, lbF = get_lmdb_names(expName, setName)
 	db       = mpio.DoubleDbSaver(imF, lbF)
 	seqCount = get_num_images()
+	seqNum   = get_train_test_seqnum(setName)
+	seqCount = [seqCount[s] for s in seqNum]
 	totalN   = 2 * sum(seqCount) - 2 * len(seqCount)	#2 times for left and right images
 	perm     = np.random.permutation(totalN)
 
@@ -132,13 +229,21 @@ def make_consequent_lmdb(poseType='euler', imSz=256, nrmlz='zScoreScale'):
 
 	if nrmlz=='zScore':
 		muPose, sdPose,_ = get_pose_stats(poseType)
-	elif nrmlz=='zScoreScale':
+	elif nrmlz in ['zScoreScale']:
 		muPose, sdPose, scale = get_pose_stats(poseType)
+	elif nrmlz in ['zScoreScaleSeperate']:
+		muPose, sdPose, scale = get_pose_stats(poseType)
+		transMax = np.max(scale[0:3])
+		rotMax   = np.max(scale[3:])
+		transScale = scale[0:3] / transMax
+		rotScale   = scale[3:]  / rotMax
+		scale      = np.concatenate((transScale, rotScale), axis=0)
 	else:
 		raise Exception('Nrmlz Type Not Recognized')
 
 	count    = 0
-	for seq in range(0,11):
+	for seq in seqNum:
+		print seq
 		for cam in ['left', 'right']:
 			ims, poses    = get_image_pose(seq, cam=cam, imSz=imSz)
 			N, nr, nc, ch = ims.shape
@@ -154,6 +259,23 @@ def make_consequent_lmdb(poseType='euler', imSz=256, nrmlz='zScoreScale'):
 				lbBatch = lbBatch - muPose
 				lbBatch = lbBatch / sdPose	
 			elif nrmlz == 'zScoreScale':
+				'''
+					This is good because if a variable doesnot 
+					really changes, then there is going to 
+					negligible change in image because of that. 
+					So its not a good idea to just re-scale to
+				  the same scale on which other more important 
+					factors are changing. So first make everything 
+					sd = 1 and then scale accordingly. 
+				'''
+				lbBatch = lbBatch - muPose
+				lbBatch = lbBatch / sdPose	
+				lbBatch = lbBatch * scale
+			elif nrmlz == 'zScoreScaleSeperate':
+				'''
+					Same as zScorScale but scale the rotation and translations
+					seperately. 
+				'''
 				lbBatch = lbBatch - muPose
 				lbBatch = lbBatch / sdPose	
 				lbBatch = lbBatch * scale
