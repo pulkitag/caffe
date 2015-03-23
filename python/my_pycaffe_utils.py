@@ -10,6 +10,7 @@ def zf_saliency(net, imBatch, numOutputs, opName, ipName='data', stride=2, patch
 		Takes as input a network and set of images imBatch
 		net: Instance of MyNet
 		imBatch: the images for which saliency needs to be computed. (expects: N * ch * h * w)
+		numOutputs: Number of output units in the blob named opName
 		Produces the saliency map of im
 		net is of type MyNet
 	'''
@@ -18,19 +19,28 @@ def zf_saliency(net, imBatch, numOutputs, opName, ipName='data', stride=2, patch
 	p = int(np.floor(patchSz/2.0))
 	N = imBatch.shape[0]
 
+	if isinstance(opName, basestring):
+		opName = [opName]
+		numOutputs = [numOutputs]
+	
 	#Transform the image
 	imT = net.preprocess_batch(imBatch)
 
 	#Find the Original Scores
 	dataLayer = {}
 	dataLayer[ipName] = imT
-	origScore = np.copy(net.net.forward(**dataLayer)[opName])
-	
 	batchSz,ch,nr,nc = imT.shape
-	dType      = imT.dtype
+	dType     = imT.dtype
 	nrNew     = len(range(p, nr-p-1, stride))
 	ncNew     = len(range(p, nc-p-1, stride)) 
-	imSalient = np.zeros((N, numOutputs, nrNew, ncNew))
+
+	origScore = np.copy(net.net.forward_all(**dataLayer))
+	for op in opName:
+		assert op in origScore.keys(), "Some outputs not found"
+
+	imSalient = {}
+	for (op, num) in zip(opName, numOutputs):
+		imSalient[op] = np.zeros((N, num, nrNew, ncNew))
  
 	for (imCount,im) in enumerate(imT[0:N]):
 		count   = 0
@@ -48,12 +58,13 @@ def zf_saliency(net, imBatch, numOutputs, opName, ipName='data', stride=2, patch
 				if count==batchSz or (ir == nrNew-1 and ic == ncNew-1):
 					dataLayer = {}
 					dataLayer[ipName] = net.preprocess_batch(ims)
-					scores = net.net.forward(**dataLayer)[opName]
-					scores = origScore[imCount] - scores[0:count]
-					scores = scores.reshape((count, numOutputs))
-					for idx,coords in enumerate(imIdx):
-						y, x = coords
-						imSalient[imCount, :, y, x] = scores[idx,:].reshape(numOutputs,)
+					allScores = net.net.forward(**dataLayer)
+					for (op,num) in zip(opName, numOutputs):
+						scores = origScore[op][imCount] - allScores[op][0:count]
+						scores = scores.reshape((count, num))
+						for idx,coords in enumerate(imIdx):
+							y, x = coords
+							imSalient[op][imCount, :, y, x] = scores[idx,:].reshape(num,)
 					count = 0
 					imIdx = []	
 	
@@ -129,3 +140,73 @@ class ILSVRC12Reader:
 
 	def word_label(self, lb):
 		return self.words_[self.synsets_[lb]]	
+
+
+def read_layerdefs_from_proto(fName):
+	'''
+		Reads the definitions of layers from a protoFile
+	'''
+	fid = open(fName,'r')
+	lines = fid.readlines()
+	fid.close()
+
+	layerNames, topNames  = [], []
+	layerDef   = []
+	stFlag     = True
+	layerFlag  = False
+	tmpDef = []
+	for (idx,l) in enumerate(lines):
+		isLayerSt = 'layer' in l
+		if isLayerSt:
+			if stFlag:
+				stFlag = False
+				layerNames.append('init')
+				topNames.append('')
+			else:
+				layerNames.append(layerName)
+				topNames.append(topName)
+			layerDef.append(tmpDef)
+			tmpDef    = []
+			layerName, topName = mp.find_layer_name(lines[idx:])
+
+		tmpDef.append(l)
+		
+	return layerNames, topNames, layerDef
+
+
+def get_layerdef_for_proto(layerType, layerName, bottom, numOutput=1):
+	'''
+		Gives the text for writing a prot-def file. 
+	'''
+	defStr = []
+	if layerType == 'InnerProduct':
+		defStr = []
+		defStr.append('layer { \n')
+		defStr.append('  name: "%s" \n' % layerName)
+		defStr.append('  type: "InnerProduct" \n')
+		defStr.append('	 bottom: "%s" \n' % bottom)
+		defStr.append('  top: "%s" \n' % layerName)
+		defStr.append('  param { \n')
+		defStr.append('    lr_mult: 1 \n')
+		defStr.append('    decay_mult: 1 \n')
+		defStr.append('  } \n')
+		defStr.append('  param { \n')
+		defStr.append('    lr_mult: 2 \n')
+		defStr.append('    decay_mult: 0 \n')
+		defStr.append('  } \n')
+		defStr.append('  inner_product_param { \n')
+		defStr.append('    num_output: %d \n' % numOutput)
+		defStr.append('    weight_filler { \n')
+		defStr.append('      type: "gaussian" \n')
+		defStr.append('      std:  0.005 \n')
+		defStr.append('    } \n')
+		defStr.append('    bias_filler { \n')
+		defStr.append('      type: "constant" \n')
+		defStr.append('      value:  0. \n')
+		defStr.append('    } \n')
+		defStr.append('  } \n')
+		defStr.append('} \n')
+	else:
+		print '%s layer type not found' % layerType
+
+	return defStr	

@@ -77,6 +77,23 @@ def find_layer(lines):
 			return layerName
 
 
+def find_layer_name(lines):
+	layerName = []
+	topName   = []
+	flagCount = 0
+	for l in lines:
+		if 'name' in l:
+			flagCount += 1
+			_,layerName = l.split()
+			layerName   = layerName[1:-1]
+		if 'top' in l:
+			flagCount += 1
+			_,topName  = l.split()
+			topName    = topName[1:-1]
+		if flagCount==2:
+			return layerName, topName
+
+
 def netdef2siamese(defFile, outFile):
 	outFid = open(outFile,'w')
 	stream1, stream2 = [],[]
@@ -245,6 +262,7 @@ class MyNet:
 			self.net = caffe.Net(self.defFile_, self.modelFile_, caffe.TRAIN)
 		self.batchSz   = self.get_batchsz()
 
+
 	def set_mode(self, isGPU=True, deviceId=None):
 		if isGPU:
 			caffe.set_mode_gpu()
@@ -252,6 +270,7 @@ class MyNet:
 			caffe.set_mode_cpu()
 		if deviceId is not None:
 			caffe.set_device(deviceId)
+
 	
 	def get_batchsz(self):
 		return self.net.blobs[self.net.inputs[0]].num
@@ -344,7 +363,6 @@ class MyNet:
 			if self.isBlobFormat:
 				im_[ix] = caffe.io.resize_image(in_.transpose((1,2,0)), self.imageDims[0:2])
 			else:
-				print in_.shape
 				im_[ix] = caffe.io.resize_image(in_, self.imageDims[0:2])
 
 		#Required cropping
@@ -378,6 +396,30 @@ class MyNet:
 
 		return ims
 
+	
+	def forward_all(self, blobs=None, **kwargs):
+		'''
+			blobs: The blobs to extract in the forward_all pass
+			kwargs: A dictionary where each input blob has associated data
+		'''
+		if kwargs:
+			if (set(kwargs.keys()) != set(self.transformer.keys())):
+				raise Exception('Data Transformer has not been set for all input blobs')
+			#Just pass all the inputs
+			procData = {}
+			N        = self.batchSz
+			for in_, data in kwargs.iteritems():
+				N             = data.shape[0] #The first dimension must be equivalent of batchSz
+				procData[in_] = self.preprocess_batch(data, ipName=in_)
+
+			ops = self.net.forward_all(blobs=blobs, **procData)
+			#Resize data in the right size
+			for op_, data in ops.iteritems():
+				ops[op_] = data[0:N]
+			return ops
+		else:
+			raise Exception('No Input data specified.')
+ 
 
 def setup_prototypical_network(netName='vgg', layerName='pool4'):
 	'''
