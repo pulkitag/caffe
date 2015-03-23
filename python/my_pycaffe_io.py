@@ -1,10 +1,30 @@
 import h5py as h5
 import numpy as np
+import my_pycaffe as mp
 import caffe
 import pdb
 import os
 import lmdb
 import shutil
+
+
+def  write_proto(arr, outFile):
+	'''
+		Writes the array as a protofile
+	'''
+	blobProto = caffe.io.array_to_blobproto(arr)
+	ss        = blobProto.SerializeToString()
+	fid       = open(outFile,'w')
+	fid.write(ss)
+	fid.close()
+
+
+def mean2siamese_mean(inFile, outFile):
+	mn = mp.read_mean(inFile)
+	mn = np.concatenate((mn, mn))
+	mn = mn.reshape((1, mn.shape[0], mn.shape[1], mn.shape[2]))
+	write_proto(mn, outFile)
+
 
 def ims2hdf5(im, labels, batchSz, batchPath, isColor=True, batchStNum=1, isUInt8=True, scale=None, newLabels=False):
 	'''

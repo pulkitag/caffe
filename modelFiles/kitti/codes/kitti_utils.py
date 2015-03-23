@@ -11,14 +11,42 @@ import os
 def get_paths():
 	dirName = '/data1/pulkitag/data_sets/kitti/'
 	svDir   = '/data0/pulkitag/kitti/'
+	expDir  = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/kitti/exp/'
+	snapDir = '/data1/pulkitag/projRotate/snapshots/kitti/'
 	prms    = {}
 	prms['odoPath']     = os.path.join(dirName, 'odometry')
 	prms['poseFile']    = os.path.join(prms['odoPath'], 'dataset', 'poses', '%02d.txt')
 	prms['leftImFile']  = os.path.join(prms['odoPath'], 'dataset', 'sequences', '%02d','image_2','%06d.png')
 	prms['rightImFile'] = os.path.join(prms['odoPath'], 'dataset', 'sequences', '%02d','image_3','%06d.png')
-	prms['lmdbDir']     = os.path.join(svDir, 'lmdb-store') 
+	prms['lmdbDir']     = os.path.join(svDir, 'lmdb-store')
+	prms['expDir']      = expDir
+	prms['snapDir']     = snapDir 
 	return prms
 
+
+def get_weight_proto_file(numIter=20000, imSz=256, poseType='euler', nrmlzType='zScoreScaleSeperate',
+								 isScratch=True, concatLayer='pool5', isDeploy=False):
+	paths    = get_paths() 
+
+	#WeightFile
+	snapDir  = '%s_%s' % (poseType, nrmlzType)
+	if isScratch:
+		scratchStr = 'kitti_scratch_%s_siamese_iter_%d.caffemodel'
+	else:
+		scratchStr = 'kitti_%s_siamese_iter_%d.caffemodel'
+	scratchStr = scratchStr % (concatLayer, numIter) 
+	snapFile = os.path.join(paths['snapDir'], snapDir, scratchStr)	
+	
+	#ProtoFile
+	protoStr = 'im%d_%s_%s' % (imSz, poseType, nrmlzType)
+	if isScratch:
+		fileName = 'kittinet_siamese_scratch.prototxt'
+	else:
+		fileName = 'kittinet_siamese.prototxt'
+	protoFile  = os.path.join(paths['expDir'], protoStr, fileName)	
+
+	return snapFile, protoFile
+	
 
 def get_lmdb_names(expName, setName='train'):
 	paths   = get_paths()
@@ -281,7 +309,8 @@ def make_consequent_lmdb(poseType='euler', imSz=256, nrmlz='zScoreScaleSeperate'
 				lbBatch = lbBatch * scale
 			else:
 				raise Exception('Nrmlz Type Not Recognized')
-			db.add_batch((imBatch, lbBatch), svIdx=(perm[count:count+N-1],perm[count:count+N-1]))		
+			db.add_batch((imBatch, lbBatch), svIdx=(perm[count:count+N-1],perm[count:count+N-1]),
+					 imAsFloat=(False, True))		
 			count = count + N-1
 	
 
@@ -302,3 +331,20 @@ def get_pose_label(pose1, pose2, poseType):
 
 	return lb		
 
+
+def get_accuracy(numIter=30000, imSz=256, poseType='euler', nrmlzType='zScoreScaleSeperate',
+								 isScratch=True, concatLayer='pool5'):
+	'''
+		Determines the accuracy of the network in predicting stuff 
+	'''
+	wFile, defFile = get_weight_proto_file(numIter=numIter, imSz=imSz, poseType=poseType,
+									 nrmlzType=nrmlzType, isScratch=isScratch, 
+									 concatLayer=concatLayer, isDeploy=True)
+
+	net = mp.MyNet(defFile, wFile)
+
+	expName = 'consequent_pose-%s_nrmlz-%s_imSz%d' % (poseType, nrmlzType, imSz) 
+	
+	#Load the test db
+	imDb, lbDb = get_lmdb_names(expName, setName='test')	
+	db         = mpio.DoubleDbReader((imDb, lbDb))	

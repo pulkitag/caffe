@@ -7,7 +7,7 @@ layer {
     phase: TRAIN
   }
   transform_param {
-    mirror: true
+    mirror: false
     crop_size: 227
     mean_file: "/data0/pulkitag/projRotate/leveldb_store/picking_polar_im256_mean.binaryproto"
   }

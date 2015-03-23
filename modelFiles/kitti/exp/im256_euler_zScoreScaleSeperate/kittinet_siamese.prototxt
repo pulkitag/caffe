@@ -1,4 +1,4 @@
-name: "CaffeNet"
+name: "KittiNet"
 layer {
   name: "pair_data"
   type: "Data"
@@ -9,23 +9,23 @@ layer {
   transform_param {
     mirror: false
     crop_size: 227
-    mean_file: "/data0/pulkitag/projRotate/leveldb_store/picking_polar_im256_mean.binaryproto"
+    mean_file: "/data1/pulkitag/caffe_models/ilsvrc2012_mean_for_siamese.binaryproto"
   }
   data_param {
-    source: "/data0/pulkitag/projRotate/leveldb_store/train_images_exppicking_azimuth_amx30_astep3_tp0.70_imSz256_new-lmdb"
+    source: "/data0/pulkitag/kitti/lmdb-store/images_train_consequent_pose-euler_nrmlz-zScoreScaleSeperate_imSz256-lmdb"
     batch_size: 128
 		backend: LMDB
   }
 }
 layer {
-  name: "label"
+  name: "pair_label"
   type: "Data"
-  top: "label"
+  top: "pair_label"
   include {
     phase: TRAIN
   }
   data_param {
-    source: "/data0/pulkitag/projRotate/leveldb_store/train_labels_exppicking_azimuth_amx30_astep3_tp0.70_imSz256_new-lmdb"
+    source: "/data0/pulkitag/kitti/lmdb-store/labels_train_consequent_pose-euler_nrmlz-zScoreScaleSeperate_imSz256-lmdb"
     batch_size: 128
 		backend: LMDB
   }
@@ -40,23 +40,23 @@ layer {
   transform_param {
     mirror: false
     crop_size: 227
-    mean_file: "/data0/pulkitag/projRotate/leveldb_store/picking_polar_im256_mean.binaryproto"
+    mean_file: "/data1/pulkitag/caffe_models/ilsvrc2012_mean_for_siamese.binaryproto"
   }
   data_param {
-    source: "/data0/pulkitag/projRotate/leveldb_store/test_images_exppicking_azimuth_amx30_astep3_tp0.70_imSz256_new-lmdb"
+    source: "/data0/pulkitag/kitti/lmdb-store/images_test_consequent_pose-euler_nrmlz-zScoreScaleSeperate_imSz256-lmdb"
     batch_size: 50
 		backend: LMDB
   }
 }
 layer {
-  name: "label"
+  name: "pair_label"
   type: "Data"
-  top: "label"
+  top: "pair_label"
   include {
     phase: TEST
   }
   data_param {
-    source: "/data0/pulkitag/projRotate/leveldb_store/test_labels_exppicking_azimuth_amx30_astep3_tp0.70_imSz256_new-lmdb"
+    source: "/data0/pulkitag/kitti/lmdb-store/labels_test_consequent_pose-euler_nrmlz-zScoreScaleSeperate_imSz256-lmdb"
     batch_size: 50
 		backend: LMDB
   }
@@ -74,18 +74,29 @@ layer {
   }
 }
 layer {
+  name: "slice_label"
+  type: "Slice"
+  bottom: "pair_label"
+  top: "translation_label"
+  top: "euler_label"
+  slice_param {
+    slice_dim: 1
+    slice_point: 3
+  }
+}
+layer {
   name: "conv1"
   type: "Convolution"
   bottom: "data"
   top: "conv1"
   param {
     name: "conv1_w"
-    lr_mult: 0
-    decay_mult: 0
+    lr_mult: 1
+    decay_mult: 1
   }
   param {
     name: "conv1_b"
-    lr_mult: 0
+    lr_mult: 2
     decay_mult: 0
   }
   convolution_param {
@@ -137,12 +148,12 @@ layer {
   top: "conv2"
   param {
     name: "conv2_w"
-    lr_mult: 0
-    decay_mult: 0
+    lr_mult: 1
+    decay_mult: 1
   }
   param {
     name: "conv2_b"
-    lr_mult: 0
+    lr_mult: 2
     decay_mult: 0
   }
   convolution_param {
@@ -195,12 +206,12 @@ layer {
   top: "conv3"
   param {
     name: "conv3_w"
-    lr_mult: 0
-    decay_mult: 0
+    lr_mult: 1
+    decay_mult: 1
   }
   param {
     name: "conv3_b"
-    lr_mult: 0
+    lr_mult: 2
     decay_mult: 0
   }
   convolution_param {
@@ -230,12 +241,12 @@ layer {
   top: "conv4"
   param {
     name: "conv4_w"
-    lr_mult: 0
-    decay_mult: 0
+    lr_mult: 1
+    decay_mult: 1
   }
   param {
     name: "conv4_b"
-    lr_mult: 0
+    lr_mult: 2
     decay_mult: 0
   }
   convolution_param {
@@ -266,12 +277,12 @@ layer {
   top: "conv5"
   param {
     name: "conv5_w"
-    lr_mult: 0
-    decay_mult: 0
+    lr_mult: 1
+    decay_mult: 1
   }
   param {
     name: "conv5_b"
-    lr_mult: 0
+    lr_mult: 2
     decay_mult: 0
   }
   convolution_param {
@@ -296,96 +307,18 @@ layer {
   top: "conv5"
 }
 layer {
-  name: "pool5"
-  type: "Pooling"
-  bottom: "conv5"
-  top: "pool5"
-  pooling_param {
-    pool: MAX
-    kernel_size: 3
-    stride: 2
-  }
-}
-layer {
-  name: "fc6"
-  type: "InnerProduct"
-  bottom: "pool5"
-  top: "fc6"
-  param {
-		name: "fc6_w"
-    lr_mult: 0
-    decay_mult: 0
-  }
-  param {
-		name: "fc6_b"
-    lr_mult: 0
-    decay_mult: 0
-  }
-  inner_product_param {
-    num_output: 4096
-    weight_filler {
-      type: "gaussian"
-      std: 0.005
-    }
-    bias_filler {
-      type: "constant"
-      value: 1
-    }
-  }
-}
-layer {
-  name: "relu6"
-  type: "ReLU"
-  bottom: "fc6"
-  top: "fc6"
-}
-layer {
-  name: "fc7"
-  type: "InnerProduct"
-  bottom: "fc6"
-  top: "fc7"
-  param {
-		name: "fc7_w"
-    lr_mult: 0
-    decay_mult: 0
-  }
-  param {
-		name: "fc7_b"
-    lr_mult: 0
-    decay_mult: 0
-  }
-  inner_product_param {
-    num_output: 4096
-    weight_filler {
-      type: "gaussian"
-      std: 0.005
-    }
-    bias_filler {
-      type: "constant"
-      value: 1
-    }
-  }
-}
-layer {
-  name: "relu7"
-  type: "ReLU"
-  bottom: "fc7"
-  top: "fc7"
-}
-
-layer {
   name: "conv1_p"
   type: "Convolution"
   bottom: "data_p"
   top: "conv1_p"
   param {
     name: "conv1_w"
-    lr_mult: 0
-    decay_mult: 0
+    lr_mult: 1
+    decay_mult: 1
   }
   param {
     name: "conv1_b"
-    lr_mult: 0
+    lr_mult: 2
     decay_mult: 0
   }
   convolution_param {
@@ -437,12 +370,12 @@ layer {
   top: "conv2_p"
   param {
     name: "conv2_w"
-    lr_mult: 0
-    decay_mult: 0
+    lr_mult: 1
+    decay_mult: 1
   }
   param {
     name: "conv2_b"
-    lr_mult: 0
+    lr_mult: 2
     decay_mult: 0
   }
   convolution_param {
@@ -495,12 +428,12 @@ layer {
   top: "conv3_p"
   param {
     name: "conv3_w"
-    lr_mult: 0
-    decay_mult: 0
+    lr_mult: 1
+    decay_mult: 1
   }
   param {
     name: "conv3_b"
-    lr_mult: 0
+    lr_mult: 2
     decay_mult: 0
   }
   convolution_param {
@@ -530,12 +463,12 @@ layer {
   top: "conv4_p"
   param {
     name: "conv4_w"
-    lr_mult: 0
-    decay_mult: 0
+    lr_mult: 1
+    decay_mult: 1
   }
   param {
     name: "conv4_b"
-    lr_mult: 0
+    lr_mult: 2
     decay_mult: 0
   }
   convolution_param {
@@ -566,12 +499,12 @@ layer {
   top: "conv5_p"
   param {
     name: "conv5_w"
-    lr_mult: 0
-    decay_mult: 0
+    lr_mult: 1
+    decay_mult: 1
   }
   param {
     name: "conv5_b"
-    lr_mult: 0
+    lr_mult: 2
     decay_mult: 0
   }
   convolution_param {
@@ -595,99 +528,19 @@ layer {
   bottom: "conv5_p"
   top: "conv5_p"
 }
-layer {
-  name: "pool5_p"
-  type: "Pooling"
-  bottom: "conv5_p"
-  top: "pool5_p"
-  pooling_param {
-    pool: MAX
-    kernel_size: 3
-    stride: 2
-  }
-}
-layer {
-  name: "fc6_p"
-  type: "InnerProduct"
-  bottom: "pool5_p"
-  top: "fc6_p"
-  param {
-		name: "fc6_w"
-    lr_mult: 0
-    decay_mult: 0
-  }
-  param {
-		name: "fc6_b"
-    lr_mult: 0
-    decay_mult: 0
-  }
-  inner_product_param {
-    num_output: 4096
-    weight_filler {
-      type: "gaussian"
-      std: 0.005
-    }
-    bias_filler {
-      type: "constant"
-      value: 1
-    }
-  }
-}
-layer {
-  name: "relu6_p"
-  type: "ReLU"
-  bottom: "fc6_p"
-  top: "fc6_p"
-}
-layer {
-  name: "fc7_p"
-  type: "InnerProduct"
-  bottom: "fc6_p"
-  top: "fc7_p"
-  param {
-		name: "fc7_w"
-    lr_mult: 0
-    decay_mult: 0
-  }
-  param {
-		name: "fc7_b"
-    lr_mult: 0
-    decay_mult: 0
-  }
-  inner_product_param {
-    num_output: 4096
-    weight_filler {
-      type: "gaussian"
-      std: 0.005
-    }
-    bias_filler {
-      type: "constant"
-      value: 1
-    }
-  }
-}
-layer {
-  name: "relu7_p"
-  type: "ReLU"
-  bottom: "fc7_p"
-  top: "fc7_p"
-}
 
 layer {
   name: "concat"
   type: "Concat"
-  bottom: "fc7"
-  bottom: "fc7_p"
+  bottom: "conv5"
+  bottom: "conv5_p"
   top: "concat"
-  concat_param {
-    concat_dim: 1
-  }
 }
 layer {
-  name: "fc8_con"
+  name: "rot_fc6"
   type: "InnerProduct"
   bottom: "concat"
-  top: "fc8_con"
+  top: "rot_fc6"
   param {
     lr_mult: 1
     decay_mult: 1
@@ -697,10 +550,10 @@ layer {
     decay_mult: 0
   }
   inner_product_param {
-    num_output: 200
+    num_output: 2048
     weight_filler {
-      type: "gaussian"
-      std: 0.005
+      type: "xavier"
+      #std: 0.005
     }
     bias_filler {
       type: "constant"
@@ -709,16 +562,16 @@ layer {
   }
 }
 layer {
-  name: "relu8"
+  name: "relu6"
   type: "ReLU"
-  bottom: "fc8_con"
-  top: "fc8_con"
+  bottom: "rot_fc6"
+  top: "rot_fc6"
 }
 layer {
-  name: "fc_azimuth"
+  name: "translation_fc7"
   type: "InnerProduct"
-  bottom: "fc8_con"
-  top: "fc_azimuth"
+  bottom: "rot_fc6"
+  top: "translation_fc7"
   param {
     lr_mult: 1
     decay_mult: 1
@@ -728,10 +581,10 @@ layer {
     decay_mult: 0
   }
   inner_product_param {
-    num_output: 21
+    num_output: 3
     weight_filler {
-      type: "gaussian"
-      std: 0.005
+      type: "xavier"
+      #std: 0.005
     }
     bias_filler {
       type: "constant"
@@ -740,17 +593,41 @@ layer {
   }
 }
 layer {
-  name: "azimuth_accuracy"
-  type: "Accuracy"
-  bottom: "fc_azimuth"
-  bottom: "label"
-  top: "azimuth_accuracy"
+  name: "euler_fc7"
+  type: "InnerProduct"
+  bottom: "rot_fc6"
+  top: "euler_fc7"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  inner_product_param {
+    num_output: 3
+    weight_filler {
+      type: "xavier"
+      #std: 0.005
+    }
+    bias_filler {
+      type: "constant"
+      value: 1
+    }
+  }
 }
-
 layer {
-  name: "azimuth_loss"
-  type: "SoftmaxWithLoss"
-  bottom: "fc_azimuth"
-  bottom: "label"
-  top: "azimuth_loss"
+  name: "translation_loss"
+  type: "EuclideanLoss"
+  bottom: "translation_fc7"
+  bottom: "translation_label"
+  top: "translation_loss"
+}
+layer {
+  name: "euler_loss"
+  type: "EuclideanLoss"
+  bottom: "euler_fc7"
+  bottom: "euler_label"
+  top: "euler_loss"
 }

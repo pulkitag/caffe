@@ -7,9 +7,10 @@ layer {
     phase: TRAIN
   }
   transform_param {
-    mirror: true
+    mirror: false
     crop_size: 227
-    mean_file: "/data1/pulkitag/keypoints/leveldb_store/picking_polar_im256_mean.binaryproto"
+    #mean_file: "/data1/pulkitag/keypoints/leveldb_store/picking_polar_im256_mean.binaryproto"
+    mean_file: "/data1/pulkitag/caffe_models/ilsvrc2012_mean_for_siamese.binaryproto"
   }
   data_param {
     source: "/data0/pulkitag/projRotate/leveldb_store/train_images_exppicking_azimuth_amx30_astep3_tp0.70_imSz256_new-lmdb"
@@ -40,7 +41,8 @@ layer {
   transform_param {
     mirror: false
     crop_size: 227
-    mean_file: "/data1/pulkitag/keypoints/leveldb_store/picking_polar_im256_mean.binaryproto"
+    mean_file: "/data1/pulkitag/caffe_models/ilsvrc2012_mean_for_siamese.binaryproto"
+    #mean_file: "/data1/pulkitag/keypoints/leveldb_store/picking_polar_im256_mean.binaryproto"
   }
   data_param {
     source: "/data0/pulkitag/projRotate/leveldb_store/test_images_exppicking_azimuth_amx30_astep3_tp0.70_imSz256_new-lmdb"
