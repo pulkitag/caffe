@@ -250,7 +250,7 @@ message ParamSpec {
 // Update the next available ID when you add a new LayerParameter field.
 //
 // LayerParameter next available layer-specific ID: 131 (last added: python_param)
-// My Parameters start 1000, Next available 1003 (last added: crossconvolution_param)
+// My Parameters start 1000, Next available 1003 (last added: normalize_param)
 message LayerParameter {
   optional string name = 1; // the layer name
   optional string type = 2; // the layer type
@@ -313,6 +313,7 @@ message LayerParameter {
   optional LRNParameter lrn_param = 118;
   optional MemoryDataParameter memory_data_param = 119;
   optional MVNParameter mvn_param = 120;
+  optional NormalizeParameter normalize_param = 1002;
   optional PoolingParameter pooling_param = 121;
   optional PowerParameter power_param = 122;
   optional PythonParameter python_param = 130;
@@ -594,6 +595,14 @@ message MVNParameter {
   // This parameter can be set to true to perform DNN-like MVN
   optional bool across_channels = 2 [default = false];
 }
+
+message NormalizeParameter {
+  enum NormalizeOp {
+    DEMEAN   = 0; //Subtract the mean
+    SDSCALE  = 1; //Subtract the mean and divide by Scale
+  }
+	optional NormalizeOp normalize_op = 1 [default = DEMEAN];
+} 
 
 // Message that stores parameters used by PoolingLayer
 message PoolingParameter {

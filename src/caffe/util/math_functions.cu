@@ -449,4 +449,14 @@ __device__ int caffe_gpu_modulus(int a, int b){
 		return a % b;	
 }
 
+template <typename Dtype>
+void caffe_gpu_zero_mean(const int N, Dtype* Y){
+	Dtype mn;
+	caffe_gpu_asum(N, Y, &mn);
+	mn = -(mn / N);
+	caffe_gpu_add_scalar(N, mn, Y);		
+}
+template void caffe_gpu_zero_mean<float>(const  int N, float* Y);
+template void caffe_gpu_zero_mean<double>(const int N, double* Y);
+
 }  // namespace caffe

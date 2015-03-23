@@ -12,7 +12,7 @@ layer {
     mean_file: "/home/eecs/pulkitag/Documents/projRotate/leveldb_store/picking_polar_im256_mean.binaryproto"
   }
   data_param {
-    source: "/home/eecs/pulkitag/Documents/projRotate/leveldb_store/train_images_exppicking_polar_azimuth12_tp0.70_imSz256-lmdb"
+    source: "/home/eecs/pulkitag/Documents/projRotate/leveldb_store/train_images_exppicking_polar_azimuth12_tp0.70_imSz256_new-lmdb"
     batch_size: 128
 		backend: LMDB
   }
@@ -25,7 +25,7 @@ layer {
     phase: TRAIN
   }
   data_param {
-    source: "/home/eecs/pulkitag/Documents/projRotate/leveldb_store/train_labels_exppicking_polar_azimuth12_tp0.70_imSz256-lmdb"
+    source: "/home/eecs/pulkitag/Documents/projRotate/leveldb_store/train_labels_exppicking_polar_azimuth12_tp0.70_imSz256_new-lmdb"
     batch_size: 128
 		backend: LMDB
   }
@@ -43,7 +43,7 @@ layer {
     mean_file: "/home/eecs/pulkitag/Documents/projRotate/leveldb_store/picking_polar_im256_mean.binaryproto"
   }
   data_param {
-    source: "/home/eecs/pulkitag/Documents/projRotate/leveldb_store/test_images_exppicking_polar_azimuth12_tp0.70_imSz256-lmdb"
+    source: "/home/eecs/pulkitag/Documents/projRotate/leveldb_store/test_images_exppicking_polar_azimuth12_tp0.70_imSz256_new-lmdb"
     batch_size: 50
 		backend: LMDB
   }
@@ -56,7 +56,7 @@ layer {
     phase: TEST
   }
   data_param {
-    source: "/home/eecs/pulkitag/Documents/projRotate/leveldb_store/test_labels_exppicking_polar_azimuth12_tp0.70_imSz256-lmdb"
+    source: "/home/eecs/pulkitag/Documents/projRotate/leveldb_store/test_labels_exppicking_polar_azimuth12_tp0.70_imSz256_new-lmdb"
     batch_size: 50
 		backend: LMDB
   }
@@ -611,7 +611,7 @@ layer {
     decay_mult: 0
   }
   inner_product_param {
-    num_output: 30
+    num_output: 10
     weight_filler {
       type: "xavier"
     }

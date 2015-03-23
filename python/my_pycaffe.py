@@ -246,7 +246,7 @@ def read_mean(protoFileName):
 
 
 class MyNet:
-	def __init__(self, defFile, modelFile, isGPU=True, testMode=True, deviceId=None):
+	def __init__(self, defFile, modelFile=None, isGPU=True, testMode=True, deviceId=None):
 		self.defFile_   = defFile
 		self.modelFile_ = modelFile
 		self.testMode_  = testMode
@@ -257,9 +257,15 @@ class MyNet:
 
 	def setup_network(self):
 		if self.testMode_:
-			self.net = caffe.Net(self.defFile_, self.modelFile_, caffe.TEST)
+			if not self.modelFile_ is None:
+				self.net = caffe.Net(self.defFile_, self.modelFile_, caffe.TEST)
+			else:
+				self.net = caffe.Net(self.defFile_, caffe.TEST)
 		else:
-			self.net = caffe.Net(self.defFile_, self.modelFile_, caffe.TRAIN)
+			if not self.modelFile_ is None:
+				self.net = caffe.Net(self.defFile_, self.modelFile_, caffe.TRAIN)
+			else:
+				self.net = caffe.Net(self.defFile_, caffe.TRAIN)
 		self.batchSz   = self.get_batchsz()
 
 
@@ -273,8 +279,10 @@ class MyNet:
 
 	
 	def get_batchsz(self):
-		return self.net.blobs[self.net.inputs[0]].num
-
+		if len(self.net.inputs) > 0:
+			return self.net.blobs[self.net.inputs[0]].num
+		else:
+			return None
 
 	def get_blob_shape(self, blobName):
 		assert blobName in self.net.blobs.keys(), 'Blob Name is not present in the net'
@@ -420,6 +428,33 @@ class MyNet:
 		else:
 			raise Exception('No Input data specified.')
  
+
+	def vis_weights(self, blobName, blobNum=0): 
+		assert blobName in self.net.blobs, 'BlobName not found'
+		dat  = self.net.params[blobName][blobNum].data
+		vis_square(dat.transpose(0,2,3,1))	
+
+
+def vis_square(data, padsize=1, padval=0):
+	'''
+		data is numFitlers * height * width or numFilters * height * width * channels
+	'''
+
+	data -= data.min()
+	data /= data.max()
+
+	# force the number of filters to be square
+	n = int(np.ceil(np.sqrt(data.shape[0])))
+	padding = ((0, n ** 2 - data.shape[0]), (0, padsize), (0, padsize)) + ((0, 0),) * (data.ndim - 3)
+	data = np.pad(data, padding, mode='constant', constant_values=(padval, padval))
+
+	# tile the filters into an image
+	data = data.reshape((n, n) + data.shape[1:]).transpose((0, 2, 1, 3) + tuple(range(4, data.ndim + 1)))
+	data = data.reshape((n * data.shape[1], n * data.shape[3]) + data.shape[4:])
+
+	plt.imshow(data)
+
+
 
 def setup_prototypical_network(netName='vgg', layerName='pool4'):
 	'''

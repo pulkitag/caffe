@@ -1,4 +1,4 @@
-name: "CaffeNet"
+name: "KittiNet"
 layer {
   name: "pair_data"
   type: "Data"
@@ -7,12 +7,12 @@ layer {
     phase: TRAIN
   }
   transform_param {
-    mirror: true
+    mirror: false
     crop_size: 227
-    mean_file: "/data1/pulkitag/keypoints/leveldb_store/picking_polar_im256_mean.binaryproto"
+    mean_file: "/data1/pulkitag/caffe_models/ilsvrc2012_mean_for_siamese.binaryproto"
   }
   data_param {
-    source: "/data1/pulkitag/keypoints/leveldb_store/train_images_exppicking_polar_azimuth_tp0.70_imSz256-lmdb"
+    source: "/data0/pulkitag/kitti/lmdb-store/images_train_consequent_pose-euler_nrmlz-zScoreScaleSeperate_imSz256-lmdb"
     batch_size: 128
 		backend: LMDB
   }
@@ -25,7 +25,7 @@ layer {
     phase: TRAIN
   }
   data_param {
-    source: "/data1/pulkitag/keypoints/leveldb_store/train_labels_exppicking_polar_azimuth_tp0.70_imSz256-lmdb"
+    source: "/data0/pulkitag/kitti/lmdb-store/labels_train_consequent_pose-euler_nrmlz-zScoreScaleSeperate_imSz256-lmdb"
     batch_size: 128
 		backend: LMDB
   }
@@ -40,10 +40,10 @@ layer {
   transform_param {
     mirror: false
     crop_size: 227
-    mean_file: "/data1/pulkitag/keypoints/leveldb_store/picking_polar_im256_mean.binaryproto"
+    mean_file: "/data1/pulkitag/caffe_models/ilsvrc2012_mean_for_siamese.binaryproto"
   }
   data_param {
-    source: "/data1/pulkitag/keypoints/leveldb_store/test_images_exppicking_polar_azimuth_tp0.70_imSz256-lmdb"
+    source: "/data0/pulkitag/kitti/lmdb-store/images_test_consequent_pose-euler_nrmlz-zScoreScaleSeperate_imSz256-lmdb"
     batch_size: 50
 		backend: LMDB
   }
@@ -56,7 +56,7 @@ layer {
     phase: TEST
   }
   data_param {
-    source: "/data1/pulkitag/keypoints/leveldb_store/test_labels_exppicking_polar_azimuth_tp0.70_imSz256-lmdb"
+    source: "/data0/pulkitag/kitti/lmdb-store/labels_test_consequent_pose-euler_nrmlz-zScoreScaleSeperate_imSz256-lmdb"
     batch_size: 50
 		backend: LMDB
   }
@@ -77,11 +77,11 @@ layer {
   name: "slice_label"
   type: "Slice"
   bottom: "pair_label"
-  top: "polar_label"
-  top: "azimuth_label"
+  top: "translation_label"
+  top: "euler_label"
   slice_param {
     slice_dim: 1
-    slice_point: 1
+    slice_point: 3
   }
 }
 layer {
@@ -528,15 +528,13 @@ layer {
   bottom: "conv5_p"
   top: "conv5_p"
 }
+
 layer {
   name: "concat"
   type: "Concat"
   bottom: "conv5"
   bottom: "conv5_p"
   top: "concat"
-  concat_param {
-    concat_dim: 1
-  }
 }
 layer {
   name: "rot_fc6"
@@ -544,18 +542,18 @@ layer {
   bottom: "concat"
   top: "rot_fc6"
   param {
-    lr_mult: 10
+    lr_mult: 1
     decay_mult: 1
   }
   param {
-    lr_mult: 20
+    lr_mult: 2
     decay_mult: 0
   }
   inner_product_param {
     num_output: 2048
     weight_filler {
-      type: "gaussian"
-      std: 0.005
+      type: "xavier"
+      #std: 0.005
     }
     bias_filler {
       type: "constant"
@@ -570,23 +568,23 @@ layer {
   top: "rot_fc6"
 }
 layer {
-  name: "azimuth_fc7"
+  name: "translation_fc7"
   type: "InnerProduct"
   bottom: "rot_fc6"
-  top: "azimuth_fc7"
+  top: "translation_fc7"
   param {
-    lr_mult: 10
+    lr_mult: 1
     decay_mult: 1
   }
   param {
-    lr_mult: 20
+    lr_mult: 2
     decay_mult: 0
   }
   inner_product_param {
-    num_output: 120
+    num_output: 3
     weight_filler {
-      type: "gaussian"
-      std: 0.005
+      type: "xavier"
+      #std: 0.005
     }
     bias_filler {
       type: "constant"
@@ -595,19 +593,41 @@ layer {
   }
 }
 layer {
-  name: "azimith_accuracy"
-  type: "Accuracy"
-  bottom: "azimuth_fc7"
-  bottom: "azimuth_label"
-  top: "azimuth_accuracy"
-  include {
-    phase: TEST
+  name: "euler_fc7"
+  type: "InnerProduct"
+  bottom: "rot_fc6"
+  top: "euler_fc7"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  inner_product_param {
+    num_output: 3
+    weight_filler {
+      type: "xavier"
+      #std: 0.005
+    }
+    bias_filler {
+      type: "constant"
+      value: 1
+    }
   }
 }
 layer {
-  name: "azimuth_loss"
-  type: "SoftmaxWithLoss"
-  bottom: "azimuth_fc7"
-  bottom: "azimuth_label"
-  top: "azimuth_loss"
+  name: "translation_loss"
+  type: "EuclideanLoss"
+  bottom: "translation_fc7"
+  bottom: "translation_label"
+  top: "translation_loss"
+}
+layer {
+  name: "euler_loss"
+  type: "EuclideanLoss"
+  bottom: "euler_fc7"
+  bottom: "euler_label"
+  top: "euler_loss"
 }

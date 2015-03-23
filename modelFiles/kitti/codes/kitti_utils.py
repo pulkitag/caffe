@@ -1,0 +1,350 @@
+import numpy as np
+import my_pycaffe as mp
+import my_pycaffe_utils as mpu
+import matplotlib.pyplot as plt
+import my_pycaffe_io as mpio
+import scipy.misc as scm
+import rot_utils as ru
+import pdb
+import os
+
+def get_paths():
+	dirName = '/data1/pulkitag/data_sets/kitti/'
+	svDir   = '/data0/pulkitag/kitti/'
+	expDir  = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/kitti/exp/'
+	snapDir = '/data1/pulkitag/projRotate/snapshots/kitti/'
+	prms    = {}
+	prms['odoPath']     = os.path.join(dirName, 'odometry')
+	prms['poseFile']    = os.path.join(prms['odoPath'], 'dataset', 'poses', '%02d.txt')
+	prms['leftImFile']  = os.path.join(prms['odoPath'], 'dataset', 'sequences', '%02d','image_2','%06d.png')
+	prms['rightImFile'] = os.path.join(prms['odoPath'], 'dataset', 'sequences', '%02d','image_3','%06d.png')
+	prms['lmdbDir']     = os.path.join(svDir, 'lmdb-store')
+	prms['expDir']      = expDir
+	prms['snapDir']     = snapDir 
+	return prms
+
+
+def get_weight_proto_file(numIter=20000, imSz=256, poseType='euler', nrmlzType='zScoreScaleSeperate',
+								 isScratch=True, concatLayer='pool5', isDeploy=False):
+	paths    = get_paths() 
+
+	#WeightFile
+	snapDir  = '%s_%s' % (poseType, nrmlzType)
+	if isScratch:
+		scratchStr = 'kitti_scratch_%s_siamese_iter_%d.caffemodel'
+	else:
+		scratchStr = 'kitti_%s_siamese_iter_%d.caffemodel'
+	scratchStr = scratchStr % (concatLayer, numIter) 
+	snapFile = os.path.join(paths['snapDir'], snapDir, scratchStr)	
+	
+	#ProtoFile
+	protoStr = 'im%d_%s_%s' % (imSz, poseType, nrmlzType)
+	if isScratch:
+		fileName = 'kittinet_siamese_scratch.prototxt'
+	else:
+		fileName = 'kittinet_siamese.prototxt'
+	protoFile  = os.path.join(paths['expDir'], protoStr, fileName)	
+
+	return snapFile, protoFile
+	
+
+def get_lmdb_names(expName, setName='train'):
+	paths   = get_paths()
+	if not setName in ['train', 'test']:
+		raise Exception('Invalid Set Name')
+	imFile  = os.path.join(paths['lmdbDir'], 'images_%s_%s-lmdb' % (setName, expName)) 
+	lbFile  = os.path.join(paths['lmdbDir'], 'labels_%s_%s-lmdb' % (setName, expName))
+	return imFile, lbFile
+
+
+def get_num_images():
+	#seq0: 
+	#seq1: Driving on highway
+	#seq2: Driving through countryside.  
+	#seq3: Driving through countryside. 
+	#seq4: City wide streets
+	#seq5: Narrow streets within city and lots of houses
+	#seq6: Similar to 5, but wider streets. 
+	#seq7: Similar to 5 but a lot more other moving cars. 
+  #seq8: Country Side and houses 
+	#seq9: Country side and houses. More simialr to 8.
+	#seq10: Narrow streets wihtin city + lots of trees and houses 
+	#seq11: Narrow steets with houses + some narrow highway.
+	allNum = [4541, 1101, 4661, 801, 271, 2761, 1101, 1101, 4071, 1591, 1201]
+	return allNum
+
+
+def get_train_test_seqnum(setName):
+	if setName=='train':
+		seq = [0,1,2,3,4,5,7,8,10]
+	elif setName=='test':
+		seq  = [6, 9]
+	else:
+		raise Exception('Unrecognized setName')
+	return seq
+
+
+def read_poses(seqNum=0):
+	'''
+		Provides the pose wrt to frame 1 in the form of (deltaX, deltaY, deltaZ, thetaZ, thetaY, thetaX
+	'''
+	if seqNum > 10 or seqNum < 0:
+		raise Exception('Poses are only present for seqNum 0 to 10')
+
+	paths  = get_paths()
+	psFile = paths['poseFile'] % seqNum
+
+	fid     = open(psFile, 'r')
+	lines   = fid.readlines()
+	allVals = np.zeros((len(lines), 3, 4)).astype(float)
+	for (i,l) in enumerate(lines):
+		vals      = [float(v) for v in l.split()]
+		allVals[i]    = np.array(vals).reshape((3,4))
+	fid.close()
+	return allVals
+
+
+def plot_pose(seqNum='all', poseType='euler'):
+	'''
+		Plots the pose information for the Kitti dataset. 
+	'''	
+	allNum = get_num_images()
+	if isinstance(seqNum,int):
+		seqNum = [seqNum]
+		N      = allNum[seqNum]
+	elif seqNum=='all':
+		seqNum = range(0,11)
+		N      = sum(allNum)
+
+	#Define the colors for the plots
+	colors = ['black','yellow','cyan', 'r','g','b']
+	names  = ['X', 'Y', 'Z', 'thetaZ', 'thetaY', 'thetaX']
+
+	#Get Pose Statistics
+	mu, sd, sc  = get_pose_stats(poseType) 
+	mu, sd, sc  = mu.reshape(1,6), sd.reshape(1,6), sc.reshape(1,6)
+	
+	poses = []
+	for seq in seqNum:
+		poses.append(read_poses(seq))
+
+	poseLabels = []
+	for seq in seqNum:
+		tmpN         = allNum[seq]
+		tmpPoseLabel = np.zeros((tmpN-1,6))
+		for i in range(tmpN-1):
+			tmpPoseLabel[i] = get_pose_label(poses[seq][i], poses[seq][i+1], poseType).reshape(6,)
+		poseLabels.append(tmpPoseLabel)
+
+
+	poses      = np.concatenate(poses)
+	poseLabels = np.concatenate(poseLabels) 
+	poseLabels  = poseLabels - mu
+	poseLabels  = poseLabels / sd
+	poseLabels  = poseLabels * sc 
+
+	L   = poseLabels.shape[0]
+	cumNum = np.cumsum(np.array(allNum))
+	figT = plt.figure()
+	plt.title('Relative Translations')
+	yMx = np.max(poseLabels[:,0:3])
+	yMn = np.min(poseLabels[:,0:3]) 
+	for i in range(3):
+		plt.plot(range(L), poseLabels[:,i], colors[i], label=names[i])
+	for s in seqNum: 
+		plt.plot(cumNum[s] * np.ones((100,1)), np.linspace(yMn,yMx,100), 'gray', linewidth=4.0)	
+	plt.legend(fontsize='large')
+
+	figR = plt.figure()
+	plt.title('Relative Rotations')
+	yMx = np.max(poseLabels[:,3:])
+	yMn = np.min(poseLabels[:,3:]) 
+	for i in range(3):
+		plt.plot(range(L), poseLabels[:,i+3], colors[i+3], label=names[i+3])
+	for s in seqNum: 
+		plt.plot(cumNum[s] * np.ones((100,1)), np.linspace(yMn,yMx,100), 'gray', linewidth=4.0)	
+	plt.legend(fontsize='large')
+	
+	figAt = plt.figure()
+	plt.title('Absolute Translation')
+	trans  = poses[:,:,3]
+	for i in range(3):
+		plt.plot(range(poses.shape[0]), trans[:,i], colors[i], label=names[i])
+	plt.legend(fontsize='large')
+
+	plt.ion()
+	plt.show()
+	 
+
+def read_images(seqNum=0, cam='left', imSz=256):
+	'''
+		Read the required images
+	'''
+	if cam=='left':
+		imStr = 'leftImFile'
+	elif cam=='right':
+		imStr = 'rightImFile'
+	else:
+		raise Exception('cam type not recognized')
+
+	paths    = get_paths()
+	fileName = paths[imStr] % (seqNum, 0)
+	dirName  = os.path.dirname(fileName)	
+	N        = len(os.listdir(dirName))
+	
+	ims = np.zeros((N, imSz, imSz, 3)).astype(np.uint8)
+	for i in range(N):
+		fileName = paths[imStr] % (seqNum, i)
+		im       = plt.imread(fileName)
+		im       = scm.imresize(im, (256, 256))
+		ims[i]   = im
+	return ims	
+
+
+def get_image_pose(seqNum=0, cam='left', imSz=256):
+	poses  = read_poses(seqNum)
+	ims    = read_images(seqNum, cam, imSz)
+	return ims, poses
+
+
+def get_pose_stats(poseType):
+	'''
+		Compute the pose stats by sampling 100 examples from each sequence
+	'''
+	if poseType=='euler':
+		lbLength = 6
+	else: 
+		raise Exception('Unrecognized poseType')
+
+	allPose = np.zeros((100 * 11, lbLength))
+	count = 0
+	for seqNum in range(0,11):
+		poses = read_poses(seqNum)
+		N     = poses.shape[0]
+		perm  = np.random.permutation(N-1)
+		perm  = perm[0:100]
+		for i in range(100):
+			p1, p2 =	poses[perm[i]], poses[perm[i]+1]
+			allPose[count]  = get_pose_label(p1, p2, poseType).reshape(lbLength,)
+			count += 1
+			
+	muPose = np.mean(allPose,axis=0).reshape((lbLength,1,1))
+	sdPose = np.std(allPose, axis=0).reshape((lbLength,1,1))
+
+	maxSd       = np.max(sdPose)
+	scaleFactor = sdPose / maxSd 
+	return muPose, sdPose, scaleFactor
+
+
+def make_consequent_lmdb(poseType='euler', imSz=256, nrmlz='zScoreScaleSeperate', setName='train'):
+	'''
+		Take left and right images from all the sequences, get the poses and make the lmdb.
+		Testing sequences are 6 and 9
+	'''
+	expName = 'consequent_pose-%s_nrmlz-%s_imSz%d' % (poseType, nrmlz, imSz) 
+	imF, lbF = get_lmdb_names(expName, setName)
+	db       = mpio.DoubleDbSaver(imF, lbF)
+	seqCount = get_num_images()
+	seqNum   = get_train_test_seqnum(setName)
+	seqCount = [seqCount[s] for s in seqNum]
+	totalN   = 2 * sum(seqCount) - 2 * len(seqCount)	#2 times for left and right images
+	perm     = np.random.permutation(totalN)
+
+	if poseType == 'euler':
+		poseLength = 6
+	else:
+		raise Exception('Pose Type Not Recognized')	
+
+	if nrmlz=='zScore':
+		muPose, sdPose,_ = get_pose_stats(poseType)
+	elif nrmlz in ['zScoreScale']:
+		muPose, sdPose, scale = get_pose_stats(poseType)
+	elif nrmlz in ['zScoreScaleSeperate']:
+		muPose, sdPose, scale = get_pose_stats(poseType)
+		transMax = np.max(scale[0:3])
+		rotMax   = np.max(scale[3:])
+		transScale = scale[0:3] / transMax
+		rotScale   = scale[3:]  / rotMax
+		scale      = np.concatenate((transScale, rotScale), axis=0)
+	else:
+		raise Exception('Nrmlz Type Not Recognized')
+
+	count    = 0
+	for seq in seqNum:
+		print seq
+		for cam in ['left', 'right']:
+			ims, poses    = get_image_pose(seq, cam=cam, imSz=imSz)
+			N, nr, nc, ch = ims.shape
+			imBatch = np.zeros((N-1, 2*ch, nr, nc)) 
+			lbBatch = np.zeros((N-1, poseLength, 1, 1))
+			for i in range(0, N-1):
+				imBatch[i,0:ch,:,:] = ims[i].transpose((2,0,1))
+				imBatch[i,ch:,:,:]  = ims[i+1].transpose((2,0,1))
+				pose1, pose2        = poses[i], poses[i+1]
+				lbBatch[i] = get_pose_label(pose1, pose2, poseType)	
+	
+			if nrmlz == 'zScore':	
+				lbBatch = lbBatch - muPose
+				lbBatch = lbBatch / sdPose	
+			elif nrmlz == 'zScoreScale':
+				'''
+					This is good because if a variable doesnot 
+					really changes, then there is going to 
+					negligible change in image because of that. 
+					So its not a good idea to just re-scale to
+				  the same scale on which other more important 
+					factors are changing. So first make everything 
+					sd = 1 and then scale accordingly. 
+				'''
+				lbBatch = lbBatch - muPose
+				lbBatch = lbBatch / sdPose	
+				lbBatch = lbBatch * scale
+			elif nrmlz == 'zScoreScaleSeperate':
+				'''
+					Same as zScorScale but scale the rotation and translations
+					seperately. 
+				'''
+				lbBatch = lbBatch - muPose
+				lbBatch = lbBatch / sdPose	
+				lbBatch = lbBatch * scale
+			else:
+				raise Exception('Nrmlz Type Not Recognized')
+			db.add_batch((imBatch, lbBatch), svIdx=(perm[count:count+N-1],perm[count:count+N-1]),
+					 imAsFloat=(False, True))		
+			count = count + N-1
+	
+
+def get_pose_label(pose1, pose2, poseType):
+	'''
+		Returns the pose label 
+	'''
+	t1 = pose1[:,3]
+	t2 = pose2[:,3]
+	r1 = pose1[:3,:3]
+	r2 = pose2[:3,:3]
+	if poseType == 'euler':
+		lb = np.zeros((6,1,1))
+		lb[0:3] = (t2 - t1).reshape((3,1,1))
+		lb[3], lb[4], lb[5] = ru.mat2euler(np.dot(r2.transpose(), r1))
+	else:
+		raise Exception('Pose Type Not Recognized')	
+
+	return lb		
+
+
+def get_accuracy(numIter=30000, imSz=256, poseType='euler', nrmlzType='zScoreScaleSeperate',
+								 isScratch=True, concatLayer='pool5'):
+	'''
+		Determines the accuracy of the network in predicting stuff 
+	'''
+	wFile, defFile = get_weight_proto_file(numIter=numIter, imSz=imSz, poseType=poseType,
+									 nrmlzType=nrmlzType, isScratch=isScratch, 
+									 concatLayer=concatLayer, isDeploy=True)
+
+	net = mp.MyNet(defFile, wFile)
+
+	expName = 'consequent_pose-%s_nrmlz-%s_imSz%d' % (poseType, nrmlzType, imSz) 
+	
+	#Load the test db
+	imDb, lbDb = get_lmdb_names(expName, setName='test')	
+	db         = mpio.DoubleDbReader((imDb, lbDb))	
