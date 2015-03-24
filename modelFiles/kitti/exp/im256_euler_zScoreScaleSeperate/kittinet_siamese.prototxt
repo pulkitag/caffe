@@ -9,7 +9,8 @@ layer {
   transform_param {
     mirror: false
     crop_size: 227
-    mean_file: "/data1/pulkitag/caffe_models/ilsvrc2012_mean_for_siamese.binaryproto"
+    mean_file: "/data0/pulkitag/kitti/lmdb-store/kitti_mean.binaryproto"
+    #mean_file: "/data1/pulkitag/caffe_models/ilsvrc2012_mean_for_siamese.binaryproto"
   }
   data_param {
     source: "/data0/pulkitag/kitti/lmdb-store/images_train_consequent_pose-euler_nrmlz-zScoreScaleSeperate_imSz256-lmdb"
@@ -40,7 +41,8 @@ layer {
   transform_param {
     mirror: false
     crop_size: 227
-    mean_file: "/data1/pulkitag/caffe_models/ilsvrc2012_mean_for_siamese.binaryproto"
+    mean_file: "/data0/pulkitag/kitti/lmdb-store/kitti_mean.binaryproto"
+    #mean_file: "/data1/pulkitag/caffe_models/ilsvrc2012_mean_for_siamese.binaryproto"
   }
   data_param {
     source: "/data0/pulkitag/kitti/lmdb-store/images_test_consequent_pose-euler_nrmlz-zScoreScaleSeperate_imSz256-lmdb"
@@ -552,8 +554,8 @@ layer {
   inner_product_param {
     num_output: 2048
     weight_filler {
-      type: "xavier"
-      #std: 0.005
+      type: "gaussian"
+      std: 0.0005
     }
     bias_filler {
       type: "constant"
@@ -583,8 +585,8 @@ layer {
   inner_product_param {
     num_output: 3
     weight_filler {
-      type: "xavier"
-      #std: 0.005
+      type: "gaussian"
+      std: 0.0005
     }
     bias_filler {
       type: "constant"
@@ -608,8 +610,8 @@ layer {
   inner_product_param {
     num_output: 3
     weight_filler {
-      type: "xavier"
-      #std: 0.005
+      type: "gaussian"
+      std: 0.0005
     }
     bias_filler {
       type: "constant"

@@ -27,3 +27,4 @@ snapshot_prefix: "/data1/pulkitag/projRotate/snapshots/kitti/euler_zScoreScaleSe
 # solver mode: CPU or GPU
 solver_mode: GPU
 device_id: 0
+debug_info: true

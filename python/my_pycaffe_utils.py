@@ -5,6 +5,7 @@ import pdb
 import os
 import scipy.io as sio
 import matplotlib.pyplot as plt
+import subprocess
 
 def zf_saliency(net, imBatch, numOutputs, opName, ipName='data', stride=2, patchSz=11):
 	'''
@@ -379,4 +380,106 @@ def plot_debug_log(logFile, setName='train', plotNames=None):
 							 1 + blobOp[name].shape[1] + blobParam[name].shape[1],
 							 name + '_diff', col,  fig, numPlots=numPlots)
 	plt.show()	
+
+
+def get_caffe_paths():
+	'''
+		Specify the main caffe paths
+	'''
+	paths['tools'] = '/work4/pulkitag-code/pkgs/caffe-v2-2/build/tools' 
+	return paths
+
+
+def give_run_permissions_(fileName):
+	args = ['chmod u+x %s' % fileName]
+	subprocess.check_call(args,shell=True)
+
+
+class ExperimentFiles():
+	'''
+		Used for writing experiment files in an easy manner. 
+	'''
+	def __init__(self, modelDir, defFile='caffenet.prototxt', 
+							 solverFile='solver.prototxt', logFile='log.txt', 
+							 runFile='run.sh', runPhase='train'):
+		self.modelDir_ = modelDir
+		if not os.path.exists(self.modelDir_):
+			os.makedirs(self.modelDir_)
+		self.solver_   = os.path.join(self.modelDir_, solverFile)
+		self.log_      = os.path.join(self.modelDir_, logFile)
+		self.def_      = os.path.join(self.modelDir_, defFile)
+		self.run_      = os.path.join(self.modelDir_, runFile)
+		self.paths_    = get_caffe_paths()
+		assert runPhase in ['train', 'test'], "Invalid run phase"
+		self.runPhase_ = runPhase #Run File should run caffe in train or test phase	
+
+	def write_run(self):
+		with open(self.run_,'w') as f:
+			f.write('#!/usr/bin/env sh \n \n')
+			f.write('TOOLS=%s \n \n' % self.paths_['tools'])
+			f.write('GLOG_logtostderr=1 $TOOLS/caffe %s' % self.runPhase_)
+			f.write('\t --solver=%s' % self.solver_)
+			f.write('\t 2>&1 | tee %s \n' % self.log_)
+		give_run_permissions_(run_)
+
+	def write_solver_rep(self, inFile, repNum):
+		'''
+			Modifies the inFile to make it appropriate for running repeats
+		'''
+		outFid = open(self.solver_, 'w')
+		with open(inFile,'r') as f:
+			lines = f.readlines()
+			for (i,l) in enumerate(lines):
+				if 'snapshot_prefix' in l:
+					snapshot = l.split[1]
+					snapshot = snapshot[:-1] + '_rep%d"' % repNum
+					l = 'snapshot_prefix: ' + snapshot
+				outFid.write(l)
+		outFid.close()
+
+	def write_def_copy(self, inFile):
+		'''
+			Copies the inFile to make the new def file. 
+		'''
+		outFid = open(self.def_, 'w')
+		with open(inFile,'r') as f:
+			lines = f.readlines()
+			for l in lines:
+				outFid.write(l)
+		outFid.close() 	
+
+	def run(self):
+		'''
+			Run the Experiment. 
+		'''
+		cwd = os.getcwd()
+		subprocess.check_call([('cd %s && ' % self.modelDir_) + self.run_] ,shell=True)
+		os.chdir(cwd)	
+
+
+def make_experiment_repeats(numRepeats, modelDir, defFile, solverFile='solver.prototxt'):
+	'''
+		Used to run an experiment multiple times.
+		numRepeats : Number of repeats to run.
+		modelDir   : The directory containing the defFile and solver file
+		defFile    : Path relative to modelDir of the architecture prototxt file. 
+		solverFile : Solver File
+	'''
+	#Make the directory for storing rep data. 
+	repDir          = modelDir + '_reps'
+	os.makedir(repDir)
+	#Get Solver File Name
+	solRoot, solExt = os.path.splitext(solverFile)
+
+	for rep in range(numRepeats):
+		repSol  = solRoot + ('_rep%d.' % rep) + solExt
+		repLog  = 'log_rep%d.txt' % rep
+		repRun  = 'run_%d.sh' % rep
+		exp     = ExperimentFiles(modelDir=repDir, defFile=defFile, solverFile=repSol,
+							 logFile=repLog, runFile=repRun)
+		exp.write_run()
+		exp.write_solver_rep(os.path.join(modelDir, solverFile), rep)
+		exp.write_def_copy(os.path.join(modelDir, defFile)) 
+			 	
+
 	
