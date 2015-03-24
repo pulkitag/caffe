@@ -8,7 +8,7 @@ layer {
   }
   transform_param {
     mirror: false
-    crop_size: 227
+    #crop_size: 227
     mean_file: "/data0/pulkitag/kitti/lmdb-store/kitti_mean.binaryproto"
   }
   data_param {
@@ -39,7 +39,7 @@ layer {
   }
   transform_param {
     mirror: false
-    crop_size: 227
+    #crop_size: 227
     mean_file: "/data0/pulkitag/kitti/lmdb-store/kitti_mean.binaryproto"
   }
   data_param {

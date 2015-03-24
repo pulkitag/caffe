@@ -699,8 +699,9 @@ layer {
   inner_product_param {
     num_output: 200
     weight_filler {
-      type: "gaussian"
-      std: 0.005
+			type: "xavier"
+      #type: "gaussian"
+      #std: 0.005
     }
     bias_filler {
       type: "constant"
@@ -728,10 +729,11 @@ layer {
     decay_mult: 0
   }
   inner_product_param {
-    num_output: 21
+    num_output: 22
     weight_filler {
-      type: "gaussian"
-      std: 0.005
+			type: "xavier"
+      #type: "gaussian"
+      #std: 0.005
     }
     bias_filler {
       type: "constant"

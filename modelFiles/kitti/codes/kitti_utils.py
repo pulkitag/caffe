@@ -333,7 +333,7 @@ def get_pose_label(pose1, pose2, poseType):
 
 
 def get_accuracy(numIter=30000, imSz=256, poseType='euler', nrmlzType='zScoreScaleSeperate',
-								 isScratch=True, concatLayer='pool5'):
+								 isScratch=True, concatLayer='pool5', numBatches=10):
 	'''
 		Determines the accuracy of the network in predicting stuff 
 	'''
@@ -341,10 +341,67 @@ def get_accuracy(numIter=30000, imSz=256, poseType='euler', nrmlzType='zScoreSca
 									 nrmlzType=nrmlzType, isScratch=isScratch, 
 									 concatLayer=concatLayer, isDeploy=True)
 
+	print "Intializing Network"
 	net = mp.MyNet(defFile, wFile)
 
 	expName = 'consequent_pose-%s_nrmlz-%s_imSz%d' % (poseType, nrmlzType, imSz) 
 	
-	#Load the test db
-	imDb, lbDb = get_lmdb_names(expName, setName='test')	
-	db         = mpio.DoubleDbReader((imDb, lbDb))	
+	lblNames  = ['translation_label', 'euler_label']
+	predNames = ['translation_fc7', 'euler_fc7']
+	
+	data = {}
+	for name in lblNames + predNames:
+		data[name] = []
+
+	print "Calculating Features"
+	for i in range(numBatches):
+		blobs = net.forward_all(blobs= lblNames + predNames, noInputs=True)
+		for name in lblNames + predNames:
+			data[name].append(blobs[name].squeeze()) 
+
+	#pdb.set_trace()
+	for name in lblNames + predNames:
+		data[name] = np.concatenate(data[name], axis=0)
+
+	print "Plotting Results"
+	plt.ion()
+	figT = plt.figure()
+	plt.title('Relative Translation')
+	plot_triplets(data['translation_label'], fig=figT, isDashed=True,
+				 linewidth=1.0, labels=['gtDeltaX', 'gtDeltaY', 'gtDeltaZ'])
+	plot_triplets(data['translation_fc7'], fig=figT, isDashed=False,
+				 linewidth=1.0, labels=['predDeltaX', 'predDeltaY', 'predDeltaZ'])
+
+
+	figR = plt.figure()
+	plt.title('Relative Rotation')
+	plot_triplets(data['euler_label'], fig=figR, isDashed=True,
+				 linewidth=1.0, labels=['gtThetaX', 'gtThetaY', 'gtThetaZ'])
+	plot_triplets(data['euler_fc7'], fig=figR, isDashed=False,
+				 linewidth=1.0, labels=['predThetaX', 'predThetaY', 'predThetaZ'])
+
+
+
+def plot_triplets(data, fig=None, colors=['r','g','b'], labels=None, linewidth=2.0, isDashed=False):
+	'''
+		data: N * 3 - N samples, each being 3 Dimensional
+	'''
+	if fig is None:
+		fig = plt.figure()
+	else:
+		plt.figure(fig.number)
+
+	N,ch = data.shape
+	assert ch==3, 'The data is assumed to consist of 3D points'
+
+	if isDashed:
+		colors = [c + '--' for c in colors]
+
+	for (i,c) in enumerate(range(ch)):
+		plt.subplot(3,1,i+1)
+		if labels is None:
+			plt.plot(range(N), data[:,c], colors[c], linewidth=linewidth)
+		else:
+			plt.plot(range(N), data[:,c], colors[c], linewidth=linewidth, label=labels[c])
+		plt.legend(fontsize='large')
+	return fig

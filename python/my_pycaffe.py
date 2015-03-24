@@ -5,6 +5,7 @@ import pdb
 import matplotlib.pyplot as plt
 import os
 from six import string_types
+import copy
 
 class layerSz:
 	def __init__(self, stride, filterSz):
@@ -405,41 +406,45 @@ class MyNet:
 		return ims
 
 	
-	def forward_all(self, blobs=None, **kwargs):
+	def forward_all(self, blobs=None, noInputs=False, **kwargs):
 		'''
 			blobs: The blobs to extract in the forward_all pass
+			noInputs: Set to true when there are no input blobs. 
 			kwargs: A dictionary where each input blob has associated data
 		'''
-		if kwargs:
-			if (set(kwargs.keys()) != set(self.transformer.keys())):
-				raise Exception('Data Transformer has not been set for all input blobs')
-			#Just pass all the inputs
-			procData = {}
-			N        = self.batchSz
-			for in_, data in kwargs.iteritems():
-				N             = data.shape[0] #The first dimension must be equivalent of batchSz
-				procData[in_] = self.preprocess_batch(data, ipName=in_)
+		if not noInputs:
+			if kwargs:
+				if (set(kwargs.keys()) != set(self.transformer.keys())):
+					raise Exception('Data Transformer has not been set for all input blobs')
+				#Just pass all the inputs
+				procData = {}
+				N        = self.batchSz
+				for in_, data in kwargs.iteritems():
+					N             = data.shape[0] #The first dimension must be equivalent of batchSz
+					procData[in_] = self.preprocess_batch(data, ipName=in_)
 
-			ops = self.net.forward_all(blobs=blobs, **procData)
-			#Resize data in the right size
-			for op_, data in ops.iteritems():
-				ops[op_] = data[0:N]
-			return ops
+				ops = self.net.forward_all(blobs=blobs, **procData)
+				#Resize data in the right size
+				for op_, data in ops.iteritems():
+					ops[op_] = data[0:N]
+			else:
+				raise Exception('No Input data specified.')
 		else:
-			raise Exception('No Input data specified.')
- 
+			ops = self.net.forward(blobs=blobs)
 
-	def vis_weights(self, blobName, blobNum=0): 
+		return copy.deepcopy(ops) 
+
+
+	def vis_weights(self, blobName, blobNum=0, ax=None, titleName=None): 
 		assert blobName in self.net.blobs, 'BlobName not found'
 		dat  = self.net.params[blobName][blobNum].data
-		vis_square(dat.transpose(0,2,3,1))	
+		vis_square(dat.transpose(0,2,3,1), ax=ax, titleName=titleName)	
 
 
-def vis_square(data, padsize=1, padval=0):
+def vis_square(data, padsize=1, padval=0, ax=None, titleName=None):
 	'''
 		data is numFitlers * height * width or numFilters * height * width * channels
 	'''
-
 	data -= data.min()
 	data /= data.max()
 
@@ -452,8 +457,15 @@ def vis_square(data, padsize=1, padval=0):
 	data = data.reshape((n, n) + data.shape[1:]).transpose((0, 2, 1, 3) + tuple(range(4, data.ndim + 1)))
 	data = data.reshape((n * data.shape[1], n * data.shape[3]) + data.shape[4:])
 
-	plt.imshow(data)
+	if titleName is None:
+		titleName = ''
 
+	if ax is not None:
+		ax.imshow(data)
+		ax.set_title(titleName)
+	else:
+		plt.imshow(data)
+		plt.title(titleName)
 
 
 def setup_prototypical_network(netName='vgg', layerName='pool4'):
