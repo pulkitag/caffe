@@ -1,3 +1,7 @@
+## @package my_pycaffe_utils
+#  Miscellaneous Util Functions
+#
+
 import my_pycaffe as mp
 import my_pycaffe_io as mpio
 import numpy as np
@@ -6,6 +10,7 @@ import os
 import scipy.io as sio
 import matplotlib.pyplot as plt
 import subprocess
+import collections as co
 
 def zf_saliency(net, imBatch, numOutputs, opName, ipName='data', stride=2, patchSz=11):
 	'''
@@ -395,13 +400,59 @@ def give_run_permissions_(fileName):
 	subprocess.check_call(args,shell=True)
 
 
+def process_proto_param(lines):
+	data      = co.OrderedDict()
+	braCount  = 0
+	readFlag  = True
+	i         = 0
+	while readFlag:
+		l = lines[i]
+		if '{' in l:
+			name       = l.split()[0] 
+			data[name], skipI = process_proto_param(lines[i+1:]) 
+			braCount += 1
+			i        += skipI
+		elif '}' in l:
+			braCount -= 1
+		else:
+			name, val  = l.split()
+			name       = name[:-1]
+			data[name] = val
+		if braCount == -1:
+			break
+		i += 1
+	return data, i
+
+
+class ProtoDef():
+	'''
+		Reads the architecture definition file and converts it into a nice, programmable format. 		
+	'''
+	def __init__(self, defFile):
+		self.layers_ = co.OrderedDict()	
+		fid   = open(defFile, 'r')
+		lines = fid.readlines()
+		i     = 0
+		while True:
+			l = lines[i]
+			if ('layers' in l) or ('layer' in l):
+				layerName = mp.find_layer(lines[i:])
+				self.layers_[layerName], skipI = process_proto_param(lines[i+1:])  
+				i += skipI
+			i += 1
+			if i >= len(lines):
+				break
+
 class ExperimentFiles():
 	'''
 		Used for writing experiment files in an easy manner. 
 	'''
 	def __init__(self, modelDir, defFile='caffenet.prototxt', 
 							 solverFile='solver.prototxt', logFile='log.txt', 
-							 runFile='run.sh', runPhase='train'):
+							 runFile='run.sh', deviceId=0):
+		'''
+			deviceId: The GPU ID to be used. 
+		'''
 		self.modelDir_ = modelDir
 		if not os.path.exists(self.modelDir_):
 			os.makedirs(self.modelDir_)
@@ -410,17 +461,39 @@ class ExperimentFiles():
 		self.def_      = os.path.join(self.modelDir_, defFile)
 		self.run_      = os.path.join(self.modelDir_, runFile)
 		self.paths_    = get_caffe_paths()
-		assert runPhase in ['train', 'test'], "Invalid run phase"
-		self.runPhase_ = runPhase #Run File should run caffe in train or test phase	
+		self.deviceId_ = deviceId
 
-	def write_run(self):
+	def write_run_train(self):
+		'''
+			Write the run file for training. 
+		'''
 		with open(self.run_,'w') as f:
 			f.write('#!/usr/bin/env sh \n \n')
 			f.write('TOOLS=%s \n \n' % self.paths_['tools'])
-			f.write('GLOG_logtostderr=1 $TOOLS/caffe %s' % self.runPhase_)
+			f.write('GLOG_logtostderr=1 $TOOLS/caffe train')
 			f.write('\t --solver=%s' % self.solver_)
+			f.write('\t -gpu %d' % self.deviceId_)
 			f.write('\t 2>&1 | tee %s \n' % self.log_)
-		give_run_permissions_(run_)
+		give_run_permissions_(self.run_)
+
+	def write_run_test(self, modelIterations, testIterations):
+		'''
+			Write the run file for testing.
+			modelIterations: Number of iterations of the modelFile. 
+											 The modelFile Name is automatically extracted from the solver file.
+			testIterations:  Number of iterations to use for testing.   
+		'''
+		snapshot = self.extract_snapshot_name() % modelIterations
+		with open(self.run_,'w') as f:
+			f.write('#!/usr/bin/env sh \n \n')
+			f.write('TOOLS=%s \n \n' % self.paths_['tools'])
+			f.write('GLOG_logtostderr=1 $TOOLS/caffe test')
+			f.write('\t --weights=%s' % snapshot)
+			f.write('\t --iterations=%d' % testIterations)
+			f.write('\t -gpu %d' % self.deviceId_)
+			f.write('\t 2>&1 | tee %s \n' % self.log_)
+		give_run_permissions_(self.run_)
+
 
 	def write_solver_rep(self, inFile, repNum):
 		'''
@@ -436,6 +509,18 @@ class ExperimentFiles():
 					l = 'snapshot_prefix: ' + snapshot
 				outFid.write(l)
 		outFid.close()
+
+	def extract_snapshot_name(self):
+		'''
+			Find the name with which models are being stored. 
+		'''
+		with open(self.solver_,'r') as f:
+			lines = f.readlines()
+			if 'snapshot_prefix' in l:
+				snapshot = l.split[1]
+		#_iter_%d.caffemodel is added by caffe while snapshotting. 
+		snapshot = snapshot + '_iter_%d.caffemodel'
+		return snapshot
 
 	def write_def_copy(self, inFile):
 		'''
@@ -457,29 +542,54 @@ class ExperimentFiles():
 		os.chdir(cwd)	
 
 
-def make_experiment_repeats(numRepeats, modelDir, defFile, solverFile='solver.prototxt'):
+def make_experiment_repeats(numRepeats, modelDir, defPrefix,
+									 solverPrefix='solver', deviceId=0, suffix=None):
 	'''
 		Used to run an experiment multiple times.
-		numRepeats : Number of repeats to run.
-		modelDir   : The directory containing the defFile and solver file
-		defFile    : Path relative to modelDir of the architecture prototxt file. 
-		solverFile : Solver File
+		This is useful for testing different random initializations. 
+		numRepeats   : Number of repeats to run.
+		modelDir     : The directory containing the defFile and solver file
+		defPrefix    : The prefix of the architecture prototxt file. 
+		solverPrefix : The prefix of the solver file. 
+		deviceId     : The GPU device to use.
+		suffix       : If a suffix is present it is added to all the files.
+								   For eg solver.prototxt will become, solver_suffix.prototxt 
 	'''
 	#Make the directory for storing rep data. 
 	repDir          = modelDir + '_reps'
 	os.makedir(repDir)
+	#Make the definition file. 
+	if suffix is not None:
+		defFile    = defPrefix + '_' + suffix + '.prototxt'
+		solverFile = solverPrefix + '_' + suffix + '.prototxt' 
+	else:
+		defFile    = defPrefix + '.prototxt'
+		solverFile = solverPrefix + '.prototxt' 
+ 
 	#Get Solver File Name
 	solRoot, solExt = os.path.splitext(solverFile)
 
 	for rep in range(numRepeats):
-		repSol  = solRoot + ('_rep%d.' % rep) + solExt
-		repLog  = 'log_rep%d.txt' % rep
-		repRun  = 'run_%d.sh' % rep
-		exp     = ExperimentFiles(modelDir=repDir, defFile=defFile, solverFile=repSol,
-							 logFile=repLog, runFile=repRun)
-		exp.write_run()
+		repSol   = solRoot + ('_rep%d.' % rep) + solExt
+		if suffix is not None:
+			repLog   = 'log_rep%d_%s.txt' % (rep, suffix)
+			repRun   = 'run_rep%d_%s.sh'  % (rep, suffix)
+			repLogTest   = 'log_test_rep%d_%s.txt' % (rep, suffix)
+			repRunTest   = 'run_test_rep%d_%s.sh'  % (rep, suffix)
+		else:
+			repLog   = 'log_rep%d.txt' % (rep)
+			repRun   = 'run_rep%d.sh'  % (rep)
+			repLogTest   = 'log_test_rep%d.txt' % (rep)
+			repRunTest   = 'run_test_rep%d.sh'  % (rep)
+			
+		#Training Phase
+		trainExp = ExperimentFiles(modelDir=repDir, defFile=defFile, solverFile=repSol,
+							 logFile=repLog, runFile=repRun, deviceId=deviceId)
+		exp.write_run_train()
 		exp.write_solver_rep(os.path.join(modelDir, solverFile), rep)
 		exp.write_def_copy(os.path.join(modelDir, defFile)) 
-			 	
-
+		#Test Phase	
+		testExp      = ExperimentFiles(modelDir=repDir, defFile=defFile, solverFile=repSol,
+							 		 logFile=repLogTest, runFile=repRunTest, deviceId=deviceId)
+		testExp.write_run_test()
 	

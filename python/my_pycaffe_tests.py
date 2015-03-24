@@ -1,3 +1,7 @@
+## @package my_pycaffe_tests
+#  Unit Testing functions. 
+#
+
 import my_pycaffe as mp
 import my_pycaffe_utils as mpu
 import h5py

@@ -1,0 +1,4 @@
+	pool: MAX
+	kernel_size: 2
+	stride: 2
+

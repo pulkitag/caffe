@@ -1,3 +1,8 @@
+## @package my_pycaffe
+#  Major Wrappers.
+#
+
+
 import numpy as np
 import h5py
 import caffe
@@ -30,10 +35,10 @@ class layerSz:
 		self.stridePix = self.stride * self.stridePixPrev
 
 
+## 
+# Calculate the receptive field size and the stride of the Alex-Net
+# Something
 def calculate_size():
-	'''
-		Calculate the receptive field size and the stride of the Alex-Net
-	'''
 	conv1 = layerSz(4,11)
 	conv1.set_prev_prms(1,1)
 	conv1.compute()
@@ -69,7 +74,8 @@ def calculate_size():
 	print 'Conv4: Receptive: %d, Stride: %d ' % (conv4.pixelSz, conv4.stridePix)	
 	print 'Pool5: Receptive: %d, Stride: %d ' % (pool5.pixelSz, pool5.stridePix)	
 	
-
+##
+# Find the Layer Type
 def find_layer(lines):
 	layerName = []
 	for l in lines:
@@ -77,7 +83,8 @@ def find_layer(lines):
 			_,layerName = l.split()
 			return layerName
 
-
+##
+# Find the Layer Name
 def find_layer_name(lines):
 	layerName = []
 	topName   = []
@@ -94,7 +101,8 @@ def find_layer_name(lines):
 		if flagCount==2:
 			return layerName, topName
 
-
+##
+# Converts definition file of a network into siamese network. 
 def netdef2siamese(defFile, outFile):
 	outFid = open(outFile,'w')
 	stream1, stream2 = [],[]
@@ -173,12 +181,12 @@ def netdef2siamese(defFile, outFile):
 	outFid.close()
 
 
+##
+# Get Model and Mean file for a mdoel.  
+#
+#		the model file - the .caffemodel with the weights
+#		the mean file of the imagenet data
 def get_model_mean_file(netName='vgg'):
-	'''
-		Returns 
-			the model file - the .caffemodel with the weights
-			the mean file of the imagenet data
-	'''
 	modelDir = '/data1/pulkitag/caffe_models/'
 	bvlcDir  = modelDir + 'bvlc_reference/'
 	if netName   == 'alex':
@@ -200,6 +208,8 @@ def get_model_mean_file(netName='vgg'):
 	return modelFile, imMeanFile
 	
 
+##
+# Get the architecture definition file. 
 def get_layer_def_files(netName='vgg', layerName='pool4'):
 	'''
 		Returns
@@ -216,10 +226,9 @@ def get_layer_def_files(netName='vgg', layerName='pool4'):
 	return defFile	
 
 
+##
+# Get the shape of input blob from the defFile
 def get_input_blob_shape(defFile):
-	'''
-		Get the shape of input blob from the defFile
-	'''
 	blobShape = []
 	with open(defFile,'r') as f:
 		lines  = f.readlines()

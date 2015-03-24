@@ -1,3 +1,7 @@
+## @package my_pycaffe_io 
+#  IO operations. 
+#
+
 import h5py as h5
 import numpy as np
 import my_pycaffe as mp
@@ -7,7 +11,8 @@ import os
 import lmdb
 import shutil
 
-
+## 
+# Write array as a proto
 def  write_proto(arr, outFile):
 	'''
 		Writes the array as a protofile
@@ -19,6 +24,8 @@ def  write_proto(arr, outFile):
 	fid.close()
 
 
+##
+# Convert the mean to be useful for siamese network. 
 def mean2siamese_mean(inFile, outFile):
 	mn = mp.read_mean(inFile)
 	mn = np.concatenate((mn, mn))

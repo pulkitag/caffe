@@ -30,14 +30,17 @@ def load_images(setName = 'train'):
 	return im, label
 
 
-def get_lmdb_name(expName, setName):
-	dbDir = '/data1/pulkitag/mnist/lmdb-store/' 
+def get_lmdb_name(expName, setName, repNum=None):
+	dbDir = '/data0/pulkitag/mnist/lmdb-store/' 
 	if setName == 'train':
 		dbDir = os.path.join(dbDir, 'train')
 	elif setName == 'test':
 		dbDir = os.path.join(dbDir, 'test')
 	else:
 		raise Exception('Unrecognized Set Name')
+
+	if repNum is not None:
+		expName = expName + ('_rep%d' % repNum)
 
 	if expName in ['normal', 'null_transform']:
 		imFile = os.path.join(dbDir, 'images_labels_' + expName + '-lmdb')
@@ -162,7 +165,8 @@ def sample_transform(maxVal):
 
 
 def make_transform_label_db(setName='train',numLabels=1000, 
-														maxDeltaRot=5, maxDeltaTrans=3, maxRot=5, numEx=None, baseLineMode=False):
+														maxDeltaRot=5, maxDeltaTrans=3, maxRot=5, 
+														numEx=None, baseLineMode=False, repNum=None):
 	'''
 		setName: Train or Test
 		numLabels: number of examples for which the ground truth labels are provided. 
@@ -171,6 +175,7 @@ def make_transform_label_db(setName='train',numLabels=1000,
 		maxRot       : The maximum baseline rotation. The Delta Rotation is applied after maxRot 	
 		numEx        : Number of examples to include
 		baseLineMode : If this is true then only save images that have classification labels
+		repNum       : If the lmdb for repeats should be made or not. 
 	'''
 	ims, lbs  = load_images(setName=setName)
 	N, nr, nc = ims.shape
@@ -190,7 +195,10 @@ def make_transform_label_db(setName='train',numLabels=1000,
 		assert numLabels==N, 'In Testing we use labels for all the examples'
 
 	#Set the Seed
-	np.random.seed(3)
+	if repNum is None:
+		np.random.seed(3)
+	else:
+		np.random.seed(3 + (repNum + 1) * 2)
 
 	#Determine the examples for which labels are provided
 	perm = np.random.permutation(range(N))
@@ -201,11 +209,12 @@ def make_transform_label_db(setName='train',numLabels=1000,
 		expName = 'mnist_baseline_transform_classify_%s_dRot%d_dTrn%d_mxRot%d_nLbl%.0e_numEx%.0e' % (setName, maxDeltaRot, maxDeltaTrans, maxRot, numLabels, numEx)
 	else:
 		expName = 'mnist_transform_classify_%s_dRot%d_dTrn%d_mxRot%d_nLbl%.0e_numEx%.0e' % (setName, maxDeltaRot, maxDeltaTrans, maxRot, numLabels, numEx)
-		
+	
+
 	idxs = np.random.random_integers(0, N-1, numEx)
 
 	#dbReader
-	imFile, lbFile = get_lmdb_name(expName, setName)
+	imFile, lbFile = get_lmdb_name(expName, setName, repNum=repNum)
 	db     = mpio.DoubleDbSaver(imFile, lbFile)
 
 	#Start Writing the data
