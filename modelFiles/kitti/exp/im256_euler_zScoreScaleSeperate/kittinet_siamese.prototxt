@@ -63,7 +63,6 @@ layer {
 		backend: LMDB
   }
 }
-
 layer {
   name: "slice_pair"
   type: "Slice"

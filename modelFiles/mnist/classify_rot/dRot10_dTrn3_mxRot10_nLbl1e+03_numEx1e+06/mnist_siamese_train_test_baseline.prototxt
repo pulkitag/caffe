@@ -155,7 +155,7 @@ layer {
   type: "InnerProduct"
   bottom: "pool2"
   top: "ip1"
-	param{
+	param {
 		name: "ip1_w"
 		lr_mult: 1
 		decay_mult: 0

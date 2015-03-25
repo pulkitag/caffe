@@ -11,6 +11,7 @@ import scipy.io as sio
 import matplotlib.pyplot as plt
 import subprocess
 import collections as co
+import other_utils as ou
 
 def zf_saliency(net, imBatch, numOutputs, opName, ipName='data', stride=2, patchSz=11):
 	'''
@@ -89,7 +90,8 @@ def mapILSVRC12_labels_wnids(metaFile):
 	wnid   = wnid[0:1000]	
 	return labels, wnid
 
-
+##
+# Read ILSVRC Data
 class ILSVRC12Reader:
 	def __init__(self, caffeDir='/work4/pulkitag-code/pkgs/caffe-v2-2'):
 		labelFile  = '/data1/pulkitag/ILSVRC-2012-raw/devkit-1.0/data/ILSVRC2012_validation_ground_truth.txt'
@@ -180,7 +182,8 @@ def read_layerdefs_from_proto(fName):
 		
 	return layerNames, topNames, layerDef
 
-
+##
+# Generate String for writing down a protofile for a layer. 
 def get_layerdef_for_proto(layerType, layerName, bottom, numOutput=1):
 	'''
 		Gives the text for writing a prot-def file. 
@@ -387,11 +390,15 @@ def plot_debug_log(logFile, setName='train', plotNames=None):
 	plt.show()	
 
 
+##
+# Get useful caffe paths
+#
+# Set the paths over here for using the utils code. 
 def get_caffe_paths():
-	'''
-		Specify the main caffe paths
-	'''
-	paths['tools'] = '/work4/pulkitag-code/pkgs/caffe-v2-2/build/tools' 
+	paths  = {}
+	paths['caffeMain']   = '/work4/pulkitag-code/pkgs/caffe-v2-2' 
+	paths['tools']       = os.path.join(paths['caffeMain'], 'build', 'tools')
+	paths['pythonTest']  = os.path.join(paths['caffeMain'], 'python', 'test')
 	return paths
 
 
@@ -400,28 +407,95 @@ def give_run_permissions_(fileName):
 	subprocess.check_call(args,shell=True)
 
 
-def process_proto_param(lines):
+##
+#Make a new key if there are duplicates.
+def make_key(key, keyNames, dupStr='_$dup$'):
+	'''
+		The new string is made by concatenating the dupStr,
+		until a unique name is found. 
+	'''
+	if key not in keyNames:
+		return key
+	else:
+		key = key + dupStr
+		return make_key(key, keyNames, dupStr)
+
+##
+# If the key has dupStr, strip it off. 
+def strip_key(key, dupStr='_$dup$'):
+	if dupStr in key:
+		idx = key.find(dupStr)
+		key = key[:idx]	
+	return key 
+
+
+##
+# Extracts message parameters of a .prototxt from a list of strings. 
+def get_proto_param(lines):
+	#The String to use in case of duplicate names
+	dupStr    = '_$dup$'
 	data      = co.OrderedDict()
 	braCount  = 0
 	readFlag  = True
 	i         = 0
 	while readFlag:
+		if i>=len(lines):
+			break
 		l = lines[i]
-		if '{' in l:
-			name       = l.split()[0] 
-			data[name], skipI = process_proto_param(lines[i+1:]) 
+		#print l.strip()
+		if l in ['', '\n']:
+			#Continue if empty line encountered.
+			print 'Skipping empty line: %s ' % l.strip()
+		elif '#' in l:
+			#In case of comments
+			print 'Ignoring line: %s' % l.strip()
+		elif '{' in l and '}' in l:
+			raise Exception('Reformat the file, both "{" and "}" cannot be present on the same line %s' % l)
+		elif '{' in l:
+			name       = l.split()[0]
+			if '{' in name:
+				assert name[-1] == '{'
+				name = name[:-1]
+			name       = make_key(name, data.keys(), dupStr=dupStr)
+			data[name], skipI = get_proto_param(lines[i+1:]) 
 			braCount += 1
 			i        += skipI
 		elif '}' in l:
 			braCount -= 1
 		else:
+			#print l
+			splitVals = l.split()
+			if len(splitVals) > 2:
+				raise Exception('Improper format for: %s, l.split() should only produce 2 values' % l)
 			name, val  = l.split()
 			name       = name[:-1]
+			name       = make_key(name, data.keys(), dupStr=dupStr)
 			data[name] = val
 		if braCount == -1:
 			break
 		i += 1
 	return data, i
+
+##
+# Write the proto information into a file. 
+def write_proto_param(fid, protoData, numTabs=0):
+	'''
+		fid :    The file handle to which data needs to be written.
+		data:    The data to be written. 
+		numTabs: Is for the proper alignment. 
+	'''
+	tabStr = '\t ' * numTabs 
+	for (key, data) in protoData.iteritems():
+		key = strip_key(key)
+		if isinstance(data, dict):
+			line = '%s %s { \n' % (tabStr,key)
+			fid.write(line)
+			write_proto_param(fid, data, numTabs=numTabs + 1)
+			line = '%s } \n' % (tabStr)
+			fid.write(line)
+		else:
+			line = '%s %s: %s \n' % (tabStr, key, data)
+			fid.write(line)
 
 
 class ProtoDef():
@@ -429,20 +503,84 @@ class ProtoDef():
 		Reads the architecture definition file and converts it into a nice, programmable format. 		
 	'''
 	def __init__(self, defFile):
-		self.layers_ = co.OrderedDict()	
+		self.layers_ = {}
+		self.layers_['TRAIN'] = co.OrderedDict()	
+		self.layers_['TEST']  = co.OrderedDict()
 		fid   = open(defFile, 'r')
 		lines = fid.readlines()
 		i     = 0
+		layerInit = False
+		#Lines that are there before the layers start. 
+		self.initData_ = []
 		while True:
 			l = lines[i]
+			if not layerInit:
+				self.initData_.append(l)
 			if ('layers' in l) or ('layer' in l):
-				layerName = mp.find_layer(lines[i:])
-				self.layers_[layerName], skipI = process_proto_param(lines[i+1:])  
+				layerInit = True
+				layerName,_ = mp.find_layer_name(lines[i:])
+				layerData, skipI  = get_proto_param(lines[i+1:])
+				if layerData.has_key('include'):
+					phase = layerData['include']['phase']
+					assert phase in ['TRAIN', 'TEST'], '%s phase not recognized' % phase
+					assert layerName not in self.layers_[phase].keys(), 'Duplicate LayerName Found'
+					self.layers_[phase][layerName] = layerData
+				else:
+					#Default Phase is Train
+					assert layerName not in self.layers_['TRAIN'].keys(), 'Duplicate LayerName Found'
+					self.layers_['TRAIN'][layerName] = layerData
 				i += skipI
 			i += 1
 			if i >= len(lines):
 				break
+		#The last line of iniData_ is going to be "layer {", so remove it. 
+		self.initData_ = self.initData_[:-1]
 
+	def write(self, outFile):
+		'''
+			Write to a file. 
+		'''
+		with open(outFile, 'w') as fid:
+			#Write Init Data
+			for l in self.initData_:
+				fid.write(l)
+			#Write Layers
+			for (key, data) in self.layers_['TRAIN'].iteritems():
+				fid.write('layer { \n')
+				write_proto_param(fid, data, numTabs=0)
+				fid.write('} \n')
+				#Write the test layer if it is present.  
+				if self.layers_['TEST'].has_key(key):
+					fid.write('layer { \n')
+					write_proto_param(fid, self.layers_['TEST'][key], numTabs=0)
+					fid.write('} \n')
+					
+	def set_layer_property(self, layerName, propName, value, phase='TRAIN',  propNum=0): 
+		'''
+			layerName: Name of the layer in which the property is present.
+			propName : Name of the property.
+								 If there is a recursive property like, layer['data_param']['source'],
+								 then provide a list.   
+			value    : The value of the property. 
+			phase    : The phase in which to make edits. 
+			propNum  : Some properties like top can duplicated mutliple times in a layer, so which one.
+		'''
+		assert phase in ['TRAIN', 'TEST'], 'phase name not recognized'
+		assert layerName in self.layers_[phase].keys(), '%s layer not found' % layerName
+		if not isinstance(propName, list):
+			#Modify the propName to account for duplicates
+			propName = propName + '_$dup$' * propNum
+			propName = [propName]
+		else:
+			if isinstance(propNum, list):
+				assert len(propNum)==len(propName), 'Lengths mismatch'
+				propName = [p + i * '_$dup$' for (p,i) in zip(propName, propNum)]
+			else:
+				assert propNum==0,'propNum is not appropriately specified'
+		#Set the value
+		ou.set_recursive_key(self.layers_[phase][layerName], propName, value)
+
+	
 class ExperimentFiles():
 	'''
 		Used for writing experiment files in an easy manner. 
@@ -499,15 +637,26 @@ class ExperimentFiles():
 		'''
 			Modifies the inFile to make it appropriate for running repeats
 		'''
-		outFid = open(self.solver_, 'w')
+		outFid     = open(self.solver_, 'w')
+		deviceFlag = False
 		with open(inFile,'r') as f:
 			lines = f.readlines()
 			for (i,l) in enumerate(lines):
-				if 'snapshot_prefix' in l:
-					snapshot = l.split[1]
-					snapshot = snapshot[:-1] + '_rep%d"' % repNum
-					l = 'snapshot_prefix: ' + snapshot
+				if '#' not in l:
+					if 'net:' in l:
+						l = 'net: "%s" \n' % self.def_
+					if 'snapshot_prefix:' in l:
+						assert len(l.split())==2, 'Something is wrong with %s' % l.strip()
+						snapshot = l.split()[1]
+						snapshot = snapshot[:-1] + '_rep%d"' % repNum
+						l = 'snapshot_prefix: %s \n' %  snapshot
+					if 'device_id:' in l:
+						deviceFlag = True
+						l =  'device_id: %d \n' % self.deviceId_	
 				outFid.write(l)
+		if not deviceFlag:
+			l =  'device_id: %d \n' % self.deviceId_	
+			outFid.write(l)
 		outFid.close()
 
 	def extract_snapshot_name(self):
@@ -516,10 +665,13 @@ class ExperimentFiles():
 		'''
 		with open(self.solver_,'r') as f:
 			lines = f.readlines()
-			if 'snapshot_prefix' in l:
-				snapshot = l.split[1]
+			for l in lines:
+				if 'snapshot_prefix' in l:
+					assert len(l.split())==2, 'Something is wrong with %s' % l.strip()
+					snapshot = l.split()[1]
 		#_iter_%d.caffemodel is added by caffe while snapshotting. 
-		snapshot = snapshot + '_iter_%d.caffemodel'
+		snapshot = snapshot[1:-1] + '_iter_%d.caffemodel'
+		print snapshot
 		return snapshot
 
 	def write_def_copy(self, inFile):
@@ -533,6 +685,10 @@ class ExperimentFiles():
 				outFid.write(l)
 		outFid.close() 	
 
+	def write_def(self, defData):
+		assert isinstance(defData, ProtoDef), 'Wrong type'
+		defData.write(self.def_)
+
 	def run(self):
 		'''
 			Run the Experiment. 
@@ -542,54 +698,63 @@ class ExperimentFiles():
 		os.chdir(cwd)	
 
 
-def make_experiment_repeats(numRepeats, modelDir, defPrefix,
-									 solverPrefix='solver', deviceId=0, suffix=None):
+def make_experiment_repeats(modelDir, defPrefix,
+									 solverPrefix='solver', repNum=0, deviceId=0, suffix=None, 
+										defData=None, testIterations=None, modelIterations=None):
 	'''
 		Used to run an experiment multiple times.
 		This is useful for testing different random initializations. 
-		numRepeats   : Number of repeats to run.
+		repNum       : The repeat. 
 		modelDir     : The directory containing the defFile and solver file
 		defPrefix    : The prefix of the architecture prototxt file. 
 		solverPrefix : The prefix of the solver file. 
 		deviceId     : The GPU device to use.
 		suffix       : If a suffix is present it is added to all the files.
-								   For eg solver.prototxt will become, solver_suffix.prototxt 
+								   For eg solver.prototxt will become, solver_suffix.prototxt
+		defData      : None or Instance of class ProtoDef which defined a protoFile
+		testIterations: Number of test iterations to run
+		modelIterations: The number of iterations of training for which model should be loaded 
 	'''
+	assert os.path.exists(modelDir), 'ModelDir %s not found' % modelDir
+
 	#Make the directory for storing rep data. 
 	repDir          = modelDir + '_reps'
-	os.makedir(repDir)
+	if not os.path.exists(repDir):
+		os.makedirs(repDir)
 	#Make the definition file. 
 	if suffix is not None:
 		defFile    = defPrefix + '_' + suffix + '.prototxt'
-		solverFile = solverPrefix + '_' + suffix + '.prototxt' 
+		solverFile = solverPrefix + '_' + suffix + '.prototxt'
+		repSuffix  = '_rep%d_%s' % (repNum, suffix) 
 	else:
 		defFile    = defPrefix + '.prototxt'
 		solverFile = solverPrefix + '.prototxt' 
+		repSuffix  = '_rep%d' % repNum
  
 	#Get Solver File Name
 	solRoot, solExt = os.path.splitext(solverFile)
 
-	for rep in range(numRepeats):
-		repSol   = solRoot + ('_rep%d.' % rep) + solExt
-		if suffix is not None:
-			repLog   = 'log_rep%d_%s.txt' % (rep, suffix)
-			repRun   = 'run_rep%d_%s.sh'  % (rep, suffix)
-			repLogTest   = 'log_test_rep%d_%s.txt' % (rep, suffix)
-			repRunTest   = 'run_test_rep%d_%s.sh'  % (rep, suffix)
-		else:
-			repLog   = 'log_rep%d.txt' % (rep)
-			repRun   = 'run_rep%d.sh'  % (rep)
-			repLogTest   = 'log_test_rep%d.txt' % (rep)
-			repRunTest   = 'run_test_rep%d.sh'  % (rep)
+	repSol   = solRoot + repSuffix + solExt
+	repDef   = defPrefix + repSuffix + '.prototxt'
+	repLog   = 'log%s.txt' % (repSuffix)
+	repRun   = 'run%s.sh'  % (repSuffix)
+	repLogTest   = 'log_test%s.txt' % (repSuffix)
+	repRunTest   = 'run_test%s.sh'  % (repSuffix)
 			
-		#Training Phase
-		trainExp = ExperimentFiles(modelDir=repDir, defFile=defFile, solverFile=repSol,
-							 logFile=repLog, runFile=repRun, deviceId=deviceId)
-		exp.write_run_train()
-		exp.write_solver_rep(os.path.join(modelDir, solverFile), rep)
-		exp.write_def_copy(os.path.join(modelDir, defFile)) 
-		#Test Phase	
-		testExp      = ExperimentFiles(modelDir=repDir, defFile=defFile, solverFile=repSol,
-							 		 logFile=repLogTest, runFile=repRunTest, deviceId=deviceId)
-		testExp.write_run_test()
+	#Training Phase
+	trainExp = ExperimentFiles(modelDir=repDir, defFile=repDef, solverFile=repSol,
+						 logFile=repLog, runFile=repRun, deviceId=deviceId)
+	trainExp.write_run_train()
+	trainExp.write_solver_rep(os.path.join(modelDir, solverFile), repNum)
+	if defData is None:
+		trainExp.write_def_copy(os.path.join(modelDir, defFile))
+	else:
+		trainExp.write_def(defData)
 	
+	#Test Phase	
+	if testIterations is not None:
+		assert modelIterations is not None	 
+		testExp      = ExperimentFiles(modelDir=repDir, defFile=repDef, solverFile=repSol,
+									 logFile=repLogTest, runFile=repRunTest, deviceId=deviceId)
+		testExp.write_run_test(modelIterations, testIterations)
+

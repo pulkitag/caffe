@@ -12,7 +12,9 @@ layer {
 	transform_param{
 	  scale: 0.00390625
 	}
-  include: { phase: TRAIN }
+  include{ 
+		phase: TRAIN 
+	}
 }
 layer {
   name: "pair_data"
@@ -26,7 +28,9 @@ layer {
 	transform_param{
 	  scale: 0.00390625
 	}
-  include: { phase: TEST }
+  include { 
+		phase: TEST 
+	}
 }
 layer {
     name: "slice_pair"
@@ -49,7 +53,9 @@ layer {
     batch_size: 64
 		backend: LMDB
   }
-  include: { phase: TRAIN }
+  include { 
+		phase: TRAIN 
+	}
 }
 layer {
   name: "pair_labels"
@@ -60,7 +66,9 @@ layer {
    batch_size: 100
 	 backend: LMDB
   }
-  include: { phase: TEST }
+  include	{ 
+		phase: TEST 
+	}
 }
 layer {
     name: "slice_label"
@@ -155,7 +163,7 @@ layer {
   type: "InnerProduct"
   bottom: "pool2"
   top: "ip1"
-	param{
+	param {
 		name: "ip1_w"
 		lr_mult: 1
 		decay_mult: 0
@@ -298,7 +306,7 @@ layer {
 	}
 	bottom: "ip1"
 	bottom: "ip1_p"
-	top   : "concat"
+	top: "concat"
 }
 
 layer {
@@ -402,6 +410,8 @@ layer {
   bottom: "classify_feat"
   bottom: "classify_label"
   top: "accuracy"
-  include: {phase: TEST}
+  include	{
+		phase: TEST
+	}
 }
 
