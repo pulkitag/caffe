@@ -32,7 +32,7 @@ def load_images(setName = 'train'):
 
 
 def get_lmdb_name(expName, setName, repNum=None):
-	dbDir = '/data0/pulkitag/mnist/lmdb-store/' 
+	dbDir = '/data1/pulkitag/mnist/lmdb-store/' 
 	if setName == 'train':
 		dbDir = os.path.join(dbDir, 'train')
 	elif setName == 'test':
@@ -216,6 +216,7 @@ def make_transform_label_db(setName='train',numLabels=1000,
 
 	#dbReader
 	imFile, lbFile = get_lmdb_name(expName, setName, repNum=repNum)
+	print imFile, lbFile
 	db     = mpio.DoubleDbSaver(imFile, lbFile)
 
 	#Start Writing the data
@@ -259,6 +260,24 @@ def make_transform_label_db(setName='train',numLabels=1000,
 			lbBatch = np.zeros((batchSz, 4, 1, 1)).astype(np.float)
 
 
+##
+# Make lmdbs for repeats. 
+def make_rep_dbs():
+	numLabels   = [1e+02, 1e+03, 1e+04]
+	maxDeltaRot = 10
+	maxRot      = 10
+	numEx       = 1e+06
+	#Test
+	for r in range(5):
+		make_transform_label_db(numLabels=1e+04, numEx=1e+04, maxDeltaRot=10, 
+																maxRot=10, repNum=r, setName='test') 
+	#Train
+	for r in range(5):
+		for nl in numLabels:
+				make_transform_label_db(numLabels=nl, numEx=numEx, maxDeltaRot=10, 
+																maxRot=10, repNum=r, setName='train') 
+
+
 def run_transform_experiment_repeats(numLabels=1000, deviceId=0,
 														maxDeltaRot=5, maxDeltaTrans=3, maxRot=5, 
 														numEx=None, baseLineMode=False):
@@ -290,15 +309,17 @@ def run_transform_experiment_repeats(numLabels=1000, deviceId=0,
 		#Get the definition file data
 		defData          = mpu.ProtoDef(os.path.join(modelDir, rootDefFile))
 		#Edit the train lmdb
-		defData.set_layer_property('pair_data', ['data_param','source'], "%s" % trainIm, phase='TRAIN')
-		defData.set_layer_property('pair_labels', ['data_param','source'], "%s" % trainLb, phase='TRAIN')
+		defData.set_layer_property('pair_data', ['data_param','source'], '"%s"' % trainIm, phase='TRAIN')
+		defData.set_layer_property('pair_labels', ['data_param','source'],' "%s"' % trainLb, phase='TRAIN')
 		#Edit the test lmdb	
-		defData.set_layer_property('pair_data', ['data_param','source'], "%s" % testIm, phase='TEST')
-		defData.set_layer_property('pair_labels', ['data_param','source'], "%s" % testLb, phase='TEST')
+		defData.set_layer_property('pair_data', ['data_param','source'], '"%s"' % testIm, phase='TEST')
+		defData.set_layer_property('pair_labels', ['data_param','source'],' "%s"' % testLb, phase='TEST')
 
-		mpu.make_experiment_repeats(modelDir, defPrefix, solverPrefix=solverPrefix,
+		trainExp, testExp = mpu.make_experiment_repeats(modelDir, defPrefix, solverPrefix=solverPrefix,
 														repNum=rep, deviceId=deviceId, suffix=suffix, defData=defData,
 														testIterations=100, modelIterations=50000)
+		trainExp.run()
+		testExp.run()
 
 
 def get_lmdb(setName='test', maxDeltaRot=5, maxDeltaTrans=2,

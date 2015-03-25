@@ -12,7 +12,9 @@ layer {
 	transform_param{
 	  scale: 0.00390625
 	}
-  include: { phase: TRAIN }
+  include { 
+		phase: TRAIN 
+	}
 }
 layer {
   name: "pair_data"
@@ -26,7 +28,9 @@ layer {
 	transform_param{
 	  scale: 0.00390625
 	}
-  include: { phase: TEST }
+  include { 
+		phase: TEST 
+	}
 }
 layer {
     name: "slice_pair"
@@ -49,7 +53,9 @@ layer {
     batch_size: 64
 		backend: LMDB
   }
-  include: { phase: TRAIN }
+  include { 
+		phase: TRAIN 
+	}
 }
 layer {
   name: "pair_labels"
@@ -60,7 +66,9 @@ layer {
    batch_size: 100
 	 backend: LMDB
   }
-  include: { phase: TEST }
+  include { 
+		phase: TEST 
+	}
 }
 layer {
     name: "slice_label"
@@ -386,7 +394,7 @@ layer {
 		ignore_label: 10
 		normalize: false
 	}
-	loss_weight: 1
+	loss_weight: 10
 }
 layer {
   name: "transform_loss"
@@ -402,6 +410,8 @@ layer {
   bottom: "classify_feat"
   bottom: "classify_label"
   top: "accuracy"
-  include: {phase: TEST}
+  include {
+		phase: TEST
+	}
 }
 

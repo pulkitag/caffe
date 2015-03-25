@@ -758,3 +758,4 @@ def make_experiment_repeats(modelDir, defPrefix,
 									 logFile=repLogTest, runFile=repRunTest, deviceId=deviceId)
 		testExp.write_run_test(modelIterations, testIterations)
 
+	return trainExp, testExp

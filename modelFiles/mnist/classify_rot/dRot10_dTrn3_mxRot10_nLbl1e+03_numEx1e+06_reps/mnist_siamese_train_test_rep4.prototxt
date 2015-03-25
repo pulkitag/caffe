@@ -5,7 +5,7 @@ layer {
  type: "Data" 
  top: "pair_data" 
  data_param { 
-	  source: /data0/pulkitag/mnist/lmdb-store/train/images_mnist_transform_classify_train_dRot10_dTrn3_mxRot10_nLbl1e+03_numEx1e+06_rep4-lmdb 
+	  source: "/data1/pulkitag/mnist/lmdb-store/train/images_mnist_transform_classify_train_dRot10_dTrn3_mxRot10_nLbl1e+03_numEx1e+06_rep4-lmdb" 
 	  batch_size: 64 
 	  backend: LMDB 
  } 
@@ -21,7 +21,7 @@ layer {
  type: "Data" 
  top: "pair_data" 
  data_param { 
-	  source: /data0/pulkitag/mnist/lmdb-store/test/images_mnist_transform_classify_test_dRot10_dTrn3_mxRot10_nLbl1e+03_numEx1e+06_rep4-lmdb 
+	  source: "/data1/pulkitag/mnist/lmdb-store/test/images_mnist_transform_classify_test_dRot10_dTrn3_mxRot10_nLbl1e+03_numEx1e+06_rep4-lmdb" 
 	  batch_size: 100 
 	  backend: LMDB 
  } 
@@ -48,7 +48,7 @@ layer {
  type: "Data" 
  top: "pair_labels" 
  data_param { 
-	  source: /data0/pulkitag/mnist/lmdb-store/train/labels_mnist_transform_classify_train_dRot10_dTrn3_mxRot10_nLbl1e+03_numEx1e+06_rep4-lmdb 
+	  source:  "/data1/pulkitag/mnist/lmdb-store/train/labels_mnist_transform_classify_train_dRot10_dTrn3_mxRot10_nLbl1e+03_numEx1e+06_rep4-lmdb" 
 	  batch_size: 64 
 	  backend: LMDB 
  } 
@@ -61,7 +61,7 @@ layer {
  type: "Data" 
  top: "pair_labels" 
  data_param { 
-	  source: /data0/pulkitag/mnist/lmdb-store/test/labels_mnist_transform_classify_test_dRot10_dTrn3_mxRot10_nLbl1e+03_numEx1e+06_rep4-lmdb 
+	  source:  "/data1/pulkitag/mnist/lmdb-store/test/labels_mnist_transform_classify_test_dRot10_dTrn3_mxRot10_nLbl1e+03_numEx1e+06_rep4-lmdb" 
 	  batch_size: 100 
 	  backend: LMDB 
  } 
