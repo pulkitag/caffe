@@ -306,7 +306,7 @@ layer {
 	}
 	bottom: "ip1"
 	bottom: "ip1_p"
-	top   : "concat"
+	top: "concat"
 }
 
 layer {

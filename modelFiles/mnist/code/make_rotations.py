@@ -281,7 +281,7 @@ def make_rep_dbs():
 def run_transform_experiment_repeats(numLabels=1000, deviceId=0,
 														maxDeltaRot=5, maxDeltaTrans=3, maxRot=5, 
 														numEx=None, baseLineMode=False):
-	maxReps = 5
+	maxReps = 5	
 	if numEx is None:
 		numEx = 1e+06
 	expDir = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/mnist/classify_rot'
@@ -292,20 +292,24 @@ def run_transform_experiment_repeats(numLabels=1000, deviceId=0,
 	defPrefix    = 'mnist_siamese_train_test'
 	
 	if baseLineMode:
-		expName = 'mnist_baseline_transform_classify_%s_dRot%d_dTrn%d_mxRot%d_nLbl%.0e_numEx%.0e' \
-							 % ('%s', maxDeltaRot, maxDeltaTrans, maxRot, numLabels, numEx)
+		trainExpName = 'mnist_baseline_transform_classify_%s_dRot%d_dTrn%d_mxRot%d_nLbl%.0e_numEx%.0e' \
+							 % ('train', maxDeltaRot, maxDeltaTrans, maxRot, numLabels, numEx)
+		testExpName  = 'mnist_baseline_transform_classify_%s_dRot%d_dTrn%d_mxRot%d_nLbl%.0e_numEx%.0e' \
+							 % ('test', maxDeltaRot, maxDeltaTrans, maxRot, 1e+04, 1e+04)
 		suffix = 'baseline'
 		rootDefFile = defPrefix + '_%s.prototxt' % suffix
 	else:
-		expName = 'mnist_transform_classify_%s_dRot%d_dTrn%d_mxRot%d_nLbl%.0e_numEx%.0e' \
-							 % ('%s', maxDeltaRot, maxDeltaTrans, maxRot, numLabels, numEx)
+		trainExpName = 'mnist_transform_classify_%s_dRot%d_dTrn%d_mxRot%d_nLbl%.0e_numEx%.0e' \
+							 % ('train', maxDeltaRot, maxDeltaTrans, maxRot, numLabels, numEx)
+		testExpName = 'mnist_transform_classify_%s_dRot%d_dTrn%d_mxRot%d_nLbl%.0e_numEx%.0e' \
+							 % ('test', maxDeltaRot, maxDeltaTrans, maxRot, 1e+04, 1e+04)
 		suffix = None
 		rootDefFile = defPrefix + '.prototxt'  
 	
 	for rep in range(maxReps):
 		#Get the name of lmdbs
-		trainIm, trainLb = get_lmdb_name(expName % 'train', 'train', repNum=rep)
-		testIm, testLb   = get_lmdb_name(expName % 'test', 'test', repNum=rep)
+		trainIm, trainLb = get_lmdb_name(trainExpName, 'train', repNum=rep)
+		testIm, testLb   = get_lmdb_name(testExpName, 'test', repNum=rep)
 		#Get the definition file data
 		defData          = mpu.ProtoDef(os.path.join(modelDir, rootDefFile))
 		#Edit the train lmdb
