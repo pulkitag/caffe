@@ -292,20 +292,16 @@ def run_transform_experiment_repeats(numLabels=1000, deviceId=0,
 	defPrefix    = 'mnist_siamese_train_test'
 	
 	if baseLineMode:
-		trainExpName = 'mnist_baseline_transform_classify_%s_dRot%d_dTrn%d_mxRot%d_nLbl%.0e_numEx%.0e' \
-							 % ('train', maxDeltaRot, maxDeltaTrans, maxRot, numLabels, numEx)
-		testExpName  = 'mnist_baseline_transform_classify_%s_dRot%d_dTrn%d_mxRot%d_nLbl%.0e_numEx%.0e' \
-							 % ('test', maxDeltaRot, maxDeltaTrans, maxRot, 1e+04, 1e+04)
 		suffix = 'baseline'
 		rootDefFile = defPrefix + '_%s.prototxt' % suffix
 	else:
-		trainExpName = 'mnist_transform_classify_%s_dRot%d_dTrn%d_mxRot%d_nLbl%.0e_numEx%.0e' \
-							 % ('train', maxDeltaRot, maxDeltaTrans, maxRot, numLabels, numEx)
-		testExpName = 'mnist_transform_classify_%s_dRot%d_dTrn%d_mxRot%d_nLbl%.0e_numEx%.0e' \
-							 % ('test', maxDeltaRot, maxDeltaTrans, maxRot, 1e+04, 1e+04)
 		suffix = None
 		rootDefFile = defPrefix + '.prototxt'  
-	
+	trainExpName = 'mnist_transform_classify_%s_dRot%d_dTrn%d_mxRot%d_nLbl%.0e_numEx%.0e' \
+							 % ('train', maxDeltaRot, maxDeltaTrans, maxRot, numLabels, numEx)
+	testExpName = 'mnist_transform_classify_%s_dRot%d_dTrn%d_mxRot%d_nLbl%.0e_numEx%.0e' \
+						 % ('test', maxDeltaRot, maxDeltaTrans, maxRot, 1e+04, 1e+04)
+
 	for rep in range(maxReps):
 		#Get the name of lmdbs
 		trainIm, trainLb = get_lmdb_name(trainExpName, 'train', repNum=rep)

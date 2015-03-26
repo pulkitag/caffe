@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import subprocess
 import collections as co
 import other_utils as ou
+import shutil
 
 def zf_saliency(net, imBatch, numOutputs, opName, ipName='data', stride=2, patchSz=11):
 	'''
@@ -544,7 +545,7 @@ class ProtoDef():
 			#Write Init Data
 			for l in self.initData_:
 				fid.write(l)
-			#Write Layers
+			#Write TRAIN/TEST Layers
 			for (key, data) in self.layers_['TRAIN'].iteritems():
 				fid.write('layer { \n')
 				write_proto_param(fid, data, numTabs=0)
@@ -554,6 +555,16 @@ class ProtoDef():
 					fid.write('layer { \n')
 					write_proto_param(fid, self.layers_['TEST'][key], numTabs=0)
 					fid.write('} \n')
+			#Write the layers in TEST which were not their in TRAIN
+			testKeys = self.layers_['TEST'].keys()
+			for key in testKeys:
+				if key in self.layers_['TRAIN'].keys():
+					continue
+				else:
+					fid.write('layer { \n')
+					write_proto_param(fid, self.layers_['TEST'][key], numTabs=0)
+					fid.write('} \n')
+
 					
 	def set_layer_property(self, layerName, propName, value, phase='TRAIN',  propNum=0): 
 		'''
@@ -600,6 +611,12 @@ class ExperimentFiles():
 		self.run_      = os.path.join(self.modelDir_, runFile)
 		self.paths_    = get_caffe_paths()
 		self.deviceId_ = deviceId
+		#To Prevent the results from getting lost I will copy over the log files
+		#into a result folder. 
+		self.resultDir_ = os.path.join(self.modelDir_,'result_store')
+		if not os.path.exists(self.resultDir_):
+			os.makedirs(self.resultDir_)
+		self.resultLog_ = os.path.join(self.resultDir_, logFile)
 
 	def write_run_train(self):
 		'''
@@ -627,6 +644,7 @@ class ExperimentFiles():
 			f.write('TOOLS=%s \n \n' % self.paths_['tools'])
 			f.write('GLOG_logtostderr=1 $TOOLS/caffe test')
 			f.write('\t --weights=%s' % snapshot)
+			f.write('\t --model=%s ' % self.def_)
 			f.write('\t --iterations=%d' % testIterations)
 			f.write('\t -gpu %d' % self.deviceId_)
 			f.write('\t 2>&1 | tee %s \n' % self.log_)
@@ -695,7 +713,8 @@ class ExperimentFiles():
 		'''
 		cwd = os.getcwd()
 		subprocess.check_call([('cd %s && ' % self.modelDir_) + self.run_] ,shell=True)
-		os.chdir(cwd)	
+		os.chdir(cwd)
+		shutil.copyfile(self.log_, self.resultLog_)		
 
 
 def make_experiment_repeats(modelDir, defPrefix,

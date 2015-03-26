@@ -399,3 +399,13 @@ layer {
  top: "transform_loss" 
  loss_weight: 1 
 } 
+layer { 
+ name: "classify_accuracy" 
+ type: "Accuracy" 
+ bottom: "classify_feat" 
+ bottom: "classify_label" 
+ top: "accuracy" 
+ include { 
+	  phase: TEST 
+ } 
+} 

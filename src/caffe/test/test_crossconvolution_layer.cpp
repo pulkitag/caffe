@@ -306,6 +306,34 @@ TYPED_TEST(CrossConvolutionLayerTest, TestSimpleCrossConvolution) {
 
 }
 
+TYPED_TEST(CrossConvolutionLayerTest, TestCrossConvolutionPad) {
+  typedef typename TypeParam::Dtype Dtype;
+  this->blob_bottom_vec_.push_back(this->blob_bottom_2_);
+  LayerParameter layer_param;
+  ConvolutionParameter* convolution_param =
+      layer_param.mutable_convolution_param();
+  convolution_param->set_kernel_size(3);
+  convolution_param->set_stride(2);
+  convolution_param->set_pad(1);
+  convolution_param->set_num_output(0);
+  convolution_param->set_bias_term(false);
+	shared_ptr<Layer<Dtype> > layer(
+      new CrossConvolutionLayer<Dtype>(layer_param));
+  layer->SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
+  layer->Forward(this->blob_bottom_vec_, this->blob_top_vec_);
+  // Check against reference convolution.
+  const Dtype* top_data;
+  const Dtype* ref_top_data;
+  caffe_crossconv(this->blob_bottom_, convolution_param, this->blob_bottom_2_,
+      this->MakeReferenceTop(this->blob_top_));
+  top_data = this->blob_top_->cpu_data();
+  ref_top_data = this->ref_blob_top_->cpu_data();
+  for (int i = 0; i < this->blob_top_->count(); ++i) {
+		//std::cout << i << ": " << top_data[i] << "\n";
+    EXPECT_NEAR(top_data[i], ref_top_data[i], 1e-4);
+  }
+}
+
 
 TYPED_TEST(CrossConvolutionLayerTest, TestGradient) {
   typedef typename TypeParam::Dtype Dtype;
@@ -329,7 +357,7 @@ TYPED_TEST(CrossConvolutionLayerTest, TestGradientPad) {
   ConvolutionParameter* convolution_param =
       layer_param.mutable_convolution_param();
   this->blob_bottom_vec_.push_back(this->blob_bottom_2_);
-  convolution_param->set_kernel_size(3);
+  convolution_param->set_kernel_size(5);
   convolution_param->set_stride(2);
   convolution_param->set_pad(1);
   convolution_param->set_num_output(0);

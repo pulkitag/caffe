@@ -240,8 +240,8 @@ __global__ void filtercol2im_gpu_kernel(const int n, const Dtype* data_col,
     for (int h_col = h_col_start; h_col < h_col_end; ++h_col) {
       for (int w_col = w_col_start; w_col < w_col_end; ++w_col) {
 				int offset_start = (h_col * width_col + w_col) * filter_sz + offset_ch;
-				int h_im = h_col * stride_h - pad_h;
-				int w_im = w_col * stride_w - pad_w;
+				int h_im = h_col * stride_h;
+				int w_im = w_col * stride_w;
         val += data_col[offset_start + (h - h_im) * patch_w + (w - w_im)];
       }
     }

@@ -51,22 +51,27 @@ void CrossConvolutionLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
 
 		for (int n=0; n < num_in_; n++){
 			//Load the weights from the bottom[0]
-			crossconv_getweights_gpu(bottom_data_0 + bottom[0]->offset(n), conv_layer_blobs[0]->mutable_gpu_data());
+			crossconv_getweights_gpu(bottom_data_0, conv_layer_blobs[0]->mutable_gpu_data());
 			//Copy the data of bottom[1]
-			caffe_copy(size_in_, bottom_data_1 + bottom[1]->offset(n), ipData);
+			caffe_copy(size_in_, bottom_data_1, ipData);
 			//Copy the diff from the top
- 			caffe_copy(size_out_, top_diff + top[0]->offset(n), conv_top_vec_[0]->mutable_gpu_diff()); 
+ 			caffe_copy(size_out_, top_diff, conv_top_vec_[0]->mutable_gpu_diff()); 
 			//Perform the backward pass
 			conv_layer_->Backward(conv_top_vec_, propagate_down, conv_bottom_vec_);
 			//Copy the gradients wrt to weights, i.e. bottom[0] into a buffer 
 			caffe_copy(conv_layer_blobs[0]->count(), conv_layer_blobs[0]->mutable_gpu_diff(), col_buff);
 			//Transform the buffer into diff
-			crossconv_col2im_gpu(col_buff, bottom_diff_0 + bottom[0]->offset(n));
+			crossconv_col2im_gpu(col_buff, bottom_diff_0);
 			if (propagate_down[1]){
 				//Copy the gradients for bottom[1]
-				caffe_copy(size_in_, conv_bottom_vec_[0]->mutable_gpu_diff(), bottom_diff_1 + bottom[1]->offset(n));
+				caffe_copy(size_in_, conv_bottom_vec_[0]->mutable_gpu_diff(), bottom_diff_1);
 			}
- 
+		  bottom_data_0 += bottom[0]->offset(1);
+			bottom_data_1 += bottom[1]->offset(1);
+			bottom_diff_0 += bottom[0]->offset(1);
+			bottom_diff_1 += bottom[1]->offset(1);
+			top_diff      += top[0]->offset(1);
+
 		}
 	}
 }
