@@ -397,7 +397,7 @@ layer {
  bottom: "transform_feat" 
  bottom: "transform_label" 
  top: "transform_loss" 
- loss_weight: 1 
+ loss_weight: 0 
 } 
 layer { 
  name: "classify_accuracy" 

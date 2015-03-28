@@ -1,0 +1,36 @@
+name: "Net1"
+input: "data"
+input_dim: 64
+input_dim: 3
+input_dim: 50
+input_dim: 50
+input: "label"
+input_dim: 64
+input_dim: 4
+input_dim: 1
+input_dim: 1
+layer {
+  name: "ip1"
+  type: "Inner_Product"
+  bottom: "data"
+  top: "ip1"
+  inner_product_param {
+    num_output: 64
+  }
+}
+layer {
+  name: "ip2"
+  type: "Inner_Product"
+  bottom: "ip1"
+  top: "ip2"
+  inner_product_param {
+    num_output: 8
+  }
+}
+layer {
+	name: "loss"
+	type: "EuclideanLoss"
+	top: "loss"
+	bottom: "ip2"
+	bottom: "label"
+}

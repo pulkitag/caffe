@@ -1,3 +1,7 @@
+## @package rot_utils
+#  Util functions for dealing with rotations
+#
+
 import scipy.io as sio
 import numpy as np
 from   scipy import linalg as linalg
@@ -157,8 +161,9 @@ def rotmat_to_angle_axis(rotMat):
 		v     = v/theta
 	return theta, v
 
-
-def euler2mat(z=0, y=0, x=0):
+##
+# Convert Euler matrices into a rotation matrix. 
+def euler2mat(z=0, y=0, x=0, isRadian=True):
 	''' Return matrix for rotations around z, y and x axes
 
 	Uses the z, then y, then x convention above
@@ -231,6 +236,15 @@ def euler2mat(z=0, y=0, x=0):
 	of rotation).  Therefore, the rotations are counterclockwise if
 	looking along the axis of rotation from positive to negative.
 	'''
+
+	if not isRadian:
+		z = ((np.pi)/180.) * z
+		y = ((np.pi)/180.) * y
+		x = ((np.pi)/180.) * x
+	assert z>=(-np.pi) and z < np.pi, 'Inapprorpriate z: %f' % z
+	assert y>=(-np.pi) and y < np.pi, 'Inapprorpriate y: %f' % y
+	assert x>=(-np.pi) and x < np.pi, 'Inapprorpriate x: %f' % x	
+
 	Ms = []
 	if z:
 			cosz = math.cos(z)

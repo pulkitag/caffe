@@ -21,7 +21,7 @@ layer {
  type: "Data" 
  top: "pair_data" 
  data_param { 
-	  source: "/data1/pulkitag/mnist/lmdb-store/test/images_mnist_transform_classify_test_dRot10_dTrn3_mxRot10_nLbl1e+03_numEx1e+06_rep1-lmdb" 
+	  source: "/data1/pulkitag/mnist/lmdb-store/test/images_mnist_transform_classify_test_dRot10_dTrn3_mxRot10_nLbl1e+04_numEx1e+04_rep1-lmdb" 
 	  batch_size: 100 
 	  backend: LMDB 
  } 
@@ -61,7 +61,7 @@ layer {
  type: "Data" 
  top: "pair_labels" 
  data_param { 
-	  source:  "/data1/pulkitag/mnist/lmdb-store/test/labels_mnist_transform_classify_test_dRot10_dTrn3_mxRot10_nLbl1e+03_numEx1e+06_rep1-lmdb" 
+	  source:  "/data1/pulkitag/mnist/lmdb-store/test/labels_mnist_transform_classify_test_dRot10_dTrn3_mxRot10_nLbl1e+04_numEx1e+04_rep1-lmdb" 
 	  batch_size: 100 
 	  backend: LMDB 
  } 
@@ -398,4 +398,14 @@ layer {
  bottom: "transform_label" 
  top: "transform_loss" 
  loss_weight: 1 
+} 
+layer { 
+ name: "classify_accuracy" 
+ type: "Accuracy" 
+ bottom: "classify_feat" 
+ bottom: "classify_label" 
+ top: "accuracy" 
+ include { 
+	  phase: TEST 
+ } 
 } 
