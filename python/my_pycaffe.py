@@ -469,6 +469,7 @@ def vis_square(data, padsize=1, padval=0, ax=None, titleName=None):
 	if titleName is None:
 		titleName = ''
 
+	data = data.squeeze()
 	if ax is not None:
 		ax.imshow(data)
 		ax.set_title(titleName)
