@@ -27,6 +27,7 @@ import shutil
 import matplotlib.pyplot as plt
 import my_pycaffe_io as mpio
 import time
+import myutils as mu
 
 CLASS_NAMES = ['aeroplane', 'bicycle', 'boat', 'bottle', 'bus',
 							'car', 'chair', 'diningtable', 'motorbike', 'sofa',
@@ -58,36 +59,61 @@ def get_basic_paths():
 
 ##
 # Experiment parameters
-def get_exp_prms(imSz=128, lblType='diff', cropType='resize', numSamples=20000, mnBbox=50):
+def get_exp_prms(imSz=128, lblType='diff', cropType='contPad',
+								 numSamples=20000, mnBbox=50, contPad=16,
+								 azBin=30, elBin=10):
 	'''
 	 imSz      : Size of the image to use
 	 lblType   : Type of labels to use
-						   'diff' -- difference in euler angles. 
-	 cropType  : 'resize'-- just resize the bbox to imSz
+						   'diff'    -- difference in euler angles.
+							 'uniform' -- bin the angles uniformly. 
+	 azBin     : Bin size for azimuth
+	 elBin     : Bin size for euler 
+	 cropType  : 'resize' -- just resize the bbox to imSz
+							 'contPad'-- pad the bounding box with some context.
+	 contPad   :  Amount of context padding.  
 	 numSamples:  Number of samples per class
 	 mnBbox    :  Minimum size of bbox to consider. 
 	'''
+	assert lblType  in  ['diff', 'uniform'], 'Unknown lblType encountered'
+	assert cropType in  ['resize', 'contPad'], 'Unknown cropType encountered' 
 
 	prms  = {}
-	prms['paths']      =  paths
 	prms['imSz']       =  imSz
+	#Label info
 	prms['lblType']    =  lblType
+	prms['azBin']      =  azBin
+	prms['elBin']      =  elBin
 	prms['cropType']   =  cropType
 	prms['numSamples'] =  numSamples
-	prms['mnBbox']     =  mnBbox 
-	prms['expName']    = 'pascal3d_imSz%d_lbl%s_crp%s_ns%d_mb%d' % \
-												(imSz, lblType, cropType, numSamples, mnBbox)
+	prms['mnBbox']     =  mnBbox
+	prms['contPad']    = contPad
+	if cropType in ['contPad']:
+		cropStr  = '%s%d' % (cropType, contPad)
+	else:
+		cropStr  = '%s' % (cropType)
+
+	if lblType in ['uniform']:
+		lblStr = 'uni-az%del%d' % (azBin, elBin)
+	else:
+		lblStr  = '%s' % lblType
+
+	prms['expName']    = 'pascal3d_imSz%d_lbl-%s_crp-%s_ns%.0e_mb%d' % \
+												(imSz, lblStr, cropStr, numSamples, mnBbox)
 
 	paths = get_basic_paths()
 	#Save the annotation data for the experiment. 
 	if mnBbox > 0:
-		paths['annData']    = os.path.join(paths['myData'], 'Annotation', '%s_%s_mb%d.hdf5' % mnBbox)
+		paths['annData']    = os.path.join(paths['myData'], 'Annotation',
+													 '%s_%s_mb%d.hdf5' % ('%s','%s',mnBbox))
 	else:
 		paths['annData']    = os.path.join(paths['myData'], 'Annotation', '%s_%s.hdf5') #class_setname
 		#LMDB Paths
-	paths['lmbd-im'] = '%s_images_pascal3d_imSz%d_crp%s_ns%d_mb%d-lmdb' %\
-											 ('%s', imSz, cropType, numSamples, mnBbox)
-	paths['lmdb-lb'] = '%s_labels_pascal3d_lbl%s_ns%d-lmdb' % ('%s',lblType, numSamples)
+	paths['lmdb-im'] = os.path.join(paths['lmdbDir'], 
+											'%s_images_pascal3d_imSz%d_crp-%s_ns%.0e_mb%d-lmdb' %\
+											 ('%s', imSz, cropStr, numSamples, mnBbox))
+	paths['lmdb-lb'] = os.path.join(paths['lmdbDir'], 
+											'%s_labels_pascal3d_lbl-%s_ns%.0e-lmdb' % ('%s', lblStr, numSamples))
 
 	prms['paths'] = paths
 	return prms
@@ -171,9 +197,11 @@ def ann2imnames_(annNames):
 		imNames.append(imName)
 	return imNames
 
+
 ##
 #Find the filenames for train and val
 def get_raw_ann_files(className, setName='train'):
+	assert setName in ['train','val'], 'Incorrect set name'
 	assert className in CLASS_NAMES, '% class not found' % className
 	paths    = get_basic_paths()	
 	fileName = paths['pascalSet'] % (className, setName)
@@ -191,11 +219,14 @@ def get_raw_ann_files(className, setName='train'):
 			pascalNames.append(os.path.join(pascalAnnDir, l.split()[0] + '.mat'))
 			assert os.path.exists(pascalNames[-1]), '%s doesnot exist' % pascalNames[-1]
 
-	#Imagenet Data
-	imgAnnDir = paths['rawAnnData'] % (className, 'imagenet')
-	imgNames  = [os.path.join(imgAnnDir, p) for p in os.listdir(imgAnnDir) if '.mat' in p]
+	if setName == 'train':
+		#Imagenet Data only used for training.
+		imgAnnDir = paths['rawAnnData'] % (className, 'imagenet')
+		imgNames  = [os.path.join(imgAnnDir, p) for p in os.listdir(imgAnnDir) if '.mat' in p]
+		allNames = pascalNames + imgNames
+	else:
+		allNames = pascalNames
 
-	allNames = pascalNames + imgNames
 	return allNames				
 
 
@@ -209,7 +240,7 @@ def get_class_statistics_raw(setName='train'):
 		imCount[cl] = len(fileNames) 
 		clCount = 0
 		for f in fileNames:
-			ann = read_file(f)
+			ann = read_raw_annotation_file_(f)
 			clCount += len(ann)
 		annCount[cl] = clCount
 	return imCount, annCount
@@ -229,10 +260,37 @@ def get_class_statistics_processed(setName='train'):
 
 
 ##
+# Determined a bbox is valid for the experiment or not. 
+def is_valid_bbox_(prms, bbox):
+	assert bbox.ndim ==2
+	assert bbox.shape[1]==4
+	if prms['mnBbox'] > 0:
+		xSz  = bbox[:,2] - bbox[:,0]
+		ySz  = bbox[:,3] - bbox[:,1]
+		minSz   = np.minimum(xSz.squeeze(), ySz.squeeze())
+		isValid = (minSz >= prms['mnBbox']).squeeze()
+		#maxSz = np.maximum(xSz.squeeze(), ySz.squeeze())
+		#isValid = (maxSz >= prms['mnBbox']).squeeze()
+	else:
+		isValid = np.ones((bbox.shape[0],), dtype=bool)
+	return isValid
+
+
+##
 # For a specific experiment get number of boxes per class
 def get_class_statistics_exp(prms, setName='train'):
-	
-
+	paths = prms['paths']
+	annCount = {}		
+	for cl in CLASS_NAMES:
+		annFile      = paths['procAnnData'] % (cl, setName)
+		fid          = h5.File(annFile,'r')
+		if prms['mnBbox'] > 0:
+			isValid      = is_valid_bbox_(prms, fid['bbox'][:])
+			annCount[cl] = sum(isValid)
+		else:
+			annCount[cl] = fid['bbox'].shape[0]
+		fid.close()
+	return annCount
 
 
 ##
@@ -248,8 +306,9 @@ def save_processed_annotations(forceSave=False):
 		bbox
 		imName: Path to the image. 
 	'''
-	paths    = prms['paths']
-	setNames = ['train', 'val']
+	paths    = get_basic_paths()
+	#setNames = ['train', 'val']
+	setNames = ['val']
 	dt       = h5.special_dtype(vlen=unicode)
 	for s in setNames:
 		print "Set: %s" % s
@@ -257,7 +316,7 @@ def save_processed_annotations(forceSave=False):
 		for cl in CLASS_NAMES:
 			print "Processing class: %s" % cl
 			outFile  = paths['procAnnData'] % (cl, s)
-			if os.path.exists(outFile)
+			if os.path.exists(outFile):
 				if forceSave:
 					print "Deleting old file: %s" % outFile
 					os.remove(outFile)	
@@ -265,7 +324,7 @@ def save_processed_annotations(forceSave=False):
 					print 'File: %s exists, skipping computation' % outFile
 					continue
 			annNames = get_raw_ann_files(cl, setName=s)
-			imNames  = ann2imnames(annNames)
+			imNames  = ann2imnames_(annNames)
 
 			#Prepare the file.
 			N        = annClassCounts[cl] 
@@ -293,16 +352,52 @@ def save_processed_annotations(forceSave=False):
 def save_exp_annotations(prms, forceSave=False):
 	paths    = prms['paths']
 	setNames = ['train','val']
-
+	for s in setNames:
+		print "Set: %s" % s
+		#Computed the number of example
+		annClassCounts = get_class_statistics_exp(prms, setName=s)
+		for cl in CLASS_NAMES:
+			print "Processing class: %s" % cl
+			outFile  = paths['annData'] % (cl, s)
+			inFile   = paths['procAnnData'] % (cl, s)
+			if os.path.exists(outFile):
+				if forceSave:
+					print "Deleting old file: %s" % outFile
+					os.remove(outFile)	
+				else:
+					print 'File: %s exists, skipping computation' % outFile
+					continue
+			outFid = h5.File(outFile, 'w')
+			inFid  = h5.File(inFile,  'r')
+			N      = annClassCounts[cl]
+			count  = 0
+			if prms['mnBbox'] > 0:
+				isValid = is_valid_bbox_(prms, inFid['bbox'][:])
+			else:
+				assert N == inFid['bbox'].shape[0]
+				isValid  = np.ones((N,), dtype=bool)
+	
+			for key in inFid.keys():
+				inDat    = inFid[key][:]
+				outShp   = tuple([N] + [shp for shp in inDat.shape[1:]])
+				if key in ['imgName', 'className']:
+					outType = h5.special_dtype(vlen=unicode)
+				else:
+					outType = inDat.dtype
+				outDat = outFid.create_dataset("/%s" % key, outShp, dtype=outType)
+				outDat[:] = inDat[isValid]
+			outFid.close()
+			inFid.close()  
 
 
 ##
 # Gets the indexes of examples that should be used for obtaining
 # for the pairs of images.
-def get_indexes(className, numSamples, setName):
+def get_indexes(prms, className, setName):
 	assert setName in ['train', 'val'], 'Inappropriate setName'
 	#Get annotation data. 
-	paths     = get_paths()
+	paths      = prms['paths']
+	numSamples = prms['numSamples'] 
 	annFile   = paths['annData'] % (className, setName)
 	annData   = h5.File(annFile, 'r') 
 	N         = annData['euler'].shape[0]
@@ -312,11 +407,11 @@ def get_indexes(className, numSamples, setName):
 	randState = np.random.get_state() 
 	clIdx = CLASS_NAMES.index(className)
 	seed  = 3 + (clIdx * 2) + 1 
-	np.random.seed(seed)	
+	newRandState = np.random.RandomState(seed)	
 
 	#Get the indexes
-	idx1 = np.random.choice(range(N),size=(numSamples,))
-	idx2 = np.random.choice(range(N),size=(numSamples,))
+	idx1  = newRandState.choice(range(N),size=(numSamples,))
+	idx2  = newRandState.choice(range(N),size=(numSamples,))
 
 	#Set the state back. 
 	np.random.set_state(randState)
@@ -324,49 +419,96 @@ def get_indexes(className, numSamples, setName):
 
 
 ##
+# Get labels for single images.
+def get_labels(prms, className, setName):
+	numSamples, lblType = prms['numSamples'], prms['lblType']
+	idx1, idx2 = get_indexes(prms, className, setName)
+	N = len(idx1)
+	#Get the data
+	paths     = prms['paths']
+	annData   = h5.File(paths['annData'] % (className, setName),'r')
+	euler     = annData['euler'][:]
+	lbl       = np.zeros((N,2)).astype(np.float32)
+	for (i,idx) in enumerate(idx1):
+		lbl[i] =  euler[idx]
+	return lbl
+
+
+##
 # Get the label pairs.
 def get_pair_labels(prms, className, setName):
 	numSamples, lblType = prms['numSamples'], prms['lblType']
-	idx1, idx2 = get_indexes(className, numSamples, setName)
+	idx1, idx2 = get_indexes(prms, className, setName)
 	assert len(idx1)==len(idx2), 'Example mismatch'
 	
 	#Get the data
-	paths     = get_paths()
+	paths     = prms['paths']
 	annData   = h5.File(paths['annData'] % (className, setName),'r')
 	euler     = annData['euler']
 	
 	#Get label dimension. 
 	if lblType=='diff':
-		lD = 2
-		lbType = np.float32
+		lD      = 2
+		lbClass = np.float32
+	if lblType =='uniform':
+		lD      = 2
+		lbClass = np.int32
+		azBins  = np.array(range(0,360, prms['azBin']))
+		elBins  = np.array(range(0,180, prms['elBin']))
 	else:
 		raise Exception('Label Type: %s is not recognized' % lblType)
 
 	N   =  len(idx1)
-	lbl =  np.zeros((N,lD)).astype(lbType) 
+	lbl =  np.zeros((N,lD)).astype(lbClass) 
 	count = 0
+	
 	for (i1, i2) in zip(idx1, idx2):
 		ann1 = euler[i1]
 		ann2 = euler[i2]
-		if lblType=='diff':
-			lbl[count,:] = ann2[0:lD] - ann1[0:lD]
+		az  = np.mod(ann2[0] - ann1[0], 360)
+		el  = np.mod(ann2[1] - ann1[1], 180)
+		if lblType == 'diff':
+			#The Azimuth will be converted to (-pi, pi]
+			if az > 180:
+				az = -(360 - az)
+			#The Elevation will be from [-pi/2 to pi/2]
+			if el > 90:
+				el = -(180 - el)
+			lbl[count,:] = np.array([az, el]).reshape(1,2)
+		elif lblType == 'uniform':
+			lbl[count,0] = mu.find_bin(az, azBins)
+			lbl[count,1] = mu.find_bin(el, elBins)
+		else:
+			raise Exception('Label Type: %s is not recognized' % lblType)
 		count += 1
-
 	annData.close()	
 	return lbl, idx1, idx2
 
 
 ##
 # Crop the image
-def crop_im(im, bbox, cropType, **kwargs):
+def crop_im(im, bbox, **kwargs):
 	'''
 		The bounding box is assumed to be in the form (xmin, ymin, xmax, ymax)
 		kwargs:
 			imSz: Size of the image required
 	'''
+	cropType = kwargs['cropType']
+	imSz  = kwargs['imSz']
 	x1,y1,x2,y2 = bbox
+	x1 = max(0, x1)
+	y1 = max(0, y1)
+	x2 = min(im.shape[1], x2)
+	y2 = min(im.shape[0], y2)
 	if cropType=='resize':
-		imSz  = kwargs['imSz']
+		imBox = im[y1:y2, x1:x2]
+		imBox = scm.imresize(imBox, (imSz, imSz))
+	if cropType=='contPad':
+		contPad = kwargs['contPad']
+		x1 = max(0, x1 - contPad)
+		y1 = max(0, y1 - contPad)
+		x2 = min(im.shape[1], x2 + contPad)
+		y2 = min(im.shape[0], y2 + contPad)	
 		imBox = im[y1:y2, x1:x2]
 		imBox = scm.imresize(imBox, (imSz, imSz))
 	else:
@@ -388,16 +530,17 @@ def read_image(imName, color=True):
 			im = np.tile(im.reshape(im.shape[0], im.shape[1],1),(1,1,3))
 	return im			
 
+
 ##
 # Extract the pair of images. 
 def get_pair_images(prms, className, setName):
 	numSamples, imSz, cropType = prms['numSamples'], prms['imSz'], prms['cropType']
-	idx1, idx2 = get_indexes(className, numSamples, setName)
+	idx1, idx2 = get_indexes(prms, className, setName)
 	N = len(idx1)
 	assert len(idx1)==len(idx2), 'Example mismatch'
 
 	#Get the data
-	paths     = get_paths()
+	paths     = prms['paths']
 	annData   = h5.File(paths['annData'] % (className, setName),'r')
 	imgName   = annData['imgName']
 	bbox      = annData['bbox']
@@ -412,8 +555,8 @@ def get_pair_images(prms, className, setName):
 	ims = np.zeros((N,2,imSz,imSz,3)).astype(np.uint8)
 	count = 0
 	for (i1,i2) in zip(idx1, idx2):
-		ims[count,0] = crop_im(imgDat[i1], bbox[i1], cropType, imSz=imSz)
-		ims[count,1]  = crop_im(imgDat[i2], bbox[i2], cropType, imSz=imSz)
+		ims[count,0] = crop_im(imgDat[i1], bbox[i1], **prms)
+		ims[count,1] = crop_im(imgDat[i2], bbox[i2], **prms)
 		count += 1
 
 	annData.close()		
@@ -422,53 +565,133 @@ def get_pair_images(prms, className, setName):
 
 ##
 # Visualize the data
-def vis_pairs(prms, className, setName, isShow=True, saveFile=None):
+def vis_image_labels(prms, className, setName, isShow=True, saveFile=None, isPairLabel=True):
 	ims, idxIm1, idxIm2 = get_pair_images(prms, className, setName)
-	lbls, idx1 , idx2   = get_pair_labels(prms, className, setName)
-	assert all(idx1==idxIm1) and all(idx2==idxIm2), 'Idx mismatch'
-	plt.ion()
+	if isPairLabel:
+		lbls, idx1 , idx2   = get_pair_labels(prms, className, setName)
+		assert all(idx1==idxIm1) and all(idx2==idxIm2), 'Idx mismatch'
+	else:
+		lbls = get_labels(prms, className, setName)
+	#plt.ion()
 	fig = plt.figure()
+	ax1 = plt.subplot(1,2,1)
+	ax2 = plt.subplot(1,2,2)
 	print "Visualizing pairs ..."
 	for i in range(prms['numSamples']):
-		plt.subplot(1,2,1)
-		plt.imshow(ims[i,0])
-		plt.subplot(1,2,2)
-		plt.imshow(ims[i,1])
+		print i
+		ax1.imshow(ims[i,0])
+		if isPairLabel:
+			ax2.imshow(ims[i,1])
 		plt.title('Azimuth: %f, Elevation: %f' % (lbls[i][0],lbls[i][1]))
 		plt.axis('off')
 		if isShow:
+			ax1.figure.canvas.draw()
+			plt.ion()
 			plt.show()
-			plt.draw()
-			time.sleep(3.0)
+			#plt.draw()
+			#time.sleep(3.0)
+			raw_input()
 		else:
 			plt.savefig(saveFile % i)
-
+	plt.close(fig)
 
 ##
 # Save the visualization of the data.
-def save_vis_pairs(setName='val'):
-	prms   = get_exp_prms(imSz=128, lblType='diff', cropType='resize', numSamples=100)
+def save_vis_pairs(setName='val', prms=None):
+	if prms is None:
+		prms    = get_exp_prms(imSz=128, lblType='diff', cropType='resize', numSamples=100, mnBbox=50)
 	visDir  = os.path.join(prms['paths']['visDir'], prms['expName'], setName) 
 	for cl in CLASS_NAMES:
 		clDir = os.path.join(visDir, cl)
 		if not os.path.exists(clDir):
 			os.makedirs(clDir)
 		clFile = os.path.join(clDir, 'sample_%d.jpg')
-		vis_pairs(prms, cl, setName, isShow=False, saveFile = clFile) 
+		vis_image_labels(prms, cl, setName, isShow=False, saveFile = clFile, isPairLabel=True) 
 	
 
 ##
 # Get the statistics of labels
 def get_pair_label_stats(prms, setName='val'):
-	numSamples, lblType = prms['numSamples'], prms['lblType']
 	labels = {}
 	for cl in CLASS_NAMES:	
-		labels[cl],_,_ = get_pair_labels(cl, numSamples, setName, lblType='diff')
+		labels[cl],_,_ = get_pair_labels(prms, cl, setName)
 	return labels
 
+##
+# Converts a siamese img into caffe compatible format. 
+def imSiamese2imCaffe(ims):
+	'''
+		imS: N * 2 * rows * cols * channels
+	'''
+	N,_,rows, cols, chnls = ims.shape
+	ims = ims.transpose((0,1,4,2,3))
+	ims = ims.reshape((N, 2 * chnls, rows, cols))
+	return ims 
 
-def save_image_lmdb(prms, setName='train'):
-	ims,idx1,idx2 = get_pair_images(prms, className, setName):
+
+def save_lmdb(prms, setName='train'):
+	nCl     = len(CLASS_NAMES)
+	nsPerCl = prms['numSamples']
+	N       = nsPerCl * nCl
+
+	#Set random state
+	oldRandState = np.random.get_state()
+	randState    = np.random.RandomState(7)
+	svIdx        = randState.permutation(N)
+
+	db      = mpio.DoubleDbSaver(prms['paths']['lmdb-im'] % setName, prms['paths']['lmdb-lb'] % setName)
+	batchSz = 1000		 
+	count   = 0
+
+	if prms['lblType'] in ['uniform']:
+		lblAsFloat = False
+		lbType     = np.int
+		lblSz      = 2 #2 for azimuth, el bins
+	else:
+		raise Exception('lblType not recognized')	
+
+	count = 0
+	for (icl,cl) in enumerate(CLASS_NAMES):
+		print 'Saving for class: %s' % cl
+		ims,idx1,idx2     = get_pair_images(prms, cl, setName)
+		lbs,idx1Lb,idx2Lb = get_pair_labels(prms, cl, setName)
+		assert all(idx1==idx1Lb) and all(idx2==idx2Lb), 'idx mismatch'	
+		for i in range(0,len(idx1),batchSz):
+			st = i
+			en = min(st + batchSz, len(idx1))
+			#Form the batch
+			imBatch  = imSiamese2imCaffe(ims[st:en]).astype(np.uint8)
+			lbBatch  = lbs[st:en].astype(lbType)
+			lbBatch  = lbBatch.reshape((en - st, lblSz, 1, 1)) 
+			clsLabel = icl * np.ones((en-st,)).astype(np.int)
+			batchIdx = svIdx[count : count + (en-st)]
+			#Save the batch
+			db.add_batch((imBatch, lbBatch), (clsLabel, None),
+									  imAsFloat=(False,lblAsFloat), svIdx=(batchIdx, batchIdx))
+			count = count + (en-st)
+			print count, imBatch.shape, lbBatch.shape, clsLabel.shape
+	db.close()
 
 
+def vis_lmdb(prms, setName):
+	db = mpio.DoubleDbReader((prms['paths']['lmdb-im'] % setName, prms['paths']['lmdb-lb'] % setName))
+	fig = plt.figure()
+	ax1 = plt.subplot(1,2,1)
+	ax2 = plt.subplot(1,2,2)
+	plt.ion()
+	for i in range(100):
+		imDat, rotLbl, clLbl, _ = db.read_batch_data_label(1)
+		im1 = imDat[0,0:3].transpose((1,2,0))
+		im2 = imDat[0,3:].transpose((1,2,0))
+		ax1.imshow(im1)
+		ax1.axis('off')
+		ax2.imshow(im2)
+		ax2.axis('off')
+		rotLbl = rotLbl.squeeze()
+		clLbl  = clLbl[0][0]
+		clName = CLASS_NAMES[clLbl]
+		plt.title('Cls: %s, Az: %d, Eu: %d' % (clName, rotLbl[0], rotLbl[1]))
+		plt.show()
+		raw_input()
+	db.close()	
 

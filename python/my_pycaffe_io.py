@@ -10,6 +10,7 @@ import pdb
 import os
 import lmdb
 import shutil
+import scipy.misc as scm
 
 ## 
 # Write array as a proto
@@ -31,6 +32,16 @@ def mean2siamese_mean(inFile, outFile):
 	mn = np.concatenate((mn, mn))
 	mn = mn.reshape((1, mn.shape[0], mn.shape[1], mn.shape[2]))
 	write_proto(mn, outFile)
+
+##
+# Resize the mean to a different size
+def resize_mean(inFile, outFile, imSz):
+	mn = mp.read_mean(inFile)
+	dType = mn.dtype
+	ch, rows, cols = mn.shape
+	mn = mn.transpose((1,2,0))
+	mn = scm.imresize(mn, (imSz, imSz)).transpose((2,0,1)).reshape((1,ch,imSz,imSz))
+	write_proto(mn.astype(dType), outFile)
 
 
 def ims2hdf5(im, labels, batchSz, batchPath, isColor=True, batchStNum=1, isUInt8=True, scale=None, newLabels=False):
@@ -112,6 +123,7 @@ class DbSaver:
 		else:
 			itrtr = zip(range(self.count, self.count + ims.shape[0]), ims, labels)
 
+		print svIdx.shape, ims.shape, labels.shape
 		for idx, im, lb in itrtr:
 			if not imAsFloat:
 				im    = im.astype(np.uint8)
@@ -155,21 +167,22 @@ class DbReader:
 		self.db_     = lmdb.open(dbName, readonly=True, readahead=readahead)
 		self.txn_    = self.db_.begin(write=False) 
 		self.cursor_ = self.txn_.cursor()		
-		self.itr_    = self.cursor_.iternext()
+		self.nextValid_ = True
 
 	def __del__(self):
 		self.txn_.commit()
 		self.db_.close()
 		
 	def read_next(self):
-		if self.cursor_.next():
-			key, dat = self.itr_.next()
-		else:
+		if not self.nextValid_:
 			return None, None
-		datum  = caffe.io.caffe_pb2.Datum()
-		datStr = datum.FromString(dat)
-		data   = caffe.io.datum_to_array(datStr)
-		label  = datStr.label
+		else:
+			key, dat = self.cursor_.item()
+			datum  = caffe.io.caffe_pb2.Datum()
+			datStr = datum.FromString(dat)
+			data   = caffe.io.datum_to_array(datStr)
+			label  = datStr.label
+		self.nextValid_ = self.cursor_.next()
 		return data, label
 
 	def read_batch(self, batchSz):
@@ -243,7 +256,15 @@ class DoubleDbReader:
 			dat,_ = db.read_batch(batchSz)
 			data.append(dat)
 		return data[0], data[1]
-	
+
+	def read_batch_data_label(self, batchSz):
+		data, label = [], []
+		for db in self.dbs_:
+			dat,lb = db.read_batch(batchSz)
+			data.append(dat)
+			label.append(lb)
+		return data[0], data[1], label[0], label[1]
+
 	def close(self):
 		for db in self.dbs_:
 			db.close()
