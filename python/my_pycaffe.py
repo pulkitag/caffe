@@ -219,7 +219,7 @@ def get_layer_def_files(netName='vgg', layerName='pool4'):
 	bvlcDir  = modelDir + 'bvlc_reference/'
 	if netName=='vgg':
 		defFile = modelDir + 'layer_def_files/vgg_19_%s.prototxt' % layerName
-	elif netName == 'bvlcAlexNet':
+	elif netName == 'alex_deploy':
 		defFile = bvlcDir + 'caffenet_deploy_%s.prototxt' % layerName
 	else:
 		print 'Cannont get files for networks other than VGG'

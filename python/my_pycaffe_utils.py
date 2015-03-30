@@ -186,14 +186,38 @@ def read_layerdefs_from_proto(fName):
 ##
 # Generate String for writing down a protofile for a layer. 
 def get_layerdef_for_proto(layerType, layerName, bottom, numOutput=1):
-	'''
-		Gives the text for writing a prot-def file. 
-	'''
-	defStr = []
+	layerDef = {}
+	layerDef['name'] = '"%s"' % layerName
 	if layerType == 'InnerProduct':
-		defStr = []
-		defStr.append('layer { \n')
-		defStr.append('  name: "%s" \n' % layerName)
+		layerDef['type']   = '"InnerProduct"'
+		layerDef['bottom'] = '"%s"' % bottom
+		layerDef['top']    = '"%s"' % layerName
+		layerDef['param']  = {}
+		layerDef['param']['lr_mult']    = '1'
+		layerDef['param']['decay_mult'] = '1'
+		paramDup = make_key('param', layerDef.keys())
+		layerDef[paramDup] = {}
+		layerDef[paramDup]['lr_mult']    = '2'
+		layerDef[paramDup]['decay_mult'] = '0'
+		ipKey = 'inner_product_param'
+		layerDef[ipKey]  = {}
+		layerDef[ipKey]['num_output'] = str(numOutput)
+		layerDef[ipKey]['weight_filler'] = {}
+		layerDef[ipKey]['weight_filler']['type'] = '"gaussian"'
+		layerDef[ipKey]['weight_filler']['std']  = str(0.005)
+		layerDef[ipKey]['bias_filler'] = {}
+		layerDef[ipKey]['bias_filler']['type'] = '"constant"'
+		layerDef[ipKey]['bias_filler']['value']  = str(0.)
+	elif layerType=='Silence':
+		layerDef['type']   =  '"Silence"'
+		layerDef['bottom'] =	'"%s"' % bottom
+	else:
+		raise Exception('%s layer type not found' % layerType)
+	'''	
+	defStr = []
+	defStr.append('layer { \n')
+	defStr.append('  name: "%s" \n' % layerName)
+	if layerType == 'InnerProduct':
 		defStr.append('  type: "InnerProduct" \n')
 		defStr.append('	 bottom: "%s" \n' % bottom)
 		defStr.append('  top: "%s" \n' % layerName)
@@ -216,11 +240,15 @@ def get_layerdef_for_proto(layerType, layerName, bottom, numOutput=1):
 		defStr.append('      value:  0. \n')
 		defStr.append('    } \n')
 		defStr.append('  } \n')
-		defStr.append('} \n')
+	if layerType == 'Silence'
+		defStr.append('  type: "Silence" \n')
+		defStr.append('	 bottom: "%s" \n' % bottom)
 	else:
-		print '%s layer type not found' % layerType
-
+		raise Exception('%s layer type not found' % layerType)
+	defStr.append('} \n')
 	return defStr	
+	'''
+	return layerDef
 
 
 def find_in_line(l, findType):
@@ -364,7 +392,8 @@ def plot_debug_subplots_(data, subPlotNum, label, col, fig,
 								label=label +  '_blob%d' % i, color=col)
 			plt.legend()
 
-
+##
+# Plots the weight and features values from a debug enabled log file. 
 def plot_debug_log(logFile, setName='train', plotNames=None):
 	blobOp, blobParam, blobDiff, layerNames, iterNum = process_debug_log(logFile, setName=setName)
 	if plotNames is not None:
@@ -503,10 +532,12 @@ class ProtoDef():
 	'''
 		Reads the architecture definition file and converts it into a nice, programmable format. 		
 	'''
+	ProtoPhases = ['TRAIN', 'TEST'] 
 	def __init__(self, defFile):
 		self.layers_ = {}
 		self.layers_['TRAIN'] = co.OrderedDict()	
 		self.layers_['TEST']  = co.OrderedDict()
+		self.siameseConvert_  = False  #If the def has been convered to siamese or not. 
 		fid   = open(defFile, 'r')
 		lines = fid.readlines()
 		i     = 0
@@ -537,10 +568,15 @@ class ProtoDef():
 		#The last line of iniData_ is going to be "layer {", so remove it. 
 		self.initData_ = self.initData_[:-1]
 
+	##
+	# Convert a network into a siamese network. 
+	def make_siamese():
+		print "WARNING: Only Convolution and InnerProduct layers are assumed to have params"
+		print "To be completed"	
+
+	##
+	# Write the prototxt architecture file
 	def write(self, outFile):
-		'''
-			Write to a file. 
-		'''
 		with open(outFile, 'w') as fid:
 			#Write Init Data
 			for l in self.initData_:
@@ -565,7 +601,7 @@ class ProtoDef():
 					write_proto_param(fid, self.layers_['TEST'][key], numTabs=0)
 					fid.write('} \n')
 
-					
+	##					
 	def set_layer_property(self, layerName, propName, value, phase='TRAIN',  propNum=0): 
 		'''
 			layerName: Name of the layer in which the property is present.
@@ -576,7 +612,7 @@ class ProtoDef():
 			phase    : The phase in which to make edits. 
 			propNum  : Some properties like top can duplicated mutliple times in a layer, so which one.
 		'''
-		assert phase in ['TRAIN', 'TEST'], 'phase name not recognized'
+		assert phase in ProtoDef.ProtoPhases, 'phase name not recognized'
 		assert layerName in self.layers_[phase].keys(), '%s layer not found' % layerName
 		if not isinstance(propName, list):
 			#Modify the propName to account for duplicates
@@ -591,16 +627,82 @@ class ProtoDef():
 		#Set the value
 		ou.set_recursive_key(self.layers_[phase][layerName], propName, value)
 
+	##
+	def add_layer(self, layerName, layer, phase='TRAIN'):
+		assert layerName not in self.layers_[phase].keys(), 'Layer already exists'
+		self.layers_[phase][layerName] = layer	
+
+	##
+	def del_layer(self, layerName):
+		for phase in self.layers_.keys():
+			if self.layers_[phase].has_key(layerName):
+				del self.layers_[phase][layerName]
+
+
+##
+# Class for making the solver_prototxt
+class SolverDef:
+	def __init__(self):
+		self.data_ = {}
+
+	@classmethod
+	def from_file(cls, inFile):
+		self = cls()
+		with open(inFile,'r') as f:
+			lines = f.readlines()
+			self.data_,_ = get_proto_param(lines)
+		return self
+
+	##
+	# Add a property if not there, modifies if already exists
+	def add_property(self, propName, value):
+		if propName in self.data_.keys():
+			self.set_property(propName, value)
+		else:
+			self.data_[propName] = value
+
+	##
+	# Delete Property
+	def del_property(self, propName):
+		assert propName in self.data_.keys(), '%s not found' % propName
+		del self[propName]
+
+	##
+	# Get property
+	def get_property(self, propName):
+		assert propName in self.data_.keys(), '%s not found' % propName
+		return self.data_[propName]
+
+	##
+	# Set property
+	def set_property(self, propName, value): 
+		assert propName in self.data_.keys()
+		if not isinstance(propName, list):
+			propName = [propName]
+		ou.set_recursive_key(self.data_, propName, value)
+
+	##
+  # Write the solver file
+	def write(self, outFile):
+		with open(outFile, 'w') as fid:
+			fid.write('# Autotmatically generated solver prototxt \n')
+			write_proto_param(fid, self.data_, numTabs=0)
+
 	
-class ExperimentFiles():
+class ExperimentFiles:
 	'''
 		Used for writing experiment files in an easy manner. 
 	'''
 	def __init__(self, modelDir, defFile='caffenet.prototxt', 
 							 solverFile='solver.prototxt', logFile='log.txt', 
-							 runFile='run.sh', deviceId=0):
+							 runFile='run.sh', deviceId=0, repNum=None):
 		'''
-			deviceId: The GPU ID to be used. 
+			modelDir   : The directory where model will be stored. 
+			defFile    : The relative (to modelDir) path of architecture file.
+			solverFile : The relative path of solver file
+			logFile    : Relative path of log file 
+			deviceId   : The GPU ID to be used.
+			repNum     : If none - then no repeats, otherwise use repeats. 
 		'''
 		self.modelDir_ = modelDir
 		if not os.path.exists(self.modelDir_):
@@ -611,6 +713,7 @@ class ExperimentFiles():
 		self.run_      = os.path.join(self.modelDir_, runFile)
 		self.paths_    = get_caffe_paths()
 		self.deviceId_ = deviceId
+		self.repNum_   = repNum
 		#To Prevent the results from getting lost I will copy over the log files
 		#into a result folder. 
 		self.resultDir_ = os.path.join(self.modelDir_,'result_store')
@@ -618,10 +721,9 @@ class ExperimentFiles():
 			os.makedirs(self.resultDir_)
 		self.resultLog_ = os.path.join(self.resultDir_, logFile)
 
+	##
+	# Write script for training.  
 	def write_run_train(self):
-		'''
-			Write the run file for training. 
-		'''
 		with open(self.run_,'w') as f:
 			f.write('#!/usr/bin/env sh \n \n')
 			f.write('TOOLS=%s \n \n' % self.paths_['tools'])
@@ -631,9 +733,10 @@ class ExperimentFiles():
 			f.write('\t 2>&1 | tee %s \n' % self.log_)
 		give_run_permissions_(self.run_)
 
+	##
+	# Write test script
 	def write_run_test(self, modelIterations, testIterations):
 		'''
-			Write the run file for testing.
 			modelIterations: Number of iterations of the modelFile. 
 											 The modelFile Name is automatically extracted from the solver file.
 			testIterations:  Number of iterations to use for testing.   
@@ -650,73 +753,135 @@ class ExperimentFiles():
 			f.write('\t 2>&1 | tee %s \n' % self.log_)
 		give_run_permissions_(self.run_)
 
+	##
+	# Initialiaze a solver from the file/SolverDef instance. 
+	def init_solver_from_external(self, inFile):
+		if isinstance(inFile, SolverDef):
+			self.solDef_ = inFile
+		else:
+			self.solDef_ = SolverDef.from_file(inFile)
+		self.solDef_.add_property('device_id', self.deviceId_)
+		#Modify the name of the net
+		self.solDef_.set_property('net', '"%s"' % self.def_)		
 
-	def write_solver_rep(self, inFile, repNum):
+	##
+	# Intialize the net definition from the file/ProtoDef Instance.
+	def init_netdef_from_external(self, inFile):
+		if isinstance(inFile, ProtoDef):
+			self.netDef_ = inFile
+		else: 
+			self.netDef_ = ProtoDef(inFile)
+
+	##
+	# Write a solver file for making reps.
+	def write_solver(self):
 		'''
 			Modifies the inFile to make it appropriate for running repeats
 		'''
-		outFid     = open(self.solver_, 'w')
-		deviceFlag = False
-		with open(inFile,'r') as f:
-			lines = f.readlines()
-			for (i,l) in enumerate(lines):
-				if '#' not in l:
-					if 'net:' in l:
-						l = 'net: "%s" \n' % self.def_
-					if 'snapshot_prefix:' in l:
-						assert len(l.split())==2, 'Something is wrong with %s' % l.strip()
-						snapshot = l.split()[1]
-						snapshot = snapshot[:-1] + '_rep%d"' % repNum
-						l = 'snapshot_prefix: %s \n' %  snapshot
-					if 'device_id:' in l:
-						deviceFlag = True
-						l =  'device_id: %d \n' % self.deviceId_	
-				outFid.write(l)
-		if not deviceFlag:
-			l =  'device_id: %d \n' % self.deviceId_	
-			outFid.write(l)
-		outFid.close()
+		if self.repNum_ is not None:
+			#Modify snapshot name
+			snapName   = self.solDef_.get_property('snapshot_prefix')
+			snapName   = snapName[:-1] + '_rep%d"' % repNum
+			self.solDef_.set_property('snapshot_prefix', snapName)
+		
+		self.solDef_.write(self.solver_)	
 
+	##		
 	def extract_snapshot_name(self):
 		'''
 			Find the name with which models are being stored. 
 		'''
-		with open(self.solver_,'r') as f:
-			lines = f.readlines()
-			for l in lines:
-				if 'snapshot_prefix' in l:
-					assert len(l.split())==2, 'Something is wrong with %s' % l.strip()
-					snapshot = l.split()[1]
+		snapshot   = self.solDef_.get_property('snapshot_prefix')
 		#_iter_%d.caffemodel is added by caffe while snapshotting. 
 		snapshot = snapshot[1:-1] + '_iter_%d.caffemodel'
-		print snapshot
 		return snapshot
 
-	def write_def_copy(self, inFile):
-		'''
-			Copies the inFile to make the new def file. 
-		'''
-		outFid = open(self.def_, 'w')
-		with open(inFile,'r') as f:
-			lines = f.readlines()
-			for l in lines:
-				outFid.write(l)
-		outFid.close() 	
+	##
+	def write_netdef(self):
+		self.netDef_.write(self.def_)
 
-	def write_def(self, defData):
-		assert isinstance(defData, ProtoDef), 'Wrong type'
-		defData.write(self.def_)
-
+	##
+	# Run the Experiment
 	def run(self):
-		'''
-			Run the Experiment. 
-		'''
 		cwd = os.getcwd()
 		subprocess.check_call([('cd %s && ' % self.modelDir_) + self.run_] ,shell=True)
 		os.chdir(cwd)
 		shutil.copyfile(self.log_, self.resultLog_)		
 
 
+class CaffeExperiment:
+	def __init__(self, dataExpName, caffeExpName, expDirPrefix, snapDirPrefix,
+							 defPrefix = 'caffenet', solverPrefix = 'solver',
+							 logPrefix = 'log', runPrefix = 'run', deviceId = 0,
+							 repNum = None):
+		'''
+			experiment directory: expDirPrefix  + dataExpName
+			snapshot   directory: snapDirPrefix + dataExpName
+			solver     file     : expDir + solverPrefix + caffeExpName
+			net-def    file     : expDir + defPrefix    + caffeExpName
+			log        file     : expDir + logPrefix    + caffeExpName
+			run        file     : expDir + runPrefix    + caffeExpName 
+		'''
+		#Relevant directories. 
+		self.dirs_  = {}
+		self.dirs_['exp']  = os.path.join(expDirPrefix,  dataExpName)
+		self.dirs_['snap'] = os.path.join(snapDirPrefix, dataExpName)  
+
+		#Relevant files. 
+		self.files_ = {}
+		solverFile  = solverPrefix + '_' + caffeExpName + '.prototxt'
+		logFile     = logPrefix    + '_' + caffeExpName + '.txt'
+		runFile     = runPrefix    + '_' + caffeExpName + '.sh'
+		defFile     = defPrefix    + '_' + caffeExpName + '.prototxt'
+		self.files_['solver'] = os.path.join(self.dirs_['exp'], solverFile) 
+		self.files_['netdef'] = os.path.join(self.dirs_['exp'], defFile) 
+		self.files_['log']    = os.path.join(self.dirs_['exp'], logFile)
+		self.files_['run']    = os.path.join(self.dirs_['exp'], runFile)
+
+		#snapshot
+		snapPrefix = defPrefix + '_' + caffeExpName 
+		self.files_['snap'] = os.path.join(snapDirPrefix, dataExpName,
+													snapPrefix + '_iter_%d.caffemodel')  
+		self.snapPrefix_    = '"%s"' % os.path.join(snapDirPrefix, dataExpName, snapPrefix)		
+
+		#Setup the experiment files.
+		self.expFile_ = ExperimentFiles(self.dirs_['exp'], defFile = defFile,
+											solverFile = solverFile, logFile = logFile, 
+											runFile = runFile, deviceId = deviceId,
+											repNum = repNum)
+
+	##
+	#initalize from solver file/SolverDef and netdef file/ProtoDef
+	def init_from_external(self, solverFile, netDefFile):
+		self.expFile_.init_solver_from_external(solverFile)
+		self.expFile_.init_netdef_from_external(netDefFile)	
+		#Set the correct snapshot prefix. 
+		self.expFile_.solDef_.set_property('snapshot_prefix', self.snapPrefix_)
+
+	##
+	def del_layer(self, layerName):
+		self.expFile_.netDef_.del_layer(layerName) 
+
+	## Set the property. 	
+	def set_layer_property(self, layerName, propName, value, **kwargs):
+		self.expFile_.netDef_.set_layer_property(layerName, propName, value, **kwargs)
+
+	##
+	def add_layer(self, layerName, layer, phase):
+		self.expFile_.netDef_.add_layer(layerName, layer, phase)
+
+	# Make the experiment. 
+	def make(self):
+		if not os.path.exists(self.dirs_['exp']):
+			os.makedirs(self.dirs_['exp'])
+		if not os.path.exists(self.dirs_['snap']):
+			os.makedirs(self.dirs_['snap'])
+	 
+		self.expFile_.write_netdef()
+		self.expFile_.write_solver()
+		self.expFile_.write_run_train()	
+
+ 
 def make_experiment_repeats(modelDir, defPrefix,
 									 solverPrefix='solver', repNum=0, deviceId=0, suffix=None, 
 										defData=None, testIterations=None, modelIterations=None):
@@ -762,19 +927,21 @@ def make_experiment_repeats(modelDir, defPrefix,
 			
 	#Training Phase
 	trainExp = ExperimentFiles(modelDir=repDir, defFile=repDef, solverFile=repSol,
-						 logFile=repLog, runFile=repRun, deviceId=deviceId)
-	trainExp.write_run_train()
-	trainExp.write_solver_rep(os.path.join(modelDir, solverFile), repNum)
+						 logFile=repLog, runFile=repRun, deviceId=deviceId, repNum=repNum)
+	trainExp.init_solver_from_external(os.path.join(modelDir, solverFile))
 	if defData is None:
-		trainExp.write_def_copy(os.path.join(modelDir, defFile))
+		trainExp.init_netdef_from_external(os.path.join(modelDir, defFile))
 	else:
-		trainExp.write_def(defData)
+		trainExp.init_netdef_from_external(defData)
+	trainExp.write_solver()
+	trainExp.write_netdef()
+	trainExp.write_run_train()
 	
 	#Test Phase	
 	if testIterations is not None:
 		assert modelIterations is not None	 
 		testExp      = ExperimentFiles(modelDir=repDir, defFile=repDef, solverFile=repSol,
-									 logFile=repLogTest, runFile=repRunTest, deviceId=deviceId)
+									 logFile=repLogTest, runFile=repRunTest, deviceId=deviceId, repNum=repNum)
 		testExp.write_run_test(modelIterations, testIterations)
 
 	return trainExp, testExp

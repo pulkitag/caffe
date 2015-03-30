@@ -28,6 +28,7 @@ import matplotlib.pyplot as plt
 import my_pycaffe_io as mpio
 import time
 import myutils as mu
+import my_pycaffe_utils as mpu
 
 CLASS_NAMES = ['aeroplane', 'bicycle', 'boat', 'bottle', 'bus',
 							'car', 'chair', 'diningtable', 'motorbike', 'sofa',
@@ -56,11 +57,11 @@ def get_basic_paths():
 	paths['visDir']    = os.path.join(saveDir, 'vis')
 	return paths
 
-
 ##
 # Experiment parameters
 def get_exp_prms(imSz=128, lblType='diff', cropType='contPad',
-								 numSamples=20000, mnBbox=50, contPad=16,
+								 numSamplesTrain=40000, numSamplesVal=1000,
+								 mnBbox=50, contPad=16,
 								 azBin=30, elBin=10):
 	'''
 	 imSz      : Size of the image to use
@@ -80,12 +81,14 @@ def get_exp_prms(imSz=128, lblType='diff', cropType='contPad',
 
 	prms  = {}
 	prms['imSz']       =  imSz
+	prms['numSamples']    = {}
+	prms['numSamples']['train'] = numSamplesTrain
+	prms['numSamples']['val']   = numSamplesVal
 	#Label info
 	prms['lblType']    =  lblType
 	prms['azBin']      =  azBin
 	prms['elBin']      =  elBin
 	prms['cropType']   =  cropType
-	prms['numSamples'] =  numSamples
 	prms['mnBbox']     =  mnBbox
 	prms['contPad']    = contPad
 	if cropType in ['contPad']:
@@ -99,7 +102,7 @@ def get_exp_prms(imSz=128, lblType='diff', cropType='contPad',
 		lblStr  = '%s' % lblType
 
 	prms['expName']    = 'pascal3d_imSz%d_lbl-%s_crp-%s_ns%.0e_mb%d' % \
-												(imSz, lblStr, cropStr, numSamples, mnBbox)
+												(imSz, lblStr, cropStr, numSamplesTrain, mnBbox)
 
 	paths = get_basic_paths()
 	#Save the annotation data for the experiment. 
@@ -108,13 +111,20 @@ def get_exp_prms(imSz=128, lblType='diff', cropType='contPad',
 													 '%s_%s_mb%d.hdf5' % ('%s','%s',mnBbox))
 	else:
 		paths['annData']    = os.path.join(paths['myData'], 'Annotation', '%s_%s.hdf5') #class_setname
-		#LMDB Paths
-	paths['lmdb-im'] = os.path.join(paths['lmdbDir'], 
-											'%s_images_pascal3d_imSz%d_crp-%s_ns%.0e_mb%d-lmdb' %\
-											 ('%s', imSz, cropStr, numSamples, mnBbox))
-	paths['lmdb-lb'] = os.path.join(paths['lmdbDir'], 
-											'%s_labels_pascal3d_lbl-%s_ns%.0e-lmdb' % ('%s', lblStr, numSamples))
+	#LMDB Paths
+	paths['lmdb-im']  = {}
+	paths['lmdb-lb']  = {}
+	paths['lmdb-im']['train'] = os.path.join(paths['lmdbDir'], 
+														'train_images_pascal3d_imSz%d_crp-%s_ns%.0e_mb%d-lmdb' %\
+											 			 (imSz, cropStr, numSamplesTrain, mnBbox))
+	paths['lmdb-im']['val']  = os.path.join(paths['lmdbDir'], 
+														'val_images_pascal3d_imSz%d_crp-%s_ns%.0e_mb%d-lmdb' %\
+											 			 (imSz, cropStr, numSamplesVal, mnBbox))
 
+	paths['lmdb-lb']['train'] = os.path.join(paths['lmdbDir'], 
+														'train_labels_pascal3d_lbl-%s_ns%.0e-lmdb' % (lblStr, numSamplesTrain))
+	paths['lmdb-lb']['val']   = os.path.join(paths['lmdbDir'], 
+														'val_labels_pascal3d_lbl-%s_ns%.0e-lmdb' % (lblStr, numSamplesVal))
 	prms['paths'] = paths
 	return prms
 
@@ -397,7 +407,7 @@ def get_indexes(prms, className, setName):
 	assert setName in ['train', 'val'], 'Inappropriate setName'
 	#Get annotation data. 
 	paths      = prms['paths']
-	numSamples = prms['numSamples'] 
+	numSamples = prms['numSamples'][setName] 
 	annFile   = paths['annData'] % (className, setName)
 	annData   = h5.File(annFile, 'r') 
 	N         = annData['euler'].shape[0]
@@ -421,7 +431,7 @@ def get_indexes(prms, className, setName):
 ##
 # Get labels for single images.
 def get_labels(prms, className, setName):
-	numSamples, lblType = prms['numSamples'], prms['lblType']
+	numSamples, lblType = prms['numSamples'][setName], prms['lblType']
 	idx1, idx2 = get_indexes(prms, className, setName)
 	N = len(idx1)
 	#Get the data
@@ -437,7 +447,7 @@ def get_labels(prms, className, setName):
 ##
 # Get the label pairs.
 def get_pair_labels(prms, className, setName):
-	numSamples, lblType = prms['numSamples'], prms['lblType']
+	numSamples, lblType = prms['numSamples'][setName], prms['lblType']
 	idx1, idx2 = get_indexes(prms, className, setName)
 	assert len(idx1)==len(idx2), 'Example mismatch'
 	
@@ -534,7 +544,7 @@ def read_image(imName, color=True):
 ##
 # Extract the pair of images. 
 def get_pair_images(prms, className, setName):
-	numSamples, imSz, cropType = prms['numSamples'], prms['imSz'], prms['cropType']
+	numSamples, imSz, cropType = prms['numSamples'][setName], prms['imSz'], prms['cropType']
 	idx1, idx2 = get_indexes(prms, className, setName)
 	N = len(idx1)
 	assert len(idx1)==len(idx2), 'Example mismatch'
@@ -577,7 +587,7 @@ def vis_image_labels(prms, className, setName, isShow=True, saveFile=None, isPai
 	ax1 = plt.subplot(1,2,1)
 	ax2 = plt.subplot(1,2,2)
 	print "Visualizing pairs ..."
-	for i in range(prms['numSamples']):
+	for i in range(prms['numSamples'][setName]):
 		print i
 		ax1.imshow(ims[i,0])
 		if isPairLabel:
@@ -599,7 +609,7 @@ def vis_image_labels(prms, className, setName, isShow=True, saveFile=None, isPai
 # Save the visualization of the data.
 def save_vis_pairs(setName='val', prms=None):
 	if prms is None:
-		prms    = get_exp_prms(imSz=128, lblType='diff', cropType='resize', numSamples=100, mnBbox=50)
+		prms    = get_exp_prms(imSz=128, lblType='diff', cropType='resize', numSamplesVal=100, mnBbox=50)
 	visDir  = os.path.join(prms['paths']['visDir'], prms['expName'], setName) 
 	for cl in CLASS_NAMES:
 		clDir = os.path.join(visDir, cl)
@@ -628,10 +638,11 @@ def imSiamese2imCaffe(ims):
 	ims = ims.reshape((N, 2 * chnls, rows, cols))
 	return ims 
 
-
+##
+# Make lmdbs
 def save_lmdb(prms, setName='train'):
 	nCl     = len(CLASS_NAMES)
-	nsPerCl = prms['numSamples']
+	nsPerCl = prms['numSamples'][setName]
 	N       = nsPerCl * nCl
 
 	#Set random state
@@ -639,7 +650,7 @@ def save_lmdb(prms, setName='train'):
 	randState    = np.random.RandomState(7)
 	svIdx        = randState.permutation(N)
 
-	db      = mpio.DoubleDbSaver(prms['paths']['lmdb-im'] % setName, prms['paths']['lmdb-lb'] % setName)
+	db      = mpio.DoubleDbSaver(prms['paths']['lmdb-im'][setName], prms['paths']['lmdb-lb'][setName])
 	batchSz = 1000		 
 	count   = 0
 
@@ -672,9 +683,10 @@ def save_lmdb(prms, setName='train'):
 			print count, imBatch.shape, lbBatch.shape, clsLabel.shape
 	db.close()
 
-
+##
+# Visualize the data stored in the lmdb
 def vis_lmdb(prms, setName):
-	db = mpio.DoubleDbReader((prms['paths']['lmdb-im'] % setName, prms['paths']['lmdb-lb'] % setName))
+	db = mpio.DoubleDbReader((prms['paths']['lmdb-im'][setName], prms['paths']['lmdb-lb'][setName]))
 	fig = plt.figure()
 	ax1 = plt.subplot(1,2,1)
 	ax2 = plt.subplot(1,2,2)
@@ -695,3 +707,63 @@ def vis_lmdb(prms, setName):
 		raw_input()
 	db.close()	
 
+
+##
+#
+def get_caffe_prms(isScratch=True, isClassLbl=True, concatLayer='fc6'):
+	caffePrms = {}
+	caffePrms['scratch']  = isScratch
+	caffePrms['classLbl'] = isClassLbl
+	caffePrms['concatLayer'] = concatLayer 
+	#Make the str
+	expStr = []
+	if isScratch:
+		expStr.append('scratch')
+
+	if not isClassLbl:
+		expStr.append('unsup')
+	else:
+		expStr.append('sup')
+	
+	expStr.append(concatLayer)
+	expStr = ''.join(s + '_' for s in expStr)
+	expStr = expStr[0:-1]
+	caffePrms['expStr'] = expStr
+	return caffePrms
+
+
+##
+# Make the experiment
+def make_experiment(prms, caffePrms):
+	targetExpDir   = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/pascal3d/exp/'
+	sourceExpDir   = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/pascal3d/exp/imSz128_lbl-uni-az30el10_crp-contPad16_ns4e+04_mb50'
+	sourceNetDef   = os.path.join(sourceExpDir, 'caffenet_siamese_fc6.prototxt')
+	sourceSolDef   = os.path.join(sourceExpDir, 'solver_train_fc6.prototxt')
+
+	caffeExpName = caffePrms['expStr']
+	caffeExp = mpu.CaffeExperiment(prms['expName'], caffeExpName,
+																 targetExpDir, prms['paths']['snapDir'], deviceId=1)
+
+	caffeExp.init_from_external(sourceSolDef, sourceNetDef)
+	#If no class labels are required. 
+	if not caffePrms['classLbl']:
+		caffeExp.del_layer('loss_class')
+		caffeExp.del_layer('accuracy_class')
+		caffeExp.del_layer('fc8_class')
+		caffeExp.del_layer('cl_fc7')
+		caffeExp.del_layer('cl_drop7')
+		caffeExp.del_layer('cl_relu7')
+		#Silence the class label
+		slLayer = mpu.get_layerdef_for_proto('Silence', 'silence_class_label', 'class_label')
+		caffeExp.add_layer('silence_class_label', slLayer, 'TRAIN')	
+
+	trainImLmdb = prms['paths']['lmdb-im']['train']
+	valImLmdb   = prms['paths']['lmdb-im']['val']
+	trainLbLmdb = prms['paths']['lmdb-lb']['train']
+	valLbLmdb   = prms['paths']['lmdb-lb']['val']
+	caffeExp.set_layer_property('pair_data', ['data_param','source'], '"%s"' % trainImLmdb, phase='TRAIN')
+	caffeExp.set_layer_property('label',['data_param','source'], '"%s"' % trainLbLmdb, phase='TRAIN')
+	caffeExp.set_layer_property('pair_data', ['data_param','source'], '"%s"' % valImLmdb, phase='TEST')
+	caffeExp.set_layer_property('label',['data_param','source'], '"%s"' % valLbLmdb,  phase='TEST')
+	caffeExp.make()
+	
