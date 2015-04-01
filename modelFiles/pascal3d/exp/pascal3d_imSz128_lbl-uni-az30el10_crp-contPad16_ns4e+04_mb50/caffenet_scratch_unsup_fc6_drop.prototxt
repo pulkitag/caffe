@@ -350,7 +350,16 @@ layer {
  type: "ReLU" 
  bottom: "fc6" 
  top: "fc6" 
-} 
+}
+layer { 
+ name: "fc6_drop" 
+ type: "Dropout" 
+ bottom: "fc6" 
+ top: "fc6" 
+ dropout_param { 
+	  dropout_ratio: 0.5 
+ } 
+}
 layer { 
  name: "conv1_p" 
  type: "Convolution" 
@@ -616,7 +625,16 @@ layer {
  type: "ReLU" 
  bottom: "fc6_p" 
  top: "fc6_p" 
-} 
+}
+layer { 
+ name: "fc6_drop_p" 
+ type: "Dropout" 
+ bottom: "fc6_p" 
+ top: "fc6_p" 
+ dropout_param { 
+	  dropout_ratio: 0.5 
+ } 
+}
 layer { 
  name: "concat" 
  type: "Concat" 
@@ -739,7 +757,9 @@ layer {
  loss_weight: 1 
 } 
 layer { 
- type: "Silence" 
  name: "silence_class_label" 
+ type: "Silence" 
  bottom: "class_label" 
 } 
+ 
+ 

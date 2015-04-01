@@ -6,7 +6,7 @@
  momentum: 0.9 
  weight_decay: 0.0005 
  gamma: 0.5 
- stepsize: 25000 
+ stepsize: 15000 
  lr_policy: "step" 
  display: 20 
  max_iter: 310000 

@@ -185,22 +185,22 @@ def read_layerdefs_from_proto(fName):
 
 ##
 # Generate String for writing down a protofile for a layer. 
-def get_layerdef_for_proto(layerType, layerName, bottom, numOutput=1):
-	layerDef = {}
-	layerDef['name'] = '"%s"' % layerName
+def get_layerdef_for_proto(layerType, layerName, bottom, numOutput=1, **kwargs):
+	layerDef = co.OrderedDict()
+	layerDef['name']  = '"%s"' % layerName
+	layerDef['type']  = '"%s"' % layerType
+	layerDef['bottom'] =	'"%s"' % bottom
 	if layerType == 'InnerProduct':
-		layerDef['type']   = '"InnerProduct"'
-		layerDef['bottom'] = '"%s"' % bottom
 		layerDef['top']    = '"%s"' % layerName
-		layerDef['param']  = {}
+		layerDef['param']  = co.OrderedDict()
 		layerDef['param']['lr_mult']    = '1'
 		layerDef['param']['decay_mult'] = '1'
 		paramDup = make_key('param', layerDef.keys())
-		layerDef[paramDup] = {}
+		layerDef[paramDup] = co.OrderedDict()
 		layerDef[paramDup]['lr_mult']    = '2'
 		layerDef[paramDup]['decay_mult'] = '0'
 		ipKey = 'inner_product_param'
-		layerDef[ipKey]  = {}
+		layerDef[ipKey]  = co.OrderedDict()
 		layerDef[ipKey]['num_output'] = str(numOutput)
 		layerDef[ipKey]['weight_filler'] = {}
 		layerDef[ipKey]['weight_filler']['type'] = '"gaussian"'
@@ -209,8 +209,12 @@ def get_layerdef_for_proto(layerType, layerName, bottom, numOutput=1):
 		layerDef[ipKey]['bias_filler']['type'] = '"constant"'
 		layerDef[ipKey]['bias_filler']['value']  = str(0.)
 	elif layerType=='Silence':
-		layerDef['type']   =  '"Silence"'
-		layerDef['bottom'] =	'"%s"' % bottom
+		#Nothing to be done
+		a = True
+	elif layerType=='Dropout':
+		layerDef['top']    = '"%s"' % kwargs['top']
+		layerDef['dropout_param'] = co.OrderedDict()
+		layerDef['dropout_param']['dropout_ratio'] = str(kwargs['dropout_ratio'])	
 	else:
 		raise Exception('%s layer type not found' % layerType)
 	'''	
@@ -635,8 +639,11 @@ class ProtoDef():
 	##
 	def del_layer(self, layerName):
 		for phase in self.layers_.keys():
-			if self.layers_[phase].has_key(layerName):
-				del self.layers_[phase][layerName]
+			if not isinstance(layerName, list):
+				layerName = [layerName]
+			for l in layerName:
+				if self.layers_[phase].has_key(l):
+					del self.layers_[phase][l]
 
 
 ##

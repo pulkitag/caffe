@@ -25,3 +25,34 @@ def set_recursive_key(data, keyNames, val):
 		dat[keyNames[-1]] = val
 	else:
 		raise Exception('Keys not present')
+
+##
+# Crop the image
+def crop_im(im, bbox, **kwargs):
+	'''
+		The bounding box is assumed to be in the form (xmin, ymin, xmax, ymax)
+		kwargs:
+			imSz: Size of the image required
+	'''
+	cropType = kwargs['cropType']
+	imSz  = kwargs['imSz']
+	x1,y1,x2,y2 = bbox
+	x1 = max(0, x1)
+	y1 = max(0, y1)
+	x2 = min(im.shape[1], x2)
+	y2 = min(im.shape[0], y2)
+	if cropType=='resize':
+		imBox = im[y1:y2, x1:x2]
+		imBox = scm.imresize(imBox, (imSz, imSz))
+	if cropType=='contPad':
+		contPad = kwargs['contPad']
+		x1 = max(0, x1 - contPad)
+		y1 = max(0, y1 - contPad)
+		x2 = min(im.shape[1], x2 + contPad)
+		y2 = min(im.shape[0], y2 + contPad)	
+		imBox = im[y1:y2, x1:x2]
+		imBox = scm.imresize(imBox, (imSz, imSz))
+	else:
+		raise Exception('Unrecognized crop type')
+
+	return imBox		

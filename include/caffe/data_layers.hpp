@@ -288,6 +288,77 @@ class MemoryDataLayer : public BaseDataLayer<Dtype> {
 };
 
 /**
+ * @brief Helper for the Generic Window Data Layer
+ *
+ * TODO(dox): thorough documentation for Forward and proto params.
+ */
+template <typename Dtype>
+class GenericWindowDataLayer : public BasePrefetchingDataLayer<Dtype> {
+ public:
+  explicit GenericWindowDataLayer(const LayerParameter& param)
+      : BasePrefetchingDataLayer<Dtype>(param) {}
+  virtual ~GenericDataLayer();
+  virtual void DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
+
+  virtual inline const char* type() const { return "WindowData"; }
+  virtual inline int ExactNumBottomBlobs() const { return 0; }
+  virtual inline int ExactNumTopBlobs() const { return 2; }
+
+ protected:
+  virtual unsigned int PrefetchRand();
+  virtual void InternalThreadEntry();
+
+  shared_ptr<Caffe::RNG> prefetch_rng_;
+  vector<Caffe::CropDataLayer> crop_data_layers_;
+  Blob<Dtype> labels_;
+	int num_examples_, img_group_size_, label_size_; 
+	int batch_size_;
+	int read_count_;
+};
+
+
+/**
+ * @brief Helper for the Generic Window Data Layer
+ *
+ * TODO(dox): thorough documentation for Forward and proto params.
+ */
+template <typename Dtype>
+class CropDataLayer : public BasePrefetchingDataLayer<Dtype> {
+	friend class GenericWindowDataLayer;
+ public:
+  explicit CropDataLayer(const LayerParameter& param)
+      : BasePrefetchingDataLayer<Dtype>(param) {}
+  virtual ~CropDataLayer();
+  virtual void DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
+
+  virtual inline const char* type() const { return "WindowData"; }
+  virtual inline int ExactNumBottomBlobs() const { return 0; }
+  virtual inline int ExactNumTopBlobs() const { return 2; }
+
+ protected:
+  virtual unsigned int PrefetchRand();
+  virtual void InternalThreadEntry();
+
+  shared_ptr<Caffe::RNG> prefetch_rng_;
+	//Contains a list of images. 
+  vector<std::string> image_database_;
+  enum WindowField {X1, Y1, X2, Y2};
+  vector<vector<float> > windows_;
+  Blob<Dtype> data_mean_;
+  vector<Dtype> mean_values_;
+  bool has_mean_file_;
+  bool has_mean_values_;
+  bool cache_images_;
+	//If the images are cached then store them here. 
+  vector<Datum> image_database_cache_;
+	//The number of images that have been read. 
+	int read_count_;
+};
+
+
+/**
  * @brief Provides data to the Net from windows of images files, specified
  *        by a window data file.
  *

@@ -29,6 +29,7 @@ import my_pycaffe_io as mpio
 import time
 import myutils as mu
 import my_pycaffe_utils as mpu
+import other_utils as ou
 
 CLASS_NAMES = ['aeroplane', 'bicycle', 'boat', 'bottle', 'bus',
 							'car', 'chair', 'diningtable', 'motorbike', 'sofa',
@@ -125,6 +126,9 @@ def get_exp_prms(imSz=128, lblType='diff', cropType='contPad',
 														'train_labels_pascal3d_lbl-%s_ns%.0e-lmdb' % (lblStr, numSamplesTrain))
 	paths['lmdb-lb']['val']   = os.path.join(paths['lmdbDir'], 
 														'val_labels_pascal3d_lbl-%s_ns%.0e-lmdb' % (lblStr, numSamplesVal))
+
+	paths['windowFile'] = os.path.join(paths['myData'], 'window_file_%s.txt')
+
 	prms['paths'] = paths
 	return prms
 
@@ -269,6 +273,7 @@ def get_class_statistics_processed(setName='train'):
 	return annCount
 
 
+
 ##
 # Determined a bbox is valid for the experiment or not. 
 def is_valid_bbox_(prms, bbox):
@@ -399,6 +404,26 @@ def save_exp_annotations(prms, forceSave=False):
 			outFid.close()
 			inFid.close()  
 
+##
+# Print Annotation data into a file.
+def save_window_file(prms, setName='train'): 
+	paths   = prms['paths']
+	outFile = paths['windowFile'] % setName
+	fid     = open(outFile, 'w')
+	lf      = '%s %f %f %f %f %f %f %d \n'
+	for clIdx,cl in enumerate(CLASS_NAMES):
+		annData   = h5.File(paths['annData'] % (cl, setName),'r')
+		imgName   = annData['imgName']
+		bbox      = annData['bbox']
+		euler     = annData['euler']
+		#pdb.set_trace()
+		for i in range(bbox.shape[0]):
+			l = lf % (imgName[i], bbox[i][0], bbox[i][1], bbox[i][2], bbox[i][3],
+								 euler[i][0], euler[i][1], clIdx)	
+			fid.write(l)
+		annData.close()
+	fid.close()
+
 
 ##
 # Gets the indexes of examples that should be used for obtaining
@@ -494,39 +519,6 @@ def get_pair_labels(prms, className, setName):
 	annData.close()	
 	return lbl, idx1, idx2
 
-
-##
-# Crop the image
-def crop_im(im, bbox, **kwargs):
-	'''
-		The bounding box is assumed to be in the form (xmin, ymin, xmax, ymax)
-		kwargs:
-			imSz: Size of the image required
-	'''
-	cropType = kwargs['cropType']
-	imSz  = kwargs['imSz']
-	x1,y1,x2,y2 = bbox
-	x1 = max(0, x1)
-	y1 = max(0, y1)
-	x2 = min(im.shape[1], x2)
-	y2 = min(im.shape[0], y2)
-	if cropType=='resize':
-		imBox = im[y1:y2, x1:x2]
-		imBox = scm.imresize(imBox, (imSz, imSz))
-	if cropType=='contPad':
-		contPad = kwargs['contPad']
-		x1 = max(0, x1 - contPad)
-		y1 = max(0, y1 - contPad)
-		x2 = min(im.shape[1], x2 + contPad)
-		y2 = min(im.shape[0], y2 + contPad)	
-		imBox = im[y1:y2, x1:x2]
-		imBox = scm.imresize(imBox, (imSz, imSz))
-	else:
-		raise Exception('Unrecognized crop type')
-
-	return imBox		
-
-
 ##
 # Read the image
 def read_image(imName, color=True):
@@ -565,8 +557,8 @@ def get_pair_images(prms, className, setName):
 	ims = np.zeros((N,2,imSz,imSz,3)).astype(np.uint8)
 	count = 0
 	for (i1,i2) in zip(idx1, idx2):
-		ims[count,0] = crop_im(imgDat[i1], bbox[i1], **prms)
-		ims[count,1] = crop_im(imgDat[i2], bbox[i2], **prms)
+		ims[count,0] = ou.crop_im(imgDat[i1], bbox[i1], **prms)
+		ims[count,1] = ou.crop_im(imgDat[i2], bbox[i2], **prms)
 		count += 1
 
 	annData.close()		
@@ -710,11 +702,20 @@ def vis_lmdb(prms, setName):
 
 ##
 #
-def get_caffe_prms(isScratch=True, isClassLbl=True, concatLayer='fc6'):
+def get_caffe_prms(isScratch=True, isClassLbl=True, concatLayer='fc6',
+									 noRot=False, concatDrop=False):
+	'''
+		concatDrop: Whether to have dropouts on the Concat Layers or not'
+	'''
 	caffePrms = {}
 	caffePrms['scratch']  = isScratch
 	caffePrms['classLbl'] = isClassLbl
-	caffePrms['concatLayer'] = concatLayer 
+	caffePrms['concatLayer'] = concatLayer
+	caffePrms['noRot']       = noRot
+	caffePrms['concatDrop']  = concatDrop
+
+	assert not noRot or isClassLbl, "There is no loss"
+ 
 	#Make the str
 	expStr = []
 	if isScratch:
@@ -724,8 +725,14 @@ def get_caffe_prms(isScratch=True, isClassLbl=True, concatLayer='fc6'):
 		expStr.append('unsup')
 	else:
 		expStr.append('sup')
+
+	if noRot:
+		expStr.append('noRot')
 	
 	expStr.append(concatLayer)
+	if concatDrop:
+		expStr.append('drop') 
+
 	expStr = ''.join(s + '_' for s in expStr)
 	expStr = expStr[0:-1]
 	caffePrms['expStr'] = expStr
@@ -734,7 +741,7 @@ def get_caffe_prms(isScratch=True, isClassLbl=True, concatLayer='fc6'):
 
 ##
 # Make the experiment
-def make_experiment(prms, caffePrms):
+def make_experiment(prms, caffePrms, deviceId=1):
 	targetExpDir   = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/pascal3d/exp/'
 	sourceExpDir   = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/pascal3d/exp/imSz128_lbl-uni-az30el10_crp-contPad16_ns4e+04_mb50'
 	sourceNetDef   = os.path.join(sourceExpDir, 'caffenet_siamese_fc6.prototxt')
@@ -742,7 +749,7 @@ def make_experiment(prms, caffePrms):
 
 	caffeExpName = caffePrms['expStr']
 	caffeExp = mpu.CaffeExperiment(prms['expName'], caffeExpName,
-																 targetExpDir, prms['paths']['snapDir'], deviceId=1)
+																 targetExpDir, prms['paths']['snapDir'], deviceId=deviceId)
 
 	caffeExp.init_from_external(sourceSolDef, sourceNetDef)
 	#If no class labels are required. 
@@ -756,14 +763,46 @@ def make_experiment(prms, caffePrms):
 		#Silence the class label
 		slLayer = mpu.get_layerdef_for_proto('Silence', 'silence_class_label', 'class_label')
 		caffeExp.add_layer('silence_class_label', slLayer, 'TRAIN')	
+	
+	if caffePrms['noRot']:
+		caffeExp.del_layer('label')
+		caffeExp.del_layer('slice_label_pair')
+		caffeExp.del_layer(['loss_azimuth', 'loss_elevation'])
+		caffeExp.del_layer(['accuracy_azimuth', 'accuracy_elevation'])
+		caffeExp.del_layer(['fc8_azimuth', 'fc8_elevation'])
+		caffeExp.del_layer(['conv1_p','conv2_p','conv3_p','conv4_p','conv5_p','fc6_p'])
+		caffeExp.del_layer(['relu1_p','relu2_p','relu3_p','relu4_p','relu5_p','relu6_p'])
+		caffeExp.del_layer(['pool1_p','pool2_p','pool5_p'])
+		caffeExp.del_layer(['norm1_p', 'norm2_p'])
+		caffeExp.del_layer(['rot_fc7', 'rot_relu7'])
+		caffeExp.del_layer(['concat'])
+		#Silence the second image
+		slLayer = mpu.get_layerdef_for_proto('Silence', 'silence_data_p', 'data_p')
+		caffeExp.add_layer('silence_data_p', slLayer, 'TRAIN')	
+		#Add a dropout layer for layer fc6
+		dropArgs = {'dropout_ratio': 0.5, 'top': 'fc6'}
+		dropLayer = mpu.get_layerdef_for_proto('Dropout', 'fc6_drop', 'fc6', **dropArgs)	
+		caffeExp.add_layer('fc6_drop', dropLayer, 'TRAIN')
+
+	#If we have rotation information and concat layer dropout is on
+	if not caffePrms['noRot'] and caffePrms['concatDrop']:
+		dropArgs = {'dropout_ratio': 0.5, 'top': 'fc6'}
+		dropLayer = mpu.get_layerdef_for_proto('Dropout', 'fc6_drop', 'fc6', **dropArgs)	
+		caffeExp.add_layer('fc6_drop', dropLayer, 'TRAIN')
+		dropArgs = {'dropout_ratio': 0.5, 'top': 'fc6_p'}
+		dropLayer = mpu.get_layerdef_for_proto('Dropout', 'fc6_drop_p', 'fc6_p', **dropArgs)	
+		caffeExp.add_layer('fc6_drop_p', dropLayer, 'TRAIN')
 
 	trainImLmdb = prms['paths']['lmdb-im']['train']
 	valImLmdb   = prms['paths']['lmdb-im']['val']
 	trainLbLmdb = prms['paths']['lmdb-lb']['train']
 	valLbLmdb   = prms['paths']['lmdb-lb']['val']
 	caffeExp.set_layer_property('pair_data', ['data_param','source'], '"%s"' % trainImLmdb, phase='TRAIN')
-	caffeExp.set_layer_property('label',['data_param','source'], '"%s"' % trainLbLmdb, phase='TRAIN')
+	caffeExp.set_layer_property('pair_data', ['data_param','batch_size'], 256, phase='TRAIN')
 	caffeExp.set_layer_property('pair_data', ['data_param','source'], '"%s"' % valImLmdb, phase='TEST')
-	caffeExp.set_layer_property('label',['data_param','source'], '"%s"' % valLbLmdb,  phase='TEST')
+	if not caffePrms['noRot']:
+		caffeExp.set_layer_property('label',['data_param','source'], '"%s"' % trainLbLmdb, phase='TRAIN')
+		caffeExp.set_layer_property('label',['data_param','batch_size'], 256, phase='TRAIN')
+		caffeExp.set_layer_property('label',['data_param','source'], '"%s"' % valLbLmdb,  phase='TEST')
 	caffeExp.make()
 	

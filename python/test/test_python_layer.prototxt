@@ -1,0 +1,9 @@
+layer{
+	type: "Python"
+	name: "data"
+	top:  "data"
+	python_param{
+		module: "python_layers"
+		layer: "TestPythonLayer"
+	}
+}

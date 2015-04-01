@@ -450,6 +450,26 @@ class MyNet:
 		vis_square(dat.transpose(0,2,3,1), ax=ax, titleName=titleName)	
 
 
+class MySolver:
+	def __init__(self):
+		self.solver_ = None
+
+	@classmethod
+	def from_file(cls, solFile):
+		self = cls()
+		self.solver_     = caffe.SGDSolver(solFile)
+		self.net_        = self.solver_.net
+		self.layerNames_ = [l for l in self.net_._layer_names]
+		return self	
+
+	##
+	# Return pointer to layer
+	def get_layer_pointer(self, layerName):
+		assert layerName in self.layerNames_, 'layer not found'
+		index = self.layerNames_.index(layerName)
+		return self.net_.layers[index]
+
+
 def vis_square(data, padsize=1, padval=0, ax=None, titleName=None):
 	'''
 		data is numFitlers * height * width or numFilters * height * width * channels
