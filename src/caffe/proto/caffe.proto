@@ -509,10 +509,10 @@ message GenericWindowDataParameter {
   // data mean, if provided. Note that the mean subtraction is always carried
   // out before scaling.
   optional float scale = 2 [default = 1];
-  optional string mean_file = 3;
   // Specify the batch size.
   optional uint32 batch_size = 4;
-  // Specify if we would like to randomly crop an image.
+  // Specify the size to which the window needs to be cropped.
+	// Note the semantics of crop_size are different from that of the data_transformer.
   optional uint32 crop_size = 5 [default = 0];
   // Specify if we want to randomly mirror data.
   optional bool mirror = 6 [default = false];

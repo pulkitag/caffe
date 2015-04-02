@@ -1,10 +1,31 @@
-layer{
+layer {
 	name: "window_data"
 	top:  "data"
-	type: "GenericWindowDataLayer"
-	generic_window_data_param{
+	top:  "label"
+	type: "GenericWindowData"
+	generic_window_data_param {
 		source: "/data1/pulkitag/data_sets/pascal_3d/my/window_file_val.txt"
-		root_folder: "/data1/pulkitag/pascal_3d/PASCAL3D+_release1.1/Images/"
+		root_folder: "/data1/pulkitag/data_sets/pascal_3d/PASCAL3D+_release1.1/Images/"
+		crop_size : 227
+		batch_size: 5
+	}
+	include {
+		phase: TRAIN
+	}
+}
+layer {
+	name: "window_data"
+	top:  "data"
+	top:  "label"
+	type: "GenericWindowData"
+	generic_window_data_param {
+		source: "/data1/pulkitag/data_sets/pascal_3d/my/window_file_val.txt"
+		root_folder: "/data1/pulkitag/data_sets/pascal_3d/PASCAL3D+_release1.1/Images/"
+		crop_size : 227
+		batch_size: 5
+	}
+	include {
+		phase: TEST
 	}
 }
 layer {
@@ -13,10 +34,16 @@ layer {
 	bottom: "data"
 	top   : "data_1"
 	top   : "data_2"
-	slice_param{
+	slice_param {
 		slice_dim: 1
-		slice_point: 1
+		slice_point: 3
 	}
+}
+layer {
+	name: "silence"
+	type: "Silence"
+	bottom: "data_1"
+	bottom: "data_2"
 }
 
 

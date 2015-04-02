@@ -56,16 +56,7 @@ void CropDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
   string root_folder = this->layer_param_.generic_window_data_param().root_folder();
 
 
-	//If randomization in the data is required.  
-  const bool prefetch_needs_rand =
-      this->transform_param_.mirror() ||
-      this->transform_param_.crop_size();
-  if (prefetch_needs_rand) {
-    const unsigned int prefetch_rng_seed = caffe_rng_rand();
-    prefetch_rng_.reset(new Caffe::RNG(prefetch_rng_seed));
-  } else {
-    prefetch_rng_.reset();
-  }
+	prefetch_rng_.reset();
 
 	LOG(INFO) << "Amount of context padding: "
       << this->layer_param_.generic_window_data_param().context_pad();
@@ -73,7 +64,7 @@ void CropDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
       << this->layer_param_.generic_window_data_param().crop_mode();
 
   // image
-  const int crop_size = this->transform_param_.crop_size();
+  const int crop_size = this->layer_param_.generic_window_data_param().crop_size();
   CHECK_GT(crop_size, 0);
   const int batch_size = this->layer_param_.generic_window_data_param().batch_size();
   const int channels = top[0]->channels();
@@ -81,6 +72,7 @@ void CropDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
   LOG(INFO) << "output data size: " << top[0]->num() << ","
       << top[0]->channels() << "," << top[0]->height() << ","
       << top[0]->width();
+
   // data mean
   has_mean_file_ = this->transform_param_.has_mean_file();
   has_mean_values_ = this->transform_param_.mean_value_size() > 0;
@@ -92,6 +84,7 @@ void CropDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
     ReadProtoFromBinaryFileOrDie(mean_file.c_str(), &blob_proto);
     data_mean_.FromProto(blob_proto);
   }
+	LOG(INFO) << "Pass1";
   if (has_mean_values_) {
     CHECK(has_mean_file_ == false) <<
       "Cannot specify mean_file and mean_value at the same time";
@@ -107,6 +100,10 @@ void CropDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
       }
     }
   }
+	
+	//Initialize read_count_
+	read_count_ = 0;
+	LOG(INFO) << "CROP-DATA exiting setup";
 }
 
 template <typename Dtype>
@@ -131,8 +128,10 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
   const Dtype scale     = this->layer_param_.generic_window_data_param().scale();
   const int batch_size  = this->layer_param_.generic_window_data_param().batch_size();
   const int context_pad = this->layer_param_.generic_window_data_param().context_pad();
-  const int crop_size   = this->transform_param_.crop_size();
-  const bool mirror     = this->transform_param_.mirror();
+  const int crop_size   = this->layer_param_.generic_window_data_param().crop_size();
+  const bool mirror     = this->layer_param_.generic_window_data_param().mirror();
+  //const int crop_size   = this->transform_param_.crop_size();
+  //const bool mirror     = this->transform_param_.mirror();
   Dtype* mean     = NULL;
   int mean_off    = 0;
   int mean_width  = 0;
@@ -156,6 +155,7 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
 	for (int dummy = 0; dummy < num_samples; ++dummy) {
 		// sample a window
 		timer.Start();
+		LOG(INFO) << "Size of windows: " <<  windows_.size();
 		vector<float> window = windows_[read_count_];
 
 		bool do_mirror = mirror && PrefetchRand() % 2;

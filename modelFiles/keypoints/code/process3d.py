@@ -155,7 +155,7 @@ def read_field_(data, key):
 	elif key in ['class']:
 		arr = ''.join(unichr(c) for c in data[:].squeeze())
 	elif key in ['bbox']:	
-		arr = data[:].squeeze()
+		arr = data[:].squeeze() - 1  #-1 to convert to python format from matlab format. 
 	else:
 		raise Exception('Unrecognized field %s' % key)
 	return arr
@@ -415,8 +415,14 @@ def write_window_image_line_(fid, imgName, imgSz, bbox):
 		imgSz: channels * height * width
 		bbox : x1, y1, x2, y2
 	'''
-	fid.write('%s\t %d\t %d\t %d\t %d\t %d\t %d\t %d\n' % (imgName, 
-						imgSz[0], imgSz[1], imgSz[2], bbox[0], bbox[1], bbox[2], bbox[3]))
+	ch, h, w = imgSz
+	x1,y1,x2,y2 = bbox
+	x1  = max(0, x1)
+	y1  = max(0, y1)
+	x2  = min(x2, w-1)
+	y2  = min(y2, h-1)
+	fid.write('%s %d %d %d %d %d %d %d\n' % (imgName, 
+						ch, h, w, x1, y1, x2, y2))
 
 ##
 # Print Annotation data into a file.
@@ -438,12 +444,12 @@ def save_window_file(prms, setName='train'):
 		imgSz     = annData['imgSz']
 		clCount = 0
 		for (i1,i2) in zip(idx1, idx2):
-			fid.write('#\t %d\n' % count)
+			fid.write('# %d\n' % count)
 			imName1 = os.path.join(os.path.dirname(imgName[i1]).split('/')[-1], os.path.basename(imgName[i1]))
 			imName2 = os.path.join(os.path.dirname(imgName[i2]).split('/')[-1], os.path.basename(imgName[i2]))
 			write_window_image_line_(fid, imName1, imgSz[i1], bbox[i1]) 
 			write_window_image_line_(fid, imName2, imgSz[i2], bbox[i2]) 
-			fid.write('%f\t %f\t %d\n' % (lbls[clCount][0], lbls[clCount][1], clIdx))
+			fid.write('%f %f %d\n' % (lbls[clCount][0], lbls[clCount][1], clIdx))
 			clCount += 1
 			count += 1
 		annData.close()

@@ -307,7 +307,7 @@ class GenericWindowDataLayer : public BasePrefetchingDataLayer<Dtype> {
 
   virtual inline const char* type() const { return "GenericWindowData"; }
   virtual inline int ExactNumBottomBlobs() const { return 0; }
-  virtual inline int MinTopBlobs() const { return 1; }
+  virtual inline int MinTopBlobs() const { return 2; }
 
  protected:
   virtual unsigned int PrefetchRand();
