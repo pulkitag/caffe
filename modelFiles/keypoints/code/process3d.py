@@ -322,8 +322,8 @@ def save_processed_annotations(forceSave=False):
 		imName: Path to the image. 
 	'''
 	paths    = get_basic_paths()
-	#setNames = ['train', 'val']
-	setNames = ['val']
+	setNames = ['train', 'val']
+	#setNames = ['val']
 	dt       = h5.special_dtype(vlen=unicode)
 	for s in setNames:
 		print "Set: %s" % s
@@ -348,16 +348,20 @@ def save_processed_annotations(forceSave=False):
 			dist     = outFid.create_dataset("/distance", (N, 1), dtype='f')
 			bbox     = outFid.create_dataset("/bbox", (N,4), dtype='f')
 			imgName  = outFid.create_dataset("/imgName", (N,), dt)
-			clsName  = outFid.create_dataset("/className", (N,), dt) 
+			clsName  = outFid.create_dataset("/className", (N,), dt)
+			imgSz    = outFid.create_dataset("/imgSz", (N,3), dtype='f') 
 			count = 0
 			for (f, i) in zip(annNames, imNames):
 				annDat = read_raw_annotation_file_(f)
+				im     = read_image(i, color=True)
+				h,w,ch = im.shape
 				for dat in annDat:
 					euler[count,:] = dat['viewpoint'][0:2]
 					dist[count]    = dat['viewpoint'][2]
 					bbox[count,:]  = dat['bbox']	
 					imgName[count] = i
 					clsName[count] = cl
+					imgSz[count,:]   = np.array([ch,h,w]).reshape(1,3)
 					count += 1	
 			outFid.close()
 
@@ -405,22 +409,43 @@ def save_exp_annotations(prms, forceSave=False):
 			inFid.close()  
 
 ##
+# Helper function for writing the images for the WindowFile
+def write_window_image_line_(fid, imgName, imgSz, bbox):
+	'''
+		imgSz: channels * height * width
+		bbox : x1, y1, x2, y2
+	'''
+	fid.write('%s\t %d\t %d\t %d\t %d\t %d\t %d\t %d\n' % (imgName, 
+						imgSz[0], imgSz[1], imgSz[2], bbox[0], bbox[1], bbox[2], bbox[3]))
+
+##
 # Print Annotation data into a file.
 def save_window_file(prms, setName='train'): 
 	paths   = prms['paths']
 	outFile = paths['windowFile'] % setName
 	fid     = open(outFile, 'w')
-	lf      = '%s %f %f %f %f %f %f %d \n'
+	fid.write('# GenericDataLayer\n')
+	fid.write('%d\n' % (len(CLASS_NAMES) * prms['numSamples'][setName])) #Num Examples. 
+	fid.write('%d\n' % 2); #Num Images per Example. 
+	fid.write('%d\n' % 3); #Num	Labels
+	count   = 0
 	for clIdx,cl in enumerate(CLASS_NAMES):
+		#ims, idxIm1, idxIm2 = get_pair_images(prms, cl, setName)
+		lbls, idx1 , idx2   = get_pair_labels(prms, cl, setName)
 		annData   = h5.File(paths['annData'] % (cl, setName),'r')
 		imgName   = annData['imgName']
 		bbox      = annData['bbox']
-		euler     = annData['euler']
-		#pdb.set_trace()
-		for i in range(bbox.shape[0]):
-			l = lf % (imgName[i], bbox[i][0], bbox[i][1], bbox[i][2], bbox[i][3],
-								 euler[i][0], euler[i][1], clIdx)	
-			fid.write(l)
+		imgSz     = annData['imgSz']
+		clCount = 0
+		for (i1,i2) in zip(idx1, idx2):
+			fid.write('#\t %d\n' % count)
+			imName1 = os.path.join(os.path.dirname(imgName[i1]).split('/')[-1], os.path.basename(imgName[i1]))
+			imName2 = os.path.join(os.path.dirname(imgName[i2]).split('/')[-1], os.path.basename(imgName[i2]))
+			write_window_image_line_(fid, imName1, imgSz[i1], bbox[i1]) 
+			write_window_image_line_(fid, imName2, imgSz[i2], bbox[i2]) 
+			fid.write('%f\t %f\t %d\n' % (lbls[clCount][0], lbls[clCount][1], clIdx))
+			clCount += 1
+			count += 1
 		annData.close()
 	fid.close()
 

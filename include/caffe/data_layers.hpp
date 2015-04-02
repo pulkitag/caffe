@@ -287,6 +287,10 @@ class MemoryDataLayer : public BaseDataLayer<Dtype> {
   bool has_new_data_;
 };
 
+
+template <typename Dtype>
+class CropDataLayer;
+
 /**
  * @brief Helper for the Generic Window Data Layer
  *
@@ -297,35 +301,42 @@ class GenericWindowDataLayer : public BasePrefetchingDataLayer<Dtype> {
  public:
   explicit GenericWindowDataLayer(const LayerParameter& param)
       : BasePrefetchingDataLayer<Dtype>(param) {}
-  virtual ~GenericDataLayer();
+  virtual ~GenericWindowDataLayer();
   virtual void DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
 
-  virtual inline const char* type() const { return "WindowData"; }
+  virtual inline const char* type() const { return "GenericWindowData"; }
   virtual inline int ExactNumBottomBlobs() const { return 0; }
-  virtual inline int ExactNumTopBlobs() const { return 2; }
+  virtual inline int MinTopBlobs() const { return 1; }
 
  protected:
   virtual unsigned int PrefetchRand();
   virtual void InternalThreadEntry();
 
   shared_ptr<Caffe::RNG> prefetch_rng_;
-  vector<Caffe::CropDataLayer> crop_data_layers_;
-  Blob<Dtype> labels_;
+	vector<vector<Blob<Dtype>* > > crop_tops_vec_;
+	//The crop_data_layers_ used to fetch the data.
+  vector<shared_ptr<CropDataLayer<Dtype> > > crop_data_layers_;
+  shared_ptr<Blob<Dtype> > labels_;
+	//Statistics of the data to be used. 
 	int num_examples_, img_group_size_, label_size_; 
+	//The size of the batch. 
 	int batch_size_;
+	//How many elements have been read.
 	int read_count_;
+  //Cache images or not. 
+	bool cache_images_;
 };
 
 
 /**
- * @brief Helper for the Generic Window Data Layer
+ * @brief Helper for Crop Data Layer
  *
  * TODO(dox): thorough documentation for Forward and proto params.
  */
 template <typename Dtype>
 class CropDataLayer : public BasePrefetchingDataLayer<Dtype> {
-	friend class GenericWindowDataLayer;
+	friend class GenericWindowDataLayer<Dtype>;
  public:
   explicit CropDataLayer(const LayerParameter& param)
       : BasePrefetchingDataLayer<Dtype>(param) {}
@@ -333,18 +344,18 @@ class CropDataLayer : public BasePrefetchingDataLayer<Dtype> {
   virtual void DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
 
-  virtual inline const char* type() const { return "WindowData"; }
+  virtual inline const char* type() const { return "CropData"; }
   virtual inline int ExactNumBottomBlobs() const { return 0; }
-  virtual inline int ExactNumTopBlobs() const { return 2; }
+  virtual inline int ExactNumTopBlobs() const { return 1; }
 
  protected:
   virtual unsigned int PrefetchRand();
   virtual void InternalThreadEntry();
 
   shared_ptr<Caffe::RNG> prefetch_rng_;
-	//Contains a list of images. 
-  vector<std::string> image_database_;
-  enum WindowField {X1, Y1, X2, Y2};
+	//Contains a list of images and the size of the image in channels * h * w. 
+  vector<std::pair<std::string, vector<int> > > image_database_;
+  enum WindowField {IMAGE_INDEX, X1, Y1, X2, Y2, NUM};
   vector<vector<float> > windows_;
   Blob<Dtype> data_mean_;
   vector<Dtype> mean_values_;

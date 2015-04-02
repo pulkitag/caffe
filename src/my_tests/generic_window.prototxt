@@ -1,0 +1,22 @@
+layer{
+	name: "window_data"
+	top:  "data"
+	type: "GenericWindowDataLayer"
+	generic_window_data_param{
+		source: "/data1/pulkitag/data_sets/pascal_3d/my/window_file_val.txt"
+		root_folder: "/data1/pulkitag/pascal_3d/PASCAL3D+_release1.1/Images/"
+	}
+}
+layer {
+	name: "ipchannel"
+	type: "Slice"
+	bottom: "data"
+	top   : "data_1"
+	top   : "data_2"
+	slice_param{
+		slice_dim: 1
+		slice_point: 1
+	}
+}
+
+

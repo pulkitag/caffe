@@ -1,6 +1,8 @@
 ## @package other_utils
 #  Miscellaneous Util Functions
 #
+import numpy as np
+import scipy.misc as scm
 
 ##
 # Verify if all the keys are present recursively in the dict

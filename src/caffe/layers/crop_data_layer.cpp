@@ -50,7 +50,7 @@ void CropDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
 
   LOG(INFO) << "Window data layer:" << std::endl
       << "  cache_images: "
-      << this->layer_param_.generic_window_data_param().cache_images() << std::endl
+      << this->layer_param_.generic_window_data_param().cache_images() << std::endl;
 
   cache_images_      = this->layer_param_.generic_window_data_param().cache_images();
   string root_folder = this->layer_param_.generic_window_data_param().root_folder();
@@ -76,16 +76,11 @@ void CropDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
   const int crop_size = this->transform_param_.crop_size();
   CHECK_GT(crop_size, 0);
   const int batch_size = this->layer_param_.generic_window_data_param().batch_size();
-  top[0]->Reshape(batch_size, channels, crop_size, crop_size);
+  const int channels = top[0]->channels();
   this->prefetch_data_.Reshape(batch_size, channels, crop_size, crop_size);
-
   LOG(INFO) << "output data size: " << top[0]->num() << ","
       << top[0]->channels() << "," << top[0]->height() << ","
       << top[0]->width();
-  // label
-  top[1]->Reshape(batch_size, 1, 1, 1);
-  this->prefetch_label_.Reshape(batch_size, 1, 1, 1);
-
   // data mean
   has_mean_file_ = this->transform_param_.has_mean_file();
   has_mean_values_ = this->transform_param_.mean_value_size() > 0;
@@ -172,16 +167,17 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
 			cv_img = DecodeDatumToCVMat(image_cached, true);
 		} else {
 			// load the image containing the window
-			std::string image = image_database_[read_count_];
-			cv_img = cv::imread(image, CV_LOAD_IMAGE_COLOR);
+			pair<std::string, vector<int> > image = image_database_[read_count_];
+			cv_img = cv::imread(image.first, CV_LOAD_IMAGE_COLOR);
 			if (!cv_img.data) {
-				LOG(ERROR) << "Could not open or find file " << image;
+				LOG(ERROR) << "Could not open or find file " << image.first;
 				return;
 			}
 		}
 		read_time += timer.MicroSeconds();
 		timer.Start();
 		const int channels = cv_img.channels();
+		CHECK_EQ(channels, 3);
 
 		// crop window out of image and warp it
 		int x1 = window[CropDataLayer<Dtype>::X1];
