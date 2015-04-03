@@ -199,6 +199,7 @@ void GenericWindowDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& b
 		LOG(INFO) << "Number of windows: "
 			        << crop_data_layers_[i]->windows_.size();
 		crop_data_layers_[i]->is_ready_ = true;
+		crop_data_layers_[i]->CreatePrefetchThread();
 	}
 }
 
@@ -220,8 +221,8 @@ void GenericWindowDataLayer<Dtype>::InternalThreadEntry() {
   double read_time = 0;
   double trans_time = 0;
   CPUTimer timer;
- 
-	
+
+	//Intialize the variables. 	
 	Dtype* top_data    = this->prefetch_data_.mutable_cpu_data();
   Dtype* top_label   = this->prefetch_label_.mutable_cpu_data();
 	const Dtype* label = labels_->cpu_data();	
@@ -231,23 +232,12 @@ void GenericWindowDataLayer<Dtype>::InternalThreadEntry() {
 	dummy_bottom.clear();
   caffe_set(this->prefetch_data_.count(), Dtype(0), top_data);
 
-	//Do a forward pass on the CropData layers
-	for (int i=0; i<img_group_size_; i++){
-		//CHECK_EQ(read_count_, crop_data_layers_[i]->read_count_);
-		crop_data_layers_[i]->Forward(dummy_bottom, crop_tops_vec_[i]);
-	}
+	//First make sure that threads of CropDataLayer have ended.
+	for (int i = 0; i < img_group_size_; i++){
+		crop_data_layers_[i]->JoinPrefetchThread();
+	} 	 
 
-	const int imSz = channels_ *  crop_size_ * crop_size_;
-	//Interleave the data appropriately.
-	for (int n=0; n < batch_size_; n++){
-		for (int i=0; i < img_group_size_; i++){
-			caffe_copy(imSz, crop_tops_vec_[i][0]->cpu_data() + n * imSz,
-									top_data);
-			top_data += imSz;
-		}	
-	}
-	
-	LOG(INFO) << "Copying Labels";
+	// Copy the labels
 	for (int n=0; n < batch_size_; n++){
 		for (int l=0; l < label_size_; l++){
 			top_label[0] = label[label_size_ * read_count_ + l];
@@ -259,7 +249,28 @@ void GenericWindowDataLayer<Dtype>::InternalThreadEntry() {
 			LOG(INFO) << "Resetting read_count";
 		}
 	}
+	
+	//Do a forward pass on the CropData layers
+	for (int i=0; i<img_group_size_; i++){
+		CHECK_EQ(read_count_, crop_data_layers_[i]->read_count_);
+		crop_data_layers_[i]->Forward(dummy_bottom, crop_tops_vec_[i]);
+	}
 
+	// Copy and interleave the data appropriately.
+	const int imSz = channels_ *  crop_size_ * crop_size_;
+	for (int n=0; n < batch_size_; n++){
+		for (int i=0; i < img_group_size_; i++){
+			caffe_copy(imSz, crop_tops_vec_[i][0]->cpu_data() + n * imSz,
+									top_data);
+			top_data += imSz;
+		}	
+	}
+	
+	//Start Threads for CropData layers.
+	for (int i = 0; i < img_group_size_; i++){
+		crop_data_layers_[i]->CreatePrefetchThread();
+	}
+	
   batch_timer.Stop();
   DLOG(INFO) << "Generic Window Prefetch batch: " << batch_timer.MilliSeconds() << " ms.";
   DLOG(INFO) << "     Read time: " << read_time / 1000 << " ms.";

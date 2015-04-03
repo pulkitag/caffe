@@ -123,6 +123,7 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
   
 	if (!is_ready_){
 		LOG(INFO) << "###### CropDataLayer is not ready ######";
+		return;
 	}
 
 	CPUTimer batch_timer;
@@ -410,6 +411,28 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
   //DLOG(INFO) << "     Read time: " << read_time / 1000 << " ms.";
   //DLOG(INFO) << "Transform time: " << trans_time / 1000 << " ms.";
 }
+
+template <typename Dtype>
+void CropDataLayer<Dtype>::Forward_cpu(
+    const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top) {
+
+  //The thread joining will be taked care by GenericWindowData Layer
+	// Check that thread has already ended. 
+  CHECK(!this->is_started());
+  // Reshape to loaded data.
+  top[0]->Reshape(this->prefetch_data_.num(), this->prefetch_data_.channels(),
+      this->prefetch_data_.height(), this->prefetch_data_.width());
+  // Copy the data
+  caffe_copy(this->prefetch_data_.count(), this->prefetch_data_.cpu_data(),
+             top[0]->mutable_cpu_data());
+  DLOG(INFO) << "Prefetch copied";
+  if (this->output_labels_) {
+    caffe_copy(this->prefetch_label_.count(), this->prefetch_label_.cpu_data(),
+               top[1]->mutable_cpu_data());
+  }
+	//New thread will be created by GenericWindowData Layer
+}
+
 
 INSTANTIATE_CLASS(CropDataLayer);
 REGISTER_LAYER_CLASS(CropData);
