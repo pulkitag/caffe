@@ -194,7 +194,8 @@ void GenericWindowDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& b
 		CHECK_GE(num_examples_, count_examples);
   } while (infile >> hashtag >> image_index);
 	infile.close();
-
+	CHECK_EQ(num_examples_, count_examples);
+	
 	for (int i=0; i<img_group_size_; i++){
 		LOG(INFO) << "Number of windows: "
 			        << crop_data_layers_[i]->windows_.size();

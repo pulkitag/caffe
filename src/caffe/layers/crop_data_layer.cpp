@@ -162,7 +162,7 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
 		LOG(INFO) << "###### CRASHING: WINDOWS ARE NOT INITALIZED ######";
 	}	
 	//Assert windows_ are not empty
-	CHECK_GT(windows_.size(),0);
+	CHECK_EQ(windows_.size(), num_examples_);
 
   int item_id = 0;
 	for (int dummy = 0; dummy < num_samples; ++dummy) {
