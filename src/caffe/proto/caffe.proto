@@ -527,6 +527,8 @@ message GenericWindowDataParameter {
   optional bool cache_images = 12 [default = false];
   // append root_folder to locate images
   optional string root_folder = 13 [default = ""];
+	// Only to be used by CropDataLayer
+	optional bool is_ready = 14 [default = false];
 }
 
 

@@ -369,6 +369,7 @@ class CropDataLayer : public BasePrefetchingDataLayer<Dtype> {
 	//The number of images that have been read. 
 	int read_count_;
 	int num_examples_;
+	bool is_ready_;
 };
 
 

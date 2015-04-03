@@ -107,6 +107,7 @@ def compare_windows():
 			lbStr = 'az: %f, el: %f, cl: %f' % (lb[0],lb[1],lb[2])	
 			plot_pairs(figGt, im1, im2, lbStr)
 			imCount += 1
+			print imCount
 			raw_input("Enter")
 
 

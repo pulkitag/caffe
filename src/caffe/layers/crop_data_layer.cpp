@@ -52,6 +52,7 @@ void CropDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
       << "  cache_images: "
       << this->layer_param_.generic_window_data_param().cache_images() << std::endl;
 
+  is_ready_          = this->layer_param_.generic_window_data_param().is_ready();
   cache_images_      = this->layer_param_.generic_window_data_param().cache_images();
   string root_folder = this->layer_param_.generic_window_data_param().root_folder();
 
@@ -102,6 +103,8 @@ void CropDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
 	
 	//Initialize read_count_
 	read_count_ = 0;
+	LOG(INFO) << " #### I am INSIDE Crop, I am Ready: "
+						<< is_ready_;
 }
 
 template <typename Dtype>
@@ -117,7 +120,12 @@ template <typename Dtype>
 void CropDataLayer<Dtype>::InternalThreadEntry() {
   // At each iteration, sample N windows where N*p are foreground (object)
   // windows and N*(1-p) are background (non-object) windows
-  CPUTimer batch_timer;
+  
+	if (!is_ready_){
+		LOG(INFO) << "###### CropDataLayer is not ready ######";
+	}
+
+	CPUTimer batch_timer;
   batch_timer.Start();
   double read_time = 0;
   double trans_time = 0;
@@ -148,12 +156,11 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
   // zero out batch
   caffe_set(this->prefetch_data_.count(), Dtype(0), top_data);
   const int num_samples = static_cast<int>(static_cast<float>(batch_size));
-	
+
+	if (windows_.size() < num_examples_){
+		LOG(INFO) << "###### CRASHING: WINDOWS ARE NOT INITALIZED ######";
+	}	
 	//Assert windows_ are not empty
-	if (windows_.size()==0){
-		LOG(INFO) << " ####### No windows found, returning ############";
-		return;
-	}
 	CHECK_GT(windows_.size(),0);
 
   int item_id = 0;
@@ -247,16 +254,31 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
 			Dtype scale_y =
 					static_cast<Dtype>(crop_size)/static_cast<Dtype>(unclipped_height);
 
+			// #### No Padding Change #####
+			
+			// size to warp the clipped expanded region to
+			cv_crop_size.width =
+					static_cast<int>(round(static_cast<Dtype>(unclipped_width)*scale_x));
+			cv_crop_size.height =
+					static_cast<int>(round(static_cast<Dtype>(unclipped_height)*scale_y));
+
+			cv_crop_size.width  = std::min(cv_crop_size.width, crop_size);
+			cv_crop_size.height = std::min(cv_crop_size.height, crop_size);
+			//##### End No Padding Change #####
+
+			/*
+			// REMOVING PADDING - I DON't LIKE IT.
+			// RCNN PADS. 
 			// size to warp the clipped expanded region to
 			cv_crop_size.width =
 					static_cast<int>(round(static_cast<Dtype>(clipped_width)*scale_x));
 			cv_crop_size.height =
 					static_cast<int>(round(static_cast<Dtype>(clipped_height)*scale_y));
+			
 			pad_x1 = static_cast<int>(round(static_cast<Dtype>(pad_x1)*scale_x));
 			pad_x2 = static_cast<int>(round(static_cast<Dtype>(pad_x2)*scale_x));
 			pad_y1 = static_cast<int>(round(static_cast<Dtype>(pad_y1)*scale_y));
 			pad_y2 = static_cast<int>(round(static_cast<Dtype>(pad_y2)*scale_y));
-
 			pad_h = pad_y1;
 			// if we're mirroring, we mirror the padding too (to be pedantic)
 			if (do_mirror) {
@@ -273,10 +295,15 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
 			if (pad_w + cv_crop_size.width > crop_size) {
 				cv_crop_size.width = crop_size - pad_w;
 			}
+			*/
+
 		}
 
+		//Clip the image
 		cv::Rect roi(x1, y1, x2-x1+1, y2-y1+1);
 		cv::Mat cv_cropped_img = cv_img(roi);
+
+		//Resize the image. 
 		cv::resize(cv_cropped_img, cv_cropped_img,
 				cv_crop_size, 0, 0, cv::INTER_LINEAR);
 
@@ -285,6 +312,34 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
 			cv::flip(cv_cropped_img, cv_cropped_img, 1);
 		}
 
+		//COPY WITHOUT PADDING
+		// copy the warped window into top_data
+		for (int h = 0; h < cv_cropped_img.rows; ++h) {
+			const uchar* ptr = cv_cropped_img.ptr<uchar>(h);
+			int img_index = 0;
+			for (int w = 0; w < cv_cropped_img.cols; ++w) {
+				for (int c = 0; c < channels; ++c) {
+					int top_index = ((item_id * channels + c) * crop_size + h)
+									 * crop_size + w ;
+					Dtype pixel = static_cast<Dtype>(ptr[img_index++]);
+					if (this->has_mean_file_) {
+						int mean_index = (c * mean_height + h + mean_off)
+												 * mean_width + w + mean_off;
+						top_data[top_index] = (pixel - mean[mean_index]) * scale;
+					} else {
+						if (this->has_mean_values_) {
+							top_data[top_index] = (pixel - this->mean_values_[c]) * scale;
+						} else {
+							top_data[top_index] = pixel * scale;
+						}
+					}
+				}
+			}
+		}
+	//END WITHOUT PADDING
+
+		/*
+		// COPY WITH PADDING 
 		// copy the warped window into top_data
 		for (int h = 0; h < cv_cropped_img.rows; ++h) {
 			const uchar* ptr = cv_cropped_img.ptr<uchar>(h);
@@ -309,6 +364,7 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
 				}
 			}
 		}
+	  */
 		trans_time += timer.MicroSeconds();
 
 		#if 0

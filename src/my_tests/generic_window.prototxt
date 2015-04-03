@@ -7,7 +7,7 @@ layer {
 		source: "/data1/pulkitag/data_sets/pascal_3d/my/window_file_val.txt"
 		root_folder: "/data1/pulkitag/data_sets/pascal_3d/PASCAL3D+_release1.1/Images/"
 		crop_size : 227
-		batch_size: 5
+		batch_size: 256
 		context_pad: 24
 	}
 	include {
@@ -23,7 +23,7 @@ layer {
 		source: "/data1/pulkitag/data_sets/pascal_3d/my/window_file_val.txt"
 		root_folder: "/data1/pulkitag/data_sets/pascal_3d/PASCAL3D+_release1.1/Images/"
 		crop_size : 227
-		batch_size: 5
+		batch_size: 256
 		context_pad: 24
 	}
 	include {

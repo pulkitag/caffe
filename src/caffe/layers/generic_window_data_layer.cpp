@@ -116,7 +116,9 @@ void GenericWindowDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& b
 		Blob<Dtype>* top_dummy = new Blob<Dtype>(batch_size_, channels_, crop_size, crop_size);
 		top_vec.push_back(top_dummy);
 		crop_tops_vec_.push_back(top_vec);
-		//Setup the new layer.  
+		//Setup the new layer. 
+		LOG(INFO) << "I am Crop" << i <<" , I am Ready: "
+  						<< crop_layer->layer_param_.generic_window_data_param().is_ready();
 		crop_layer->SetUp(bottom, top_vec);
 		crop_layer->windows_.clear();
 		crop_layer->image_database_.clear();
@@ -130,7 +132,6 @@ void GenericWindowDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& b
 	string tmp_hash;
   int tmp_num;
 	infile >> tmp_hash >> tmp_num;
-	LOG(INFO) <<"PRINTING: " << tmp_hash << " " << tmp_num;
 	int count_examples = 0;  
 	do {
     CHECK_EQ(hashtag, "#");
@@ -192,10 +193,12 @@ void GenericWindowDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& b
 		count_examples += 1;
 		CHECK_GE(num_examples_, count_examples);
   } while (infile >> hashtag >> image_index);
+	infile.close();
 
 	for (int i=0; i<img_group_size_; i++){
 		LOG(INFO) << "Number of windows: "
 			        << crop_data_layers_[i]->windows_.size();
+		crop_data_layers_[i]->is_ready_ = true;
 	}
 }
 
