@@ -3,6 +3,7 @@
 #
 import numpy as np
 import scipy.misc as scm
+import matplotlib.pyplot as plt
 
 ##
 # Verify if all the keys are present recursively in the dict
@@ -56,5 +57,10 @@ def crop_im(im, bbox, **kwargs):
 		imBox = scm.imresize(imBox, (imSz, imSz))
 	else:
 		raise Exception('Unrecognized crop type')
-
 	return imBox		
+
+##
+# Read and crop the image. 
+def read_crop_im(imName, bbox, **kwargs):
+	im = plt.imread(imName)
+	return crop_im(im, bbox, **kwargs)	

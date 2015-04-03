@@ -48,7 +48,7 @@ void CropDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
   //    num_windows
   //    class_index overlap x1 y1 x2 y2
 
-  LOG(INFO) << "Window data layer:" << std::endl
+  LOG(INFO) << "CropData layer:" << std::endl
       << "  cache_images: "
       << this->layer_param_.generic_window_data_param().cache_images() << std::endl;
 
@@ -84,7 +84,6 @@ void CropDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
     ReadProtoFromBinaryFileOrDie(mean_file.c_str(), &blob_proto);
     data_mean_.FromProto(blob_proto);
   }
-	LOG(INFO) << "Pass1";
   if (has_mean_values_) {
     CHECK(has_mean_file_ == false) <<
       "Cannot specify mean_file and mean_value at the same time";
@@ -103,7 +102,6 @@ void CropDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
 	
 	//Initialize read_count_
 	read_count_ = 0;
-	LOG(INFO) << "CROP-DATA exiting setup";
 }
 
 template <typename Dtype>
@@ -150,12 +148,20 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
   // zero out batch
   caffe_set(this->prefetch_data_.count(), Dtype(0), top_data);
   const int num_samples = static_cast<int>(static_cast<float>(batch_size));
+	
+	//Assert windows_ are not empty
+	if (windows_.size()==0){
+		LOG(INFO) << " ####### No windows found, returning ############";
+		return;
+	}
+	CHECK_GT(windows_.size(),0);
 
   int item_id = 0;
 	for (int dummy = 0; dummy < num_samples; ++dummy) {
 		// sample a window
 		timer.Start();
-		LOG(INFO) << "Size of windows: " <<  windows_.size();
+		//LOG(INFO) << "Size of windows: " <<  windows_.size() 
+		//					<< " Read Count: " << read_count_;
 		vector<float> window = windows_[read_count_];
 
 		bool do_mirror = mirror && PrefetchRand() % 2;
@@ -168,6 +174,7 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
 		} else {
 			// load the image containing the window
 			pair<std::string, vector<int> > image = image_database_[read_count_];
+			//LOG(INFO) << image.first; 
 			cv_img = cv::imread(image.first, CV_LOAD_IMAGE_COLOR);
 			if (!cv_img.data) {
 				LOG(ERROR) << "Could not open or find file " << image.first;
@@ -337,11 +344,15 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
 
 		item_id++;
 		read_count_++;
+		if (read_count_ == num_examples_){
+			read_count_ = 0;
+			LOG(INFO) << "Resetting read_count";
+		}
 	}
   batch_timer.Stop();
-  DLOG(INFO) << "Prefetch batch: " << batch_timer.MilliSeconds() << " ms.";
-  DLOG(INFO) << "     Read time: " << read_time / 1000 << " ms.";
-  DLOG(INFO) << "Transform time: " << trans_time / 1000 << " ms.";
+  DLOG(INFO) << "CropDataLayer Prefetch batch: " << batch_timer.MilliSeconds() << " ms.";
+  //DLOG(INFO) << "     Read time: " << read_time / 1000 << " ms.";
+  //DLOG(INFO) << "Transform time: " << trans_time / 1000 << " ms.";
 }
 
 INSTANTIATE_CLASS(CropDataLayer);

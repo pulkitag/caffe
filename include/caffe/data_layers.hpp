@@ -326,6 +326,8 @@ class GenericWindowDataLayer : public BasePrefetchingDataLayer<Dtype> {
 	int read_count_;
   //Cache images or not. 
 	bool cache_images_;
+	int channels_;
+	int crop_size_;
 };
 
 
@@ -366,6 +368,7 @@ class CropDataLayer : public BasePrefetchingDataLayer<Dtype> {
   vector<Datum> image_database_cache_;
 	//The number of images that have been read. 
 	int read_count_;
+	int num_examples_;
 };
 
 

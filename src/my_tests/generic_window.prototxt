@@ -8,6 +8,7 @@ layer {
 		root_folder: "/data1/pulkitag/data_sets/pascal_3d/PASCAL3D+_release1.1/Images/"
 		crop_size : 227
 		batch_size: 5
+		context_pad: 24
 	}
 	include {
 		phase: TRAIN
@@ -23,6 +24,7 @@ layer {
 		root_folder: "/data1/pulkitag/data_sets/pascal_3d/PASCAL3D+_release1.1/Images/"
 		crop_size : 227
 		batch_size: 5
+		context_pad: 24
 	}
 	include {
 		phase: TEST

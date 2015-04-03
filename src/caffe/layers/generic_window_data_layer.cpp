@@ -60,6 +60,7 @@ void GenericWindowDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& b
 
 	// image
   const int crop_size = this->layer_param_.generic_window_data_param().crop_size();
+	crop_size_          = crop_size;
   CHECK_GT(crop_size, 0);
 	//Size of the batch. 
   batch_size_ = this->layer_param_.generic_window_data_param().batch_size();
@@ -70,7 +71,7 @@ void GenericWindowDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& b
 
 
   string hashtag, checkName;
-  int image_index, channels;
+  int image_index;
   if (!(infile >> hashtag >> checkName)) {
     LOG(FATAL) << "Window file is empty";
   }
@@ -85,9 +86,9 @@ void GenericWindowDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& b
 	labels_.reset(new Blob<Dtype>(num_examples_, label_size_,1,1));
 
 	//Set size of the tops.
-	const int top_channels = 3; 
-	top[0]->Reshape(batch_size_, img_group_size_ * top_channels, crop_size, crop_size);
-	this->prefetch_data_.Reshape(batch_size_, img_group_size_ * top_channels, crop_size, crop_size);
+	channels_ = 3; 
+	top[0]->Reshape(batch_size_, img_group_size_ * channels_, crop_size, crop_size);
+	this->prefetch_data_.Reshape(batch_size_, img_group_size_ * channels_, crop_size, crop_size);
   LOG(INFO) << "output data size: " << top[0]->num() << ", "
       << top[0]->channels() << "," << top[0]->height() << ", "
       << top[0]->width();
@@ -106,47 +107,43 @@ void GenericWindowDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& b
 	LOG(INFO) << "Setting up crop layers";	
 	for (int i=0; i < img_group_size_; i++){
 		//Create the new crop layer.
-		LOG(INFO) << "Setup param"; 
 		LayerParameter crop_data_param(this->layer_param_);
 		crop_data_param.set_type("CropData");
 		shared_ptr<CropDataLayer<Dtype> > crop_layer;
 		crop_layer.reset(new CropDataLayer<Dtype>(crop_data_param));
-		LOG(INFO) << "Setup top";
 		//Create the top for the new layer. 
 		vector<Blob<Dtype>*> top_vec;
-		Blob<Dtype>* top_dummy = new Blob<Dtype>(batch_size_, top_channels, crop_size, crop_size);
-		//top_dummy->Reshape(batch_size_, top_channels, crop_size, crop_size);
+		Blob<Dtype>* top_dummy = new Blob<Dtype>(batch_size_, channels_, crop_size, crop_size);
 		top_vec.push_back(top_dummy);
 		crop_tops_vec_.push_back(top_vec);
 		//Setup the new layer.  
-		LOG(INFO) << "Setup crop";
 		crop_layer->SetUp(bottom, top_vec);
 		crop_layer->windows_.clear();
 		crop_layer->image_database_.clear();
 		crop_layer->image_database_cache_.clear();
-		LOG(INFO) << "Push Layer"; 
+		crop_layer->num_examples_ = num_examples_;
 		crop_data_layers_.push_back(crop_layer);
 	}	
 
 	LOG(INFO) << "Processing Image and labels";
 	Dtype* label_data = labels_->mutable_cpu_data(); 
 	string tmp_hash;
-	 int tmp_num;
+  int tmp_num;
 	infile >> tmp_hash >> tmp_num;
-	LOG(INFO) <<"PRINTING: " << tmp_hash << " " << tmp_num;  
+	LOG(INFO) <<"PRINTING: " << tmp_hash << " " << tmp_num;
+	int count_examples = 0;  
 	do {
     CHECK_EQ(hashtag, "#");
+		//LOG(INFO) << "I am here";
 		for (int i=0; i < img_group_size_; i++){
 			// read image path
 			string image_path;
 			infile >> image_path;
 			image_path = root_folder + image_path;
-			//LOG(INFO) << image_path;			
 
 			// read image dimensions
 			vector<int> image_size(3);
 			infile >> image_size[0] >> image_size[1] >> image_size[2];
-			channels = image_size[0];
 			crop_data_layers_[i]->image_database_.push_back(std::make_pair(image_path, image_size));
 			
 			//Store the image if needed. 
@@ -192,8 +189,14 @@ void GenericWindowDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& b
 			label_data[0] = lbl;
 			label_data += 1;
 		}
+		count_examples += 1;
+		CHECK_GE(num_examples_, count_examples);
   } while (infile >> hashtag >> image_index);
-  
+
+	for (int i=0; i<img_group_size_; i++){
+		LOG(INFO) << "Number of windows: "
+			        << crop_data_layers_[i]->windows_.size();
+	}
 }
 
 template <typename Dtype>
@@ -225,12 +228,20 @@ void GenericWindowDataLayer<Dtype>::InternalThreadEntry() {
 	dummy_bottom.clear();
   caffe_set(this->prefetch_data_.count(), Dtype(0), top_data);
 
+	//Do a forward pass on the CropData layers
 	for (int i=0; i<img_group_size_; i++){
-		LOG(INFO) << "Starting Thread";
+		//CHECK_EQ(read_count_, crop_data_layers_[i]->read_count_);
 		crop_data_layers_[i]->Forward(dummy_bottom, crop_tops_vec_[i]);
-		caffe_copy(crop_tops_vec_[i][0]->count(), crop_tops_vec_[i][0]->cpu_data(),
-								top_data);
-		top_data += crop_tops_vec_[i][0]->count();	
+	}
+
+	const int imSz = channels_ *  crop_size_ * crop_size_;
+	//Interleave the data appropriately.
+	for (int n=0; n < batch_size_; n++){
+		for (int i=0; i < img_group_size_; i++){
+			caffe_copy(imSz, crop_tops_vec_[i][0]->cpu_data() + n * imSz,
+									top_data);
+			top_data += imSz;
+		}	
 	}
 	
 	LOG(INFO) << "Copying Labels";
@@ -245,7 +256,6 @@ void GenericWindowDataLayer<Dtype>::InternalThreadEntry() {
 			LOG(INFO) << "Resetting read_count";
 		}
 	}
-
 
   batch_timer.Stop();
   DLOG(INFO) << "Generic Window Prefetch batch: " << batch_timer.MilliSeconds() << " ms.";
