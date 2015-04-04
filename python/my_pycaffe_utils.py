@@ -563,7 +563,8 @@ class ProtoDef():
 					self.layers_[phase][layerName] = layerData
 				else:
 					#Default Phase is Train
-					assert layerName not in self.layers_['TRAIN'].keys(), 'Duplicate LayerName Found'
+					assert layerName not in self.layers_['TRAIN'].keys(),\
+																 'Duplicate LayerName: %s found' % layerName
 					self.layers_['TRAIN'][layerName] = layerData
 				i += skipI
 			i += 1
@@ -866,6 +867,12 @@ class CaffeExperiment:
 		self.expFile_.solDef_.set_property('snapshot_prefix', self.snapPrefix_)
 
 	##
+	# init from self
+	def init_from_self(self):
+		self.expFile_.init_solver_from_external(self.files_['solver'])
+		self.expFile_.init_netdef_from_external(self.files_['netdef'])	
+
+	##
 	def del_layer(self, layerName):
 		self.expFile_.netDef_.del_layer(layerName) 
 
@@ -876,6 +883,11 @@ class CaffeExperiment:
 	##
 	def add_layer(self, layerName, layer, phase):
 		self.expFile_.netDef_.add_layer(layerName, layer, phase)
+
+	##
+	def get_snapshot_name(self, numIter=10000):
+		snapName = self.expFile_.extract_snapshot_name() % numIter
+		return snapName
 
 	# Make the experiment. 
 	def make(self):

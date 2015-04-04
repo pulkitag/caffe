@@ -30,6 +30,22 @@ def set_recursive_key(data, keyNames, val):
 		raise Exception('Keys not present')
 
 ##
+# Read the image
+def read_image(imName, color=True, isBGR=False):
+	'''
+		color: True - if a gray scale image is encountered convert into color
+	'''
+	im = plt.imread(imName)
+	if color:
+		if im.ndim==2:
+			print "Converting grayscale image into color image"
+			im = np.tile(im.reshape(im.shape[0], im.shape[1],1),(1,1,3))
+		if isBGR:
+			im = im[:,:,[2,1,0]]
+	return im			
+
+
+##
 # Crop the image
 def crop_im(im, bbox, **kwargs):
 	'''
@@ -62,5 +78,10 @@ def crop_im(im, bbox, **kwargs):
 ##
 # Read and crop the image. 
 def read_crop_im(imName, bbox, **kwargs):
-	im = plt.imread(imName)
+	if kwargs.has_key('color'):
+		im = read_image(imName, color=kwargs['color'])
+	else:
+		im = read_image(imName)
 	return crop_im(im, bbox, **kwargs)	
+
+

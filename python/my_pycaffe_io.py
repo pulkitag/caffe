@@ -168,6 +168,7 @@ class DbReader:
 		self.txn_    = self.db_.begin(write=False) 
 		self.cursor_ = self.txn_.cursor()		
 		self.nextValid_ = True
+		self.cursor_.first()
 
 	def __del__(self):
 		self.txn_.commit()

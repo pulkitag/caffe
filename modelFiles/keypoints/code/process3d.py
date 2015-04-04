@@ -353,7 +353,7 @@ def save_processed_annotations(forceSave=False):
 			count = 0
 			for (f, i) in zip(annNames, imNames):
 				annDat = read_raw_annotation_file_(f)
-				im     = read_image(i, color=True)
+				im     = ou.read_image(i, color=True)
 				h,w,ch = im.shape
 				for dat in annDat:
 					euler[count,:] = dat['viewpoint'][0:2]
@@ -550,19 +550,6 @@ def get_pair_labels(prms, className, setName):
 	annData.close()	
 	return lbl, idx1, idx2
 
-##
-# Read the image
-def read_image(imName, color=True):
-	'''
-		color: True - if a gray scale image is encountered convert into color
-	'''
-	im = plt.imread(imName)
-	if color:
-		if im.ndim==2:
-			print "Converting grayscale image into color image"
-			im = np.tile(im.reshape(im.shape[0], im.shape[1],1),(1,1,3))
-	return im			
-
 
 ##
 # Extract the pair of images. 
@@ -582,7 +569,7 @@ def get_pair_images(prms, className, setName):
 	print "Pre-Loading the images"
 	imgDat = []
 	for i in range(imgName.shape[0]):
-		imgDat.append(read_image(imgName[i], color=True))
+		imgDat.append(ou.read_image(imgName[i], color=True))
 
 	print "Extracting desired crops"
 	ims = np.zeros((N,2,imSz,imSz,3)).astype(np.uint8)
@@ -771,16 +758,22 @@ def get_caffe_prms(isScratch=True, isClassLbl=True, concatLayer='fc6',
 
 
 ##
+# Get the experiment object. 
+def get_experiment_object(prms, caffePrms, deviceId=1):
+	targetExpDir   = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/pascal3d/exp/'
+	caffeExpName = caffePrms['expStr']
+	caffeExp = mpu.CaffeExperiment(prms['expName'], caffeExpName,
+																 targetExpDir, prms['paths']['snapDir'], deviceId=deviceId)
+	return caffeExp
+
+##
 # Make the experiment
 def make_experiment(prms, caffePrms, deviceId=1):
-	targetExpDir   = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/pascal3d/exp/'
 	sourceExpDir   = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/pascal3d/exp/imSz128_lbl-uni-az30el10_crp-contPad16_ns4e+04_mb50'
 	sourceNetDef   = os.path.join(sourceExpDir, 'caffenet_siamese_fc6.prototxt')
 	sourceSolDef   = os.path.join(sourceExpDir, 'solver_train_fc6.prototxt')
 
-	caffeExpName = caffePrms['expStr']
-	caffeExp = mpu.CaffeExperiment(prms['expName'], caffeExpName,
-																 targetExpDir, prms['paths']['snapDir'], deviceId=deviceId)
+	caffeExp = get_experiment_object(prms, caffePrms, deviceId)
 
 	caffeExp.init_from_external(sourceSolDef, sourceNetDef)
 	#If no class labels are required. 

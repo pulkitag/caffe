@@ -86,20 +86,31 @@ def find_layer(lines):
 ##
 # Find the Layer Name
 def find_layer_name(lines):
-	layerName = []
-	topName   = []
+	layerName = None
+	topName   = None
 	flagCount = 0
-	for l in lines:
-		if 'name' in l:
+	firstL    = lines[0]
+	assert firstL.split()[1] is '{', 'Something is wrong'
+	brackCount = 1
+	for l in lines[1:]:
+		if '{' in l:
+			brackCount  += 1
+		if '}' in l:
+			brackCount -= 1
+		if brackCount ==0:
+			break
+		if 'name' in l and brackCount==1:
 			flagCount += 1
 			_,layerName = l.split()
 			layerName   = layerName[1:-1]
-		if 'top' in l:
+		if 'top' in l and brackCount==1:
 			flagCount += 1
 			_,topName  = l.split()
 			topName    = topName[1:-1]
-		if flagCount==2:
-			return layerName, topName
+	
+	assert layerName is not None, 'no name of a layer found'		
+	return layerName, topName
+
 
 ##
 # Converts definition file of a network into siamese network. 

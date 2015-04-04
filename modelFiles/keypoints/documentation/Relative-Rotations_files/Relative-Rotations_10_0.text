@@ -1,0 +1,7 @@
+/data1/pulkitag/pascal3d/snapshots/imSz128_lbl-uni-az30el10_crp-contPad16_ns4e+04_mb50/pascal3d_scratch_concat-fc6_iter_50000.caffemodel
+Ignoring line: # Autotmatically generated solver prototxt
+/data1/pulkitag/pascal3d/snapshots/pascal3d_imSz128_lbl-uni-az30el10_crp-contPad16_ns4e+04_mb50/caffenet_scratch_sup_noRot_fc6_iter_50000.caffemodel
+Ignoring line: # Autotmatically generated solver prototxt
+/data1/pulkitag/pascal3d/snapshots/pascal3d_imSz128_lbl-uni-az30el10_crp-contPad16_ns4e+04_mb50/caffenet_scratch_unsup_fc6_iter_50000.caffemodel
+Ignoring line: # Autotmatically generated solver prototxt
+/data1/pulkitag/pascal3d/snapshots/pascal3d_imSz128_lbl-uni-az30el10_crp-contPad16_ns4e+04_mb50/caffenet_scratch_unsup_fc6_drop_iter_50000.caffemodel

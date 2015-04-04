@@ -1,0 +1,14 @@
+Class        Train-BBox           Val-BBox            
+----------------------------------------------------------------------------------------------------
+aeroplane    2314                 361                 
+bicycle      1656                 340                 
+boat         2489                 265                 
+bottle       1696                 272                 
+bus          1356                 283                 
+car          6194                 594                 
+chair        2059                 1032                
+diningtable  2611                 288                 
+motorbike    1570                 339                 
+sofa         1749                 294                 
+train        1601                 298                 
+tvmonitor    1570                 336                 
