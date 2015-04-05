@@ -30,6 +30,28 @@ def set_recursive_key(data, keyNames, val):
 		raise Exception('Keys not present')
 
 ##
+# Get the item from a recursive key
+def get_item_recursive_key(data, keyNames):
+	if verify_recursive_key(data, keyNames):
+		dat = reduce(lambda dat, key: dat[key], keyNames[:-1], data)
+		return dat[keyNames[-1]]
+	else:
+		raise Exception('Keys not present')
+
+##
+# Find the path to the key in a recursive dictionary. 
+def find_path_key(data, keyName):
+	path = []
+	if not isinstance(data, dict):
+		return path
+	if data.has_key(keyName):
+		return [keyName]
+	else:
+		for keys in data.keys():
+			path = path + find_path_key(data[key], keyName)
+	return path
+
+##
 # Read the image
 def read_image(imName, color=True, isBGR=False):
 	'''

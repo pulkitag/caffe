@@ -19,11 +19,48 @@ def get_paths():
 	prms['leftImFile']  = os.path.join(prms['odoPath'], 'dataset', 'sequences', '%02d','image_2','%06d.png')
 	prms['rightImFile'] = os.path.join(prms['odoPath'], 'dataset', 'sequences', '%02d','image_3','%06d.png')
 	prms['lmdbDir']     = os.path.join(svDir, 'lmdb-store')
+	prms['windowDir']   = os.path.join(svDir, 'window-files')
 	prms['expDir']      = expDir
 	prms['snapDir']     = snapDir 
 	return prms
 
 
+def get_prms(poseType='euler', nrmlzType='zScoreScaleSeperate', 
+						 imSz=256, concatLayer='fc6', maxFrameDiff=1,
+						 numTrainSamples=1e+06, numTestSamples=1e+04, isOld=False):
+	'''
+		poseType   : How pose is being used.
+		nrmlzType  : The way the pose data has been normalized.
+		imSz       : Size of the images being used.
+		concatLayer: The layer used for concatentation in siamese training
+		maxFrameDiff: The maximum range within which frames are considered. 
+		isOld       : Backward compatibility	
+	'''
+	paths = get_paths()
+	prms  = {}
+	prms['pose']         = poseType
+	prms['nrmlz']        = nrmlzType
+	prms['imSz']         = imSz
+	prms['concatLayer']  = concatLayer  
+	prms['maxFrameDiff'] = maxFrameDiff
+
+	if isOld:
+		expName = 'consequent_pose-%s_nrmlz-%s_imSz%d'\
+								 % (poseType, nrmlz, imSz) 
+	else:
+		expName = 'mxDiff-%d_pose-%s_nrmlz-%s_imSz%d_concat-%s_nTr-%d'\
+								 % (maxFrameDiff, poseType, nrmlz, imSz, concatLayer, numTrainSamples) 
+	prms['expName'] = expName
+
+	paths['windowFile'] = {}
+	paths['windowFile']['train'] = 'train_%s.txt' % expName
+	paths['windowFile']['test']  = 'test_%s.txt'  % expName
+	
+	prms['paths'] = paths
+	return prms
+
+##
+# For Old code.
 def get_weight_proto_file(numIter=20000, imSz=256, poseType='euler', nrmlzType='zScoreScaleSeperate',
 								 isScratch=True, concatLayer='pool5', isDeploy=False):
 	paths    = get_paths() 
@@ -47,7 +84,8 @@ def get_weight_proto_file(numIter=20000, imSz=256, poseType='euler', nrmlzType='
 
 	return snapFile, protoFile
 	
-
+##
+# This for old code. 
 def get_lmdb_names(expName, setName='train'):
 	paths   = get_paths()
 	if not setName in ['train', 'test']:
@@ -326,6 +364,14 @@ def get_pose_label(pose1, pose2, poseType):
 		lb = np.zeros((6,1,1))
 		lb[0:3] = (t2 - t1).reshape((3,1,1))
 		lb[3], lb[4], lb[5] = ru.mat2euler(np.dot(r2.transpose(), r1))
+	if poseType == 'sigMotion':
+		#Consider only the directions along which there is significant motion.
+		# Translation along X,Z and rotation about Y
+		lb = np.zeros((3,1,1))
+		deltaT = t2 - t1
+		lb[0], lb[1] = deltaT[0], deltaT[2]
+		_, lb[2], _= ru.mat2euler(np.dot(r2.transpose(), r1))
+		 
 	else:
 		raise Exception('Pose Type Not Recognized')	
 
@@ -372,7 +418,7 @@ def get_accuracy(numIter=30000, imSz=256, poseType='euler', nrmlzType='zScoreSca
 	plot_triplets(data['translation_fc7'], fig=figT, isDashed=False,
 				 linewidth=1.0, labels=['predDeltaX', 'predDeltaY', 'predDeltaZ'])
 
-
+	#Z, Y and X have been flipped - it should be X, Y, Z 
 	figR = plt.figure()
 	plt.title('Relative Rotation')
 	plot_triplets(data['euler_label'], fig=figR, isDashed=True,

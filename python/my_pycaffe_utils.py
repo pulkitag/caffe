@@ -210,11 +210,16 @@ def get_layerdef_for_proto(layerType, layerName, bottom, numOutput=1, **kwargs):
 		layerDef[ipKey]['bias_filler']['value']  = str(0.)
 	elif layerType=='Silence':
 		#Nothing to be done
-		a = True
+		pass
 	elif layerType=='Dropout':
 		layerDef['top']    = '"%s"' % kwargs['top']
 		layerDef['dropout_param'] = co.OrderedDict()
-		layerDef['dropout_param']['dropout_ratio'] = str(kwargs['dropout_ratio'])	
+		layerDef['dropout_param']['dropout_ratio'] = str(kwargs['dropout_ratio'])
+	elif layerType in ['Accuracy', 'SoftmaxWithLoss']:
+		assert kwargs.has_key('bottom2')
+		bottom2 = make_key('bottom', layerDef.keys())
+		layerDef[bottom2] = '"%s"' % kwargs['bottom2']
+		layerDef['top']   = '"%s"' % kwargs['top']	
 	else:
 		raise Exception('%s layer type not found' % layerType)
 	'''	
@@ -425,6 +430,18 @@ def plot_debug_log(logFile, setName='train', plotNames=None):
 
 
 ##
+# Get the accuracy from the test log
+def test_log2acc(logFile):
+	acc = None
+	with open(logFile, 'r') as fid:
+		lines = fid.readlines()
+		data  = lines[-2].split()
+		assert data[-3] == 'accuracy', 'Something is wrong in the way the accuracy is being read'
+		acc = float(data[-1])
+	return acc
+
+
+##
 # Get useful caffe paths
 #
 # Set the paths over here for using the utils code. 
@@ -606,6 +623,70 @@ class ProtoDef():
 					write_proto_param(fid, self.layers_['TEST'][key], numTabs=0)
 					fid.write('} \n')
 
+	##
+	# Find the layers that have learning rates
+	def find_learning_layers(self):
+		layerNames = co.OrderedDict()
+		for ph in ProtoDef.ProtoPhases:
+			layerNames[ph] = []
+			for lName in self.layers_[ph]:
+				if self.layers_[ph][lName].has_key('param'):
+					layerNames[ph].append(lName)
+		return layerNames
+
+	##
+	# If the layer has learnable parameters set them to zero
+	def set_no_learning(self, layerName, phase='TRAIN'):
+		'''
+			Generally the learning layers have weights and biases
+			Currently this code will only work for these layers. 
+		'''
+		self.set_layer_property(layerName, ['param','lr_mult'], 0., phase=phase, propNum=[0, 0])
+		self.set_layer_property(layerName, ['param','lr_mult'], 0., phase=phase, propNum=[1, 0])
+		self.set_layer_property(layerName, ['param','decay_mult'], 0., phase=phase, propNum=[0, 0])
+		self.set_layer_property(layerName, ['param','decay_mult'], 0., phase=phase, propNum=[1, 0])
+
+	##
+	# Set std for all the layers
+	def set_std_all(self, std):
+		layerNames = self.find_learning_layers()
+		for ph in layerNames.keys():
+			phLayers = layerNames[ph]
+			for name in phLayers:
+				keyPath = ou.find_path_key(phLayers[name], 'weight_filler')
+				if len(keyPath) > 0:
+					fillerType = ou.get_item_recursive_key(phLayers[name], keyPath + ['weight_filler', 'type'])
+					if fillerType=='"gaussian"':
+						keyPath = keyPath + ['weight_filler', 'std']
+						ou.set_recursive_key(self.layers_[ph][name], keyPath, std)
+					else:
+						print "Filler type for %s is not gaussian" % name
+ 
+	##
+	#Make all the layers uptil a given layer as non-learnable
+	#Since the layers are stored in form of an ordered-dict this will work. 
+	def set_no_learning_until(self, layerName):
+		'''
+			Useful when finetuning only a few layers in the network.
+			layerName: The last layer that shall have the non-zero learning rate
+		'''
+		allLayers = self.find_learning_layers()
+		for ph in ProtoDef.ProtoPhases:
+			doFlag = True
+			lNames = allLayers[ph]
+			count  = 0
+			if len(lNames)==0:
+				continue
+			while doFlag:
+				if lNames[count] == layerName:
+					doFlag = False
+				else:
+					#print 'No-Learning: %s' % lNames[count]
+					self.set_no_learning(lNames[count], phase=ph)
+				count += 1
+				if count == len(lNames):
+					doFlag = False
+		
 	##					
 	def set_layer_property(self, layerName, propName, value, phase='TRAIN',  propNum=0): 
 		'''
@@ -635,6 +716,8 @@ class ProtoDef():
 	##
 	def add_layer(self, layerName, layer, phase='TRAIN'):
 		assert layerName not in self.layers_[phase].keys(), 'Layer already exists'
+		lProtoName = layer['name'][1:-1]
+		assert layerName == lProtoName, 'Inconsistency in names, (%s,%s)' % (layerName, lProtoName)
 		self.layers_[phase][layerName] = layer	
 
 	##
@@ -646,12 +729,26 @@ class ProtoDef():
 				if self.layers_[phase].has_key(l):
 					del self.layers_[phase][l]
 
+	##
+	# Get the name of the top of the last layer. 
+	def get_last_top_name(self, phase='TRAIN'):
+		'''
+			This needs to be imrpoved - right now it assumes that the last
+			layer only has a single top blob
+		'''
+		lastKey = next(self.layers_[phase].__reversed__())
+		#Ensure there is only one top
+		topKey      = make_key('top', self.layers_[phase][lastKey])
+		topExpected = make_key('top', ['top'])
+		assert topKey==topExpected, 'There are multiple tops in %s' % lastKey
+		topName = self.layers_[phase][lastKey]['top'][1:-1]
+		return topName
 
 ##
 # Class for making the solver_prototxt
 class SolverDef:
 	def __init__(self):
-		self.data_ = {}
+		self.data_ = co.OrderedDict()
 
 	@classmethod
 	def from_file(cls, inFile):
@@ -696,14 +793,41 @@ class SolverDef:
 			fid.write('# Autotmatically generated solver prototxt \n')
 			write_proto_param(fid, self.data_, numTabs=0)
 
+##
+# Get the defaults
+def get_defaults(setArgs, defArgs):
+	for key in setArgs.keys():
+		assert defArgs.has_key(key), 'Key not found: %s' % key
+		defArgs[key] = setArgs[key]
+	return defArgs
+
+
+##
+# Programatically make a solver. 
+def make_solver(**kwargs):
+	defArgs = co.OrderedDict([('net', '""'), ('test_iter', 100), ('test_interval', 1000),
+						 ('base_lr', 0.01), ('momentum', 0.9), ('weight_decay', 0.0005),
+						 ('gamma', 0.1), ('stepsize', 100000), ('lr_policy', '"step"'),
+						 ('display', 20),('max_iter', 310000), ('snapshot', 10000),
+						 ('snapshot_prefix', '""'), ('solver_mode', 'GPU'), ('device_id', 1),
+						 ('debug_info', 'false')])
+
+	defArgs = get_defaults(kwargs, defArgs)  
+	sol = SolverDef()
+	for key in defArgs.keys():	
+		sol.add_property(key, defArgs[key])
+	return sol
+
 	
 class ExperimentFiles:
 	'''
 		Used for writing experiment files in an easy manner. 
 	'''
 	def __init__(self, modelDir, defFile='caffenet.prototxt', 
-							 solverFile='solver.prototxt', logFile='log.txt', 
-							 runFile='run.sh', deviceId=0, repNum=None):
+							 solverFile='solver.prototxt',
+							 logFileTrain='log_train.txt', logFileTest='log_test.txt', 
+							 runFileTrain='run_train.sh', runFileTest='run_test.sh', 
+							 deviceId=0, repNum=None, isTest=False):
 		'''
 			modelDir   : The directory where model will be stored. 
 			defFile    : The relative (to modelDir) path of architecture file.
@@ -716,30 +840,36 @@ class ExperimentFiles:
 		if not os.path.exists(self.modelDir_):
 			os.makedirs(self.modelDir_)
 		self.solver_   = os.path.join(self.modelDir_, solverFile)
-		self.log_      = os.path.join(self.modelDir_, logFile)
+		self.logTrain_ = os.path.join(self.modelDir_, logFileTrain)
+		self.logTest_  = os.path.join(self.modelDir_, logFileTest)
 		self.def_      = os.path.join(self.modelDir_, defFile)
-		self.run_      = os.path.join(self.modelDir_, runFile)
+		self.runTrain_ = os.path.join(self.modelDir_, runFileTrain)
+		self.runTest_  = os.path.join(self.modelDir_, runFileTest)
 		self.paths_    = get_caffe_paths()
 		self.deviceId_ = deviceId
 		self.repNum_   = repNum
+		self.isTest_   = isTest
 		#To Prevent the results from getting lost I will copy over the log files
 		#into a result folder. 
 		self.resultDir_ = os.path.join(self.modelDir_,'result_store')
 		if not os.path.exists(self.resultDir_):
 			os.makedirs(self.resultDir_)
-		self.resultLog_ = os.path.join(self.resultDir_, logFile)
+		self.resultLogTrain_ = os.path.join(self.resultDir_, logFileTrain)
+		self.resultLogTest_  = os.path.join(self.resultDir_, logFileTest)
 
 	##
 	# Write script for training.  
-	def write_run_train(self):
-		with open(self.run_,'w') as f:
+	def write_run_train(self, modelFile=None):
+		with open(self.runTrain_,'w') as f:
 			f.write('#!/usr/bin/env sh \n \n')
 			f.write('TOOLS=%s \n \n' % self.paths_['tools'])
 			f.write('GLOG_logtostderr=1 $TOOLS/caffe train')
 			f.write('\t --solver=%s' % self.solver_)
+			if modelFile is not None:
+				f.write('\t --weights=%s' % modelFile)
 			f.write('\t -gpu %d' % self.deviceId_)
-			f.write('\t 2>&1 | tee %s \n' % self.log_)
-		give_run_permissions_(self.run_)
+			f.write('\t 2>&1 | tee %s \n' % self.logTrain_)
+		give_run_permissions_(self.runTrain_)
 
 	##
 	# Write test script
@@ -750,7 +880,7 @@ class ExperimentFiles:
 			testIterations:  Number of iterations to use for testing.   
 		'''
 		snapshot = self.extract_snapshot_name() % modelIterations
-		with open(self.run_,'w') as f:
+		with open(self.runTest_,'w') as f:
 			f.write('#!/usr/bin/env sh \n \n')
 			f.write('TOOLS=%s \n \n' % self.paths_['tools'])
 			f.write('GLOG_logtostderr=1 $TOOLS/caffe test')
@@ -758,8 +888,8 @@ class ExperimentFiles:
 			f.write('\t --model=%s ' % self.def_)
 			f.write('\t --iterations=%d' % testIterations)
 			f.write('\t -gpu %d' % self.deviceId_)
-			f.write('\t 2>&1 | tee %s \n' % self.log_)
-		give_run_permissions_(self.run_)
+			f.write('\t 2>&1 | tee %s \n' % self.logTest_)
+		give_run_permissions_(self.runTest_)
 
 	##
 	# Initialiaze a solver from the file/SolverDef instance. 
@@ -812,16 +942,20 @@ class ExperimentFiles:
 	# Run the Experiment
 	def run(self):
 		cwd = os.getcwd()
-		subprocess.check_call([('cd %s && ' % self.modelDir_) + self.run_] ,shell=True)
+		subprocess.check_call([('cd %s && ' % self.modelDir_) + self.runTrain_] ,shell=True)
 		os.chdir(cwd)
-		shutil.copyfile(self.log_, self.resultLog_)		
+		shutil.copyfile(self.logTrain_, self.resultLogTrain_)		
+		if self.isTest_:
+			subprocess.check_call([('cd %s && ' % self.modelDir_) + self.runTest_] ,shell=True)
+			os.chdir(cwd)
+			shutil.copyfile(self.logTest_, self.resultLogTest_)		
 
 
 class CaffeExperiment:
 	def __init__(self, dataExpName, caffeExpName, expDirPrefix, snapDirPrefix,
 							 defPrefix = 'caffenet', solverPrefix = 'solver',
 							 logPrefix = 'log', runPrefix = 'run', deviceId = 0,
-							 repNum = None):
+							 repNum = None, isTest=False):
 		'''
 			experiment directory: expDirPrefix  + dataExpName
 			snapshot   directory: snapDirPrefix + dataExpName
@@ -838,13 +972,15 @@ class CaffeExperiment:
 		#Relevant files. 
 		self.files_ = {}
 		solverFile  = solverPrefix + '_' + caffeExpName + '.prototxt'
-		logFile     = logPrefix    + '_' + caffeExpName + '.txt'
-		runFile     = runPrefix    + '_' + caffeExpName + '.sh'
 		defFile     = defPrefix    + '_' + caffeExpName + '.prototxt'
+		logFile     = logPrefix + '_' + '%s' + '_' + caffeExpName + '.txt'
+		runFile     = runPrefix + '_' + '%s' + '_' + caffeExpName + '.sh'
 		self.files_['solver'] = os.path.join(self.dirs_['exp'], solverFile) 
 		self.files_['netdef'] = os.path.join(self.dirs_['exp'], defFile) 
-		self.files_['log']    = os.path.join(self.dirs_['exp'], logFile)
-		self.files_['run']    = os.path.join(self.dirs_['exp'], runFile)
+		self.files_['logTrain'] = os.path.join(self.dirs_['exp'], logFile % 'train')
+		self.files_['logTest']  = os.path.join(self.dirs_['exp'], logFile % 'test')
+		self.files_['runTrain'] = os.path.join(self.dirs_['exp'], runFile % 'train')
+		self.files_['runTest']  = os.path.join(self.dirs_['exp'], runFile % 'test')
 
 		#snapshot
 		snapPrefix = defPrefix + '_' + caffeExpName 
@@ -854,9 +990,11 @@ class CaffeExperiment:
 
 		#Setup the experiment files.
 		self.expFile_ = ExperimentFiles(self.dirs_['exp'], defFile = defFile,
-											solverFile = solverFile, logFile = logFile, 
-											runFile = runFile, deviceId = deviceId,
-											repNum = repNum)
+											solverFile = solverFile, 
+											logFileTrain = logFile % 'train', logFileTest = logFile % 'test', 
+											runFileTrain = runFile % 'train', runFileTest = runFile % 'test', 
+											deviceId = deviceId, repNum = repNum, isTest=isTest)
+		self.isTest_  = isTest
 
 	##
 	#initalize from solver file/SolverDef and netdef file/ProtoDef
@@ -889,8 +1027,24 @@ class CaffeExperiment:
 		snapName = self.expFile_.extract_snapshot_name() % numIter
 		return snapName
 
+	## Only finetune the layers that are above ( and including) layerName
+	def finetune_above(self, layerName):
+		self.expFile_.netDef_.set_no_learning_until(layerName)	
+
+	## Get the top name of the last layer
+	def get_last_top_name(self):
+		return self.expFile_.netDef_.get_last_top_name()
+
+	## Set init std of all layers that are gaussian
+	def set_std_gaussian_weight_init(self, stdVal):
+		self.expFile_.netDef_.set_std_all(stdVal)
+
 	# Make the experiment. 
-	def make(self):
+	def make(self, modelFile=None, writeTest=False, testIter=None, modelIter=None):
+		'''
+			modelFile - file to finetune from if needed.
+			writeTest - if the test file needs to be written. 
+		'''
 		if not os.path.exists(self.dirs_['exp']):
 			os.makedirs(self.dirs_['exp'])
 		if not os.path.exists(self.dirs_['snap']):
@@ -898,7 +1052,18 @@ class CaffeExperiment:
 	 
 		self.expFile_.write_netdef()
 		self.expFile_.write_solver()
-		self.expFile_.write_run_train()	
+		self.expFile_.write_run_train(modelFile)
+		if writeTest:
+			assert testIter is not None and modelIter is not None, 'Missing variables'
+			self.expFile_.write_run_test(modelIter, testIter)		
+	
+	##
+	# Run the experiment
+	def run(self):
+		self.expFile_.run()
+	
+	def get_test_accuracy(self):
+		return test_log2acc(self.files_['logTest'])
 
  
 def make_experiment_repeats(modelDir, defPrefix,
@@ -946,7 +1111,7 @@ def make_experiment_repeats(modelDir, defPrefix,
 			
 	#Training Phase
 	trainExp = ExperimentFiles(modelDir=repDir, defFile=repDef, solverFile=repSol,
-						 logFile=repLog, runFile=repRun, deviceId=deviceId, repNum=repNum)
+						 logFileTrain=repLog, runFileTrain=repRun, deviceId=deviceId, repNum=repNum)
 	trainExp.init_solver_from_external(os.path.join(modelDir, solverFile))
 	if defData is None:
 		trainExp.init_netdef_from_external(os.path.join(modelDir, defFile))
@@ -960,7 +1125,7 @@ def make_experiment_repeats(modelDir, defPrefix,
 	if testIterations is not None:
 		assert modelIterations is not None	 
 		testExp      = ExperimentFiles(modelDir=repDir, defFile=repDef, solverFile=repSol,
-									 logFile=repLogTest, runFile=repRunTest, deviceId=deviceId, repNum=repNum)
+									 logFileTest=repLogTest, runFileTest=repRunTest, deviceId=deviceId, repNum=repNum)
 		testExp.write_run_test(modelIterations, testIterations)
 
 	return trainExp, testExp

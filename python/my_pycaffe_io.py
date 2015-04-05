@@ -34,6 +34,18 @@ def mean2siamese_mean(inFile, outFile):
 	write_proto(mn, outFile)
 
 ##
+# Convert the siamese mean to be the mean
+def siamese_mean2mean(inFile, outFile):
+	assert not os.path.exists(outFile), '%s already exists' % outFile
+	mn = mp.read_mean(inFile)
+	ch = mn.shape[0]
+	assert np.mod(ch,2)==0
+	ch = ch / 2
+	print "New number of channels: %d" % ch
+	newMn = mn[0:ch].reshape(1,ch,mn.shape[1],mn.shape[2])
+	write_proto(newMn.astype(mn.dtype), outFile)
+		
+##
 # Resize the mean to a different size
 def resize_mean(inFile, outFile, imSz):
 	mn = mp.read_mean(inFile)
@@ -232,7 +244,8 @@ class SiameseDbReader(DbReader):
 			im2 = im2[:,:,[2,1,0]]
 		return im1, im2, label
 			 
-
+##
+# Read two LMDBs simultaneosuly
 class DoubleDbReader:
 	def __init__(self, dbNames, isLMDB=True, readahead=True):
 		#For large LMDB set readahead to be False
@@ -269,6 +282,66 @@ class DoubleDbReader:
 	def close(self):
 		for db in self.dbs_:
 			db.close()
+
+
+##
+# For writing generic window file layers. 
+class GenericWindowWriter:
+	def __init__(self, fileName, numEx, numImgPerEx, lblSz):
+		'''
+			fileName   : the file to write to.
+			numEx      : the number of examples
+			numImgPerEx: the number of images per example
+			lblSz      : the size of the labels 
+		'''
+		self.file_  = fileName
+		self.num_   = numEx
+		self.numIm_ = numImgPerEx
+		self.lblSz_ = lblSz 
+		self.count_ = 0 #The number of examples written. 
+
+		self.fid_ = open(self.file_, 'w')	
+		self.fid_.write('# GenericDataLayer\n')
+		self.fid_.write('%d\n' % self.num_) #Num Examples. 
+		self.fid_.write('%d\n' % self.numIm_) #Num Images per Example. 
+		self.fid_.write('%d\n' % self.lblSz_) #Num	Labels
+
+	##
+	# Private Helper function for writing the images for the WindowFile
+	def write_image_line_(self, imgName, imgSz, bbox):
+		'''
+			imgSz: channels * height * width
+			bbox : x1, y1, x2, y2
+		'''
+		ch, h, w = imgSz
+		x1,y1,x2,y2 = bbox
+		x1  = max(0, x1)
+		y1  = max(0, y1)
+		x2  = min(x2, w-1)
+		y2  = min(y2, h-1)
+		self.fid_.write('%s %d %d %d %d %d %d %d\n' % (imgName, 
+							ch, h, w, x1, y1, x2, y2))
+
+	##
+	def write(self, lbl, *args):
+		assert len(args)==self.numIm_, 'Wrong input arguments'
+		#Write the images
+		for arg in args:
+			imName, imSz, bbox = arg
+			self.write_image_line_(imName, imSz, bbox)	
+		
+		#Write the label
+		lbStr = ['%f '] * self.lblSz_
+		lbStr = [lbS % lb for (lb, lbS) in zip(lbl, lbStr)]
+		lbStr = lbStr[:-1] + '\n'
+		self.fid_.write(lbStr)
+		self.count_ += 1
+
+		if self.count_ == self.num_:
+			self.close()	
+	##
+	def close(self):
+		self.fid_.close()
 
 	
 def save_lmdb_images(ims, dbFileName, labels=None, asFloat=False):

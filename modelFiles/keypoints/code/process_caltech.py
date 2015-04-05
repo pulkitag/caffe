@@ -23,7 +23,10 @@ def get_basic_paths():
 
 ##
 # Get the experiment prms
-def get_prms(imSz=128, numTrain=30, numTest=20, runNum=0):
+def get_prms(imSz=128, numTrain=30, numTest=-1, runNum=0):
+	'''
+		numTest: -1 means that use the remaining images as test
+	'''
 	prms  = {}
 	paths = get_basic_paths()
 
@@ -32,14 +35,18 @@ def get_prms(imSz=128, numTrain=30, numTest=20, runNum=0):
 	prms['runNum']   = runNum
 	prms['imSz']     = imSz
 
-	expStr = 'imSz%d_ntr%d_nte%d_run%d' % (imSz, numTrain, numTest, runNum)
+	if numTest==-1:
+		postStr = 'ntr%d_run%d' % (numTrain, runNum)
+	else:
+		postStr =  'ntr%d_nte%d_run%d' % (numTrain, numTest, runNum)
+	expStr = 'imSz%d_%s' % (imSz, postStr)
+	prms['expName'] = expStr
 
 	paths['splitsFile'] = {}
 	paths['splitsFile']['train'] = os.path.join(paths['splitsDir'],
-																 'train_ntr%d_nte%d_run%d.txt' % (numTrain, numTest, runNum))
+																 'train_%s.txt' % (postStr))
 	paths['splitsFile']['test']  = os.path.join(paths['splitsDir'],
-																 'test_ntr%d_nte%d_run%d.txt' % (numTrain, numTest, runNum))
-
+																 'test_%s.txt' % (postStr))
 	paths['lmdb'] = {}
 	paths['lmdb']['train'] = os.path.join(paths['lmdbDir'], 'train-%s-lmdb' % expStr)
 	paths['lmdb']['test']  = os.path.join(paths['lmdbDir'], 'test-%s-lmdb' % expStr)
@@ -88,8 +95,11 @@ def get_class_imagenames(prms):
 
 ##
 # Form train and test splits
-def save_train_test_splits(prms, forceSave=False):
+def save_train_test_splits(prms, forceSave=False, isOld=False):
 	'''
+		NEW Strategy:
+		Take the prms['numTrain'] images as the training set and rest as testingg set.	
+		OLD Strategy:
 		The following strategy will be used:
 		1. The test number of images will be first selected from the available collection.
 		2. Then, out of reamining images - a "maximum" of prms['numTrain'] will
@@ -116,9 +126,14 @@ def save_train_test_splits(prms, forceSave=False):
 		N        = len(imFiles[cl])
 		perm     = randState.permutation(N)
 		ids      = {}
-		ids['test']  = perm[0:prms['numTest']]
-		numTrain =   min(N - prms['numTest'], prms['numTrain'])
-		ids['train'] = perm[prms['numTest']:prms['numTest'] + numTrain]
+		if isOld:
+			ids['test']  = perm[0:prms['numTest']]
+			numTrain =   min(N - prms['numTest'], prms['numTrain'])
+			ids['train'] = perm[prms['numTest']:prms['numTest'] + numTrain]
+		else:
+			ids['train']  = perm[0:prms['numTrain']]
+			ids['test']   = perm[prms['numTrain']:]
+			
 		for s in setNames:
 			for idx in ids[s]:
 				fid[s].write('%s %d\n' % (imFiles[cl][idx], i))	
@@ -209,6 +224,10 @@ def get_pretrain_info(preTrainStr):
 	'''
 		preTrainStr: The weights to use. 
 	'''
+	if preTrainStr is None:
+		defFile = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/caltech101/exp/keynet_full.prototxt' 
+		return None, defFile
+
 	if preTrainStr == 'alex':
 		netFile = '/data1/pulkitag/caffe_models/caffe_imagenet_train_iter_310000'
 	elif preTrainStr == 'rotObjs_kmedoids30_20_iter60K':
@@ -222,11 +241,12 @@ def get_pretrain_info(preTrainStr):
 		raise Exception('Unrecognized preTrainStr: %s' % preTrainStr)
 	return netFile, defFile
 
+
 #List the layers to modify in order to get the network. 
 def get_modify_layers(maxLayer):
 	assert maxLayer >= 1, 'All layers cannot be deleted'
 	#Layers that need to be deleted so that maxLayer can be achieved.
-	delLayers = {}
+	delLayer = {}
 	delLayer['l6'] = ['drop6','relu6','fc6']
 	delLayer['l5'] = ['pool5','relu5','conv5']
 	delLayer['l4'] = ['relu4', 'conv4']
@@ -236,9 +256,10 @@ def get_modify_layers(maxLayer):
 	if maxLayer < 6:
 		for l in range(6,maxLayer,-1):
 			allDelLayers = allDelLayers + delLayer['l%d' % l]
-	allDelLayers = allDelLayers + ['accuracy', 'loss']	
+	allDelLayers = allDelLayers + ['accuracy', 'loss', 'class_fc']	
 
 	#The last feature layer.
+	lfLayer       = {}
 	lfLayer['l6'] = 'drop6'
 	lfLayer['l5'] = 'pool5'
 	lfLayer['l4'] = 'relu4'
@@ -250,13 +271,20 @@ def get_modify_layers(maxLayer):
 	return allDelLayers, lastLayer	
  		
 
-def get_caffe_prms(isPreTrain=False, maxLayer=5, fineLast=True, preTrainStr=None)
+def get_caffe_prms(isPreTrain=False, maxLayer=5, isFineLast=True,
+									 preTrainStr=None, initLr=0.01, initStd=0.01):
 	'''
-		isPreTrain: Use a pretrained network for performing classification.  		
-		maxLayer  : How many layers to consider in the alexnet train.
-		fineLast  : Whether to finetune only the last layer or all layers. 
+		isPreTrain : Use a pretrained network for performing classification.  		
+		maxLayer   : How many layers to consider in the alexnet train.
+		isFineLast : Whether to finetune only the last layer or all layers. 
 	'''
 	cPrms  = {}
+	cPrms['isPreTrain']  = isPreTrain
+	cPrms['maxLayer']    = maxLayer
+	cPrms['preTrainStr'] = preTrainStr
+	cPrms['isFineLast']  = isFineLast
+	cPrms['initLr']      = initLr
+	cPrms['initStd']     = initStd
 	expStr = []
 	if isPreTrain:
 		assert preTrainStr is not None, 'preTrainStr cannot be none'
@@ -264,18 +292,134 @@ def get_caffe_prms(isPreTrain=False, maxLayer=5, fineLast=True, preTrainStr=None
 	else:
 		expStr.append('pre-random')
 
-	if fineLast:
+	if isFineLast:
 		expStr.append('ft-last')
 	else:
 		expStr.append('ft-all')
 
 	#Max-Layer
 	expStr.append('mxl-%d' % maxLayer)
+
+	if initLr != 0.01:
+		#For backward compatibility nothing is added if initLr=0.01
+		expStr.append('inLr%.0e' % initLr)
+
+	if std != 0.01:
+		#For backward compatilibility nothing is added if std=0.01
+		expStr.append('inSd%.0e' % std)
+
 	#Final str
 	expStr = ''.join(s + '_' for s in expStr)
 	expStr = expStr[0:-1]
 	cPrms['expStr']    = expStr
-	cPrms['delLayers'], cPrms['lastLayer'] =   	
+	cPrms['delLayers'], cPrms['lastLayer'] = get_modify_layers(maxLayer)	
+	return cPrms
 
 
-def make_experiment() 
+def get_experiment_object(prms, cPrms, deviceId=1):
+	targetExpDir = prms['paths']['expDir'] 
+	caffeExpName = cPrms['expStr']
+	caffeExp = mpu.CaffeExperiment(prms['expName'], caffeExpName,
+												targetExpDir, prms['paths']['snapDir'], 
+												deviceId=deviceId, isTest=True)
+	return caffeExp
+
+
+def get_solver(cPrms):
+	solArgs = {'test_iter': 10,	'test_interval': 500, 'base_lr': cPrms['initLr'],
+						 'gamma': 0.5, 'stepsize': 1000, 'max_iter': 10000,
+				    'snapshot': 2000, 'lr_policy': '"step"'}
+	sol = mpu.make_solver(**solArgs) 
+	return sol
+
+
+def setup_experiment(prms, cPrms, deviceId=1):
+	caffeExp  = get_experiment_object(prms, cPrms, deviceId=deviceId)
+	sourceSol = get_solver(cPrms)
+	netFile, defFile = get_pretrain_info(cPrms['preTrainStr'])	
+
+	#Set the solver and net file for experiment.
+	caffeExp.init_from_external(sourceSol, defFile)
+
+	#Delete the layers that are not needed
+	for l in cPrms['delLayers']:
+		caffeExp.del_layer([l])
+
+	#Get the name of the last top layer
+	lastTop = caffeExp.get_last_top_name()
+
+	#Construct the fc layer for classification
+	opName     = 'class_fc'
+	classLayer = mpu.get_layerdef_for_proto('InnerProduct', opName,
+										 lastTop, numOutput=101)
+	caffeExp.add_layer(opName, classLayer, 'TRAIN')
+	
+	#Construct the accuracy and softmax layers
+	accArgs  = {'top': 'accuracy', 'bottom2': 'label'}
+	accLayer = mpu.get_layerdef_for_proto('Accuracy', 'accuracy', opName, **accArgs) 
+	softArgs = {'top': 'loss', 'bottom2': 'label'}
+	softLayer = mpu.get_layerdef_for_proto('SoftmaxWithLoss', 'loss', opName, **softArgs) 
+	caffeExp.add_layer('accuracy', accLayer, 'TRAIN')
+	caffeExp.add_layer('loss',    softLayer, 'TRAIN')
+
+	#Set the lmdbs
+	trainLmdb = prms['paths']['lmdb']['train']
+	testLmdb  = prms['paths']['lmdb']['test']
+	caffeExp.set_layer_property('data', ['data_param','source'], '"%s"' % trainLmdb, phase='TRAIN')
+	caffeExp.set_layer_property('data', ['data_param','source'], '"%s"' % testLmdb, phase='TEST')
+
+	#Set the learning rates and weight decays to zero if required. 
+	if cPrms['isFineLast']:
+		caffeExp.finetune_above(opName)
+
+	#Set the Stds of layers
+	caffeExp.set_std_gaussian_weight_init(cPrms['initStd'])
+	
+	return caffeExp
+
+##
+# Write the experiment files. 
+def make_experiment(prms, cPrms, deviceId=1): 
+	caffeExp = setup_experiment(prms, cPrms, deviceId=deviceId)
+	netFile, defFile = get_pretrain_info(cPrms['preTrainStr'])	
+	#Write the files
+	caffeExp.make(modelFile=netFile, writeTest=True, testIter=100, modelIter=10000)
+	return caffeExp
+
+def run_experiment(prms, cPrms, deviceId=1):
+	caffeExp = make_experiment(prms, cPrms, deviceId=deviceId)
+	caffeExp.run()
+
+##
+# Run the experiment when the weights are randomly initialized
+def run_random_experiment(isFineLast=True):
+	prms    = get_prms()
+	mxLayer = [1,2,3,4]
+	#mxLayer =  [5,6]
+	for l in mxLayer:
+		if isFineLast or l > 4:
+			initStd = 0.01
+			initLr  = 0.01
+		else:
+			initStd = 0.001
+			initLr  = 0.001
+		cPrms = get_caffe_prms(maxLayer=l, isFineLast=isFineLast, initLr=initLr, initStd=initStd)
+		run_experiment(prms, cPrms, deviceId=0) #0 corresponds to second K40  
+
+##
+#
+def run_pretrain_experiment(preTrainStr='rotObjs_kmedoids30_20_iter60K', isFineLast=True):	
+	prms    = get_prms()
+	#mxLayer = [1,2,3,4,5,6]
+	mxLayer = [5,6]
+	for l in mxLayer:
+		cPrms = get_caffe_prms(isPreTrain=True, maxLayer=l, 
+													 preTrainStr=preTrainStr, isFineLast=isFineLast, initLr=0.001)
+		run_experiment(prms, cPrms, deviceId=1) #1 corresponds to first K40  
+
+##
+# Accumulate results for an experiment
+def get_experiment_acc(prms, cPrms):
+	caffeExp = setup_experiment(prms, cPrms)
+	return caffeExp.get_test_accuracy()	
+

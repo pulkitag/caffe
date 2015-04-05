@@ -10,7 +10,7 @@ layer {
   transform_param {
     mirror: true
     crop_size: 112
-    mean_file: "/data1/pulkitag/keypoints/leveldb_store/keypoints_im128_mean.binaryproto"
+    mean_file: "/data1/pulkitag/keypoints/leveldb_store/keypoints_im128_ch3_mean.binaryproto"
   }
   data_param {
     source: ""
@@ -29,7 +29,7 @@ layer {
   transform_param {
     mirror: false
     crop_size: 112
-    mean_file: "/data1/pulkitag/keypoints/leveldb_store/keypoints_im128_mean.binaryproto"
+    mean_file: "/data1/pulkitag/keypoints/leveldb_store/keypoints_im128_ch3_mean.binaryproto"
   }
   data_param {
     source: ""
