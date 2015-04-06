@@ -200,18 +200,23 @@ class DbReader:
 
 	def read_batch(self, batchSz):
 		data, label = [], []
+		count = 0
 		for b in range(batchSz):
 			dat, lb = self.read_next()
 			if dat is None:
 				break
 			else:
+				count += 1
 				ch, h, w = dat.shape
 				dat = np.reshape(dat,(1,ch,h,w))
 				data.append(dat)
 				label.append(lb)
-		data  = np.concatenate(data[:])
-		label = np.array(label)
-		label = label.reshape((len(label),1))
+		if count > 0:
+			data  = np.concatenate(data[:])
+			label = np.array(label)
+			label = label.reshape((len(label),1))
+		else:
+			data, label = None, None
 		return data, label 
 		 
 	def get_label_stats(self, maxLabels):
@@ -225,6 +230,9 @@ class DbReader:
 				countFlag = False
 		return countArr				
 
+	def get_count(self):
+		return self.db_.stat()['entries']
+	
 	def close(self):
 		self.txn_.commit()
 		self.db_.close()

@@ -311,12 +311,16 @@ class MyNet:
 		return blob.num, blob.channels, blob.height, blob.width
 
 	
-	def set_preprocess(self, ipName='data',chSwap=(2,1,0), meanDat=None, imageDims=None, isBlobFormat=False, rawScale=None):
+	def set_preprocess(self, ipName='data',chSwap=(2,1,0), meanDat=None,
+										 imageDims=None, isBlobFormat=False, rawScale=None, cropDims=None):
 		'''
 			isBlobFormat: if the images are already coming in blobFormat or not. 
 			ipName    : the blob for which the pre-processing parameters need to be set. 
 			meanDat   : the mean which needs to subtracted
 			imageDims : the size of the images as H * W * K where K is the number of channels
+			cropDims  : the size to which the image needs to be cropped. 
+									if None - then it is automatically determined
+									this behavior is undesirable for some deploy prototxts 
 		'''
 		self.transformer[ipName] = caffe.io.Transformer({ipName: self.net.blobs[ipName].data.shape})
 		#Note blobFormat will be so used that finally the image will need to be flipped. 
@@ -331,7 +335,11 @@ class MyNet:
 	
 		#Crop Dimensions
 		ipDims            = np.array(self.net.blobs[ipName].data.shape)
-		self.cropDims     = ipDims[2:]
+		if cropDims is not None:
+			assert len(cropDims)==2, 'Length of cropDims needs to be corrected'
+			self.cropDims   = np.array(cropDims)
+		else:
+			self.cropDims     = ipDims[2:]
 		self.isBlobFormat = isBlobFormat 
 		if imageDims is None:
 			imageDims = np.array([ipDims[2], ipDims[3], ipDims[1]])
@@ -340,7 +348,7 @@ class MyNet:
 			imageDims = np.array([imageDims[0], imageDims[1], imageDims[2]])
 		self.imageDims = imageDims
 		self.get_crop_dims()		
-		
+	
 		#Mean Subtraction
 		if not meanDat is None:
 			if isinstance(meanDat, string_types):

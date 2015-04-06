@@ -190,14 +190,22 @@ def save_lmdb(prms):
 				print "Processed %d examples" % (count + prevCount)
 				ims = ims.transpose((0, 3, 1, 2))
 				db.add_batch(ims, lbs, svIdx = perm[prevCount:prevCount+count])
-				count = 0 
 				prevCount += count
+				count = 0 
 				ims       = np.zeros((batchSz, imSz, imSz, 3)).astype(np.uint8)
 				lbs       = np.zeros((batchSz,)).astype(int)
 		if count > 0:
 			ims = ims.transpose((0, 3, 1, 2))
 			db.add_batch(ims[0:count], lbs[0:count], svIdx = perm[prevCount:prevCount+count])
+			prevCount += count
+	
+		print "Saved %d examples" % (prevCount)
 		db.close()
+		## Verify that all examples have been stored.
+		dbRead = mpio.DbReader(prms['paths']['lmdb'][s])
+		saveCount = dbRead.get_count()
+		assert saveCount == len(lines), 'All examples have not been stored'
+		dbRead.close()
 		#Set the random state back. 
 		np.random.set_state(oldRandState)
 
@@ -397,6 +405,16 @@ def make_experiment(prms, cPrms, deviceId=1):
 def run_experiment(prms, cPrms, deviceId=1):
 	caffeExp = make_experiment(prms, cPrms, deviceId=deviceId)
 	caffeExp.run()
+
+def run_test():
+	prms  = get_prms()
+	cPrms = get_caffe_prms(maxLayer=2) 
+	caffeExp  = setup_experiment(prms, cPrms)
+	caffeTest = mpu.CaffeTest.from_caffe_exp_lmdb(caffeExp, prms['paths']['lmdb']['test'])
+	assert isinstance(caffeTest, mpu.CaffeTest)
+	caffeTest.setup_network(['class_fc'], imH=128, imW=128,
+								 cropH=112, cropW=112, channels=3, modelIterations=5001)
+	return caffeTest
 
 ##
 # Run the experiment when the weights are randomly initialized

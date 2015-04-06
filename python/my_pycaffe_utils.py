@@ -622,13 +622,13 @@ class ProtoDef():
 		self.initData_ = self.initData_[:-1]
 
 	@classmethod
-	def deploy_from_proto(initDef, dataLayerNames=['data'], imSz=[[3,128,128]]):
-		if isinstance(initDef):
+	def deploy_from_proto(cls, initDef, dataLayerNames=['data'], imSz=[[3,128,128]], **kwargs):
+		if isinstance(initDef, ProtoDef):
 			netDef = copy.deepcopy(initDef) 
 		else:
 			assert isinstance(initDef, str), 'Invalid format of netDef'
-			netDef = ProtoDef(initDef)
-		netDef.make_deploy(dataLayerNames=dataLayerNames, imSz=imSz)
+			netDef = cls(initDef)
+		netDef.make_deploy(dataLayerNames=dataLayerNames, imSz=imSz, **kwargs)
 		return netDef
 
 	##
@@ -639,7 +639,8 @@ class ProtoDef():
 
 	##
 	#Make a deploy prototxt file
-	def make_deploy(self, dataLayerNames=['data'], imSz=[[3,128,128]]):
+	def make_deploy(self, dataLayerNames=['data'], imSz=[[3,128,128]], 
+									batchSz=None, delLayers=None):
 		'''
 			the deployNet will have only 1 phase, by default it will be set to TRAIN
 			From the original network copy the data layers of the test phase and all
@@ -654,8 +655,9 @@ class ProtoDef():
 		#Copy the data layers from the test phase
 		for name,sz in zip(dataLayerNames, imSz):
 			assert self.layers_[tePhase].has_key(name), '%s data layer not found' % name
-			batchSzPath = ou.find_path_key(self.layers_[tePhase][name], 'batch_size')
-			batchSz     = ou.get_item_recursive_key(self.layers_[tePhase][name], batchSzPath)
+			if batchSz is None:
+				batchSzPath = ou.find_path_key(self.layers_[tePhase][name], 'batch_size')
+				batchSz     = ou.get_item_recursive_key(self.layers_[tePhase][name], batchSzPath)
 			layerName   = self.layers_[tePhase][name]['name']
 			sz          = [batchSz] + sz
 			szDict = {'ipDims': sz}
@@ -665,6 +667,9 @@ class ProtoDef():
 			if name in dataLayerNames:
 				continue
 			else:
+				if delLayers is not None:
+					if name in delLayers:
+						continue
 				deployNet[trPhase][name] = copy.deepcopy(self.layers_[trPhase][name])
 		self.layers_ = copy.deepcopy(deployNet)	
 	
@@ -754,14 +759,14 @@ class ProtoDef():
 					doFlag = False
 
 	##
-  def get_layer_property(self, layerName, propName, phase='TRAIN', propNum=0):
-    '''
-      See documentation of set_layer_property for meaning of variable names. 
-    '''
+	def get_layer_property(self, layerName, propName, phase='TRAIN', propNum=0):
+		'''
+			See documentation of set_layer_property for meaning of variable names. 
+		'''
 		#Modify the propName to account for duplicates
 		propName = propName + '_$dup$' * propNum
 		return ou.get_item_dict(self.layers_[phase][layerName], propName)	
-	
+
 	##					
 	def set_layer_property(self, layerName, propName, value, phase='TRAIN',  propNum=0): 
 		'''
@@ -1092,7 +1097,7 @@ class CaffeExperiment:
 		self.expFile_.netDef_.del_layer(layerName) 
 
 	## Get layer property
-	def get_layer_property(self, layerName, propName, **kwargs)
+	def get_layer_property(self, layerName, propName, **kwargs):
 		return self.expFile_.netDef_.get_layer_property(layerName, propName, **kwargs)
 
 	## Set the property. 	
@@ -1139,9 +1144,9 @@ class CaffeExperiment:
 			self.expFile_.write_run_test(modelIter, testIter)		
 
 	## Make the deploy file. 
-	def make_deploy(self, dataLayerNames, imSz):
-		self.deployProto_ = ProtoDef.deploy_from_proto(self.exp_.expFile_.netDef,
-									 dataLayerNames=dataLayerNames, imSz=imSz)
+	def make_deploy(self, dataLayerNames, imSz, **kwargs):
+		self.deployProto_ = ProtoDef.deploy_from_proto(self.expFile_.netDef_,
+									 dataLayerNames=dataLayerNames, imSz=imSz, **kwargs)
 		self.deployProto_.write(self.files_['netdefDeploy'])
 	
 	## Get the deploy proto
@@ -1166,26 +1171,33 @@ class CaffeTest:
 	# Intialize using an instance of CaffeExperiment and a lmdb that needs
 	# to be used for testing
 	@classmethod
-	def from_caffe_exp_lmdb(caffeExp, lmdbTest, doubleDb=False, deviceId=0):
-		self      = CaffeTest()
+	def from_caffe_exp_lmdb(cls, caffeExp, lmdbTest, doubleDb=False, deviceId=0):
+		self      = cls()
 		self.exp_ = caffeExp
 		self.db_  = mpio.DbReader(lmdbTest)
 		self.device_ = deviceId
+		self.ipMode_ = 'lmdb'
+		return self
 
-	## 
-	# Run the test
-	def run_test(self, dataLayerNames=['data'], labelBlob=['label'], 
-							 imSz=[[3,128,128]], modelIterations=10000):
+	##
+	def setup_network(self, opNames, dataLayerNames=['data'], labelBlob=['label'], 
+						 imH=128, imW=128, cropH=112, cropW=112, channels=3,
+						 modelIterations=10000, 
+						 batchSz=100, delLayers=['accuracy', 'loss']):
 		'''
 			This will simply store the gt and predicted labels
+			opName         : The layer from which the predicted features need to be taken.
+											 should be a list. 
 			dataLayerName  : Layer to which feed the data
 			labelBlob      : The name of the label blob
-			imSz           : The size of the input image
 			modelIterations: The number of iterations for which caffe-model needs to be used.  
 		'''
+		if not isinstance(opNames, list):
+			opNames = [opNames]
 		assert len(dataLayerNames)==1
 		#Make the deploy file
-		self.exp_.make_deploy(dataLayerNames = dataLayerNames, imSz = imSz)
+		self.exp_.make_deploy(dataLayerNames = dataLayerNames, imSz = [[channels, cropH, cropW]], 
+								batchSz = batchSz, delLayers = delLayers)
 		self.netdef_ = self.exp_.get_deploy_file()
 		#Name of the model
 		self.model_  = self.exp_.get_snapshot_name(numIter=modelIterations)
@@ -1206,9 +1218,56 @@ class CaffeTest:
 			print 'Setting scale as :%f' % scale
 		else:
 			scale = None
-		self.net_.set_preprocess(ipname = dataLayerNames[0], isBlobFormat=True,
-										imageDims = (imSz[0][1], imSz[0][1], imSz[0][2]),
+		self.net_.set_preprocess(ipName = dataLayerNames[0], isBlobFormat=True,
+										imageDims = (imH, imW, channels),
+										cropDims  = (cropH, cropW),
 										rawScale = scale, meanDat = meanFile)  
+		self.ip_      = dataLayerNames[0]
+		self.op_      = opNames
+		self.batchSz_ = batchSz
+
+	def get_data(self):
+		'''
+			Returns: data, label, isEnd
+		'''
+		if self.ipMode_ == 'lmdb':
+			data, label = self.db_.read_batch(self.batchSz_)
+			if data is None:
+				return None, None, True
+			elif data.shape[0] < self.batchSz_:
+				return data, label, True
+			else:
+				return data, label, False
+		else:
+			raise Exception('Data Model not recognized')
+
+	## 
+	# Run the test
+	def run_test(self):
+		self.gtLb_ = []
+		self.pdLb_ = []
+		runFlag = True
+		while runFlag:
+			data, label, isEnd = self.get_data()
+			if data is None:
+					print 'data is none'
+					break
+			if isEnd:
+				runFlag = False
+			print 'running: ', data.shape, label.shape
+			#Get the features
+			op = self.net_.forward_all(blobs=self.op_, **{self.ip_: data})
+			#If there are multiple outputs - then concatenate them along the channel dim.
+			opDat = []
+			for i,key in enumerate(self.op_):
+				if i==0:
+					opDat = op[key]
+				else:
+					opDat = np.concatenate((opDat, op[key]), axis=1)
+			self.pdLb_.append(opDat.squeeze())		
+			self.gtLb_.append(label.squeeze())
+		self.pdLb_ = np.concatenate(self.pdLb_)
+		self.gtLb_ = np.concatenate(self.gtLb_)
 
 	def close(self):
 		self.db_.close()	
