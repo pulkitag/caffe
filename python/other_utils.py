@@ -36,20 +36,36 @@ def get_item_recursive_key(data, keyNames):
 		dat = reduce(lambda dat, key: dat[key], keyNames[:-1], data)
 		return dat[keyNames[-1]]
 	else:
-		raise Exception('Keys not present')
+		print "Not found:", keyNames
+		return None
 
 ##
 # Find the path to the key in a recursive dictionary. 
 def find_path_key(data, keyName):
+	'''
+		Returns path to the first key that is found.
+	'''
 	path = []
+	#print keyName
 	if not isinstance(data, dict):
 		return path
 	if data.has_key(keyName):
 		return [keyName]
 	else:
-		for keys in data.keys():
-			path = path + find_path_key(data[key], keyName)
+		for key in data.keys():
+			pathFound = find_path_key(data[key], keyName)
+			if len(pathFound) > 0:
+				return [key] + pathFound
 	return path
+
+##
+# Find an item in dict
+def get_item_dict(data, keyName):
+	keyPath = find_path_key(data, keyName)
+	if len(keyPath)==0:
+		return None
+	else:
+		return get_item_recursive_key(data, keyPath)
 
 ##
 # Read the image

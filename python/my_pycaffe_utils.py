@@ -13,6 +13,7 @@ import subprocess
 import collections as co
 import other_utils as ou
 import shutil
+import copy
 
 def zf_saliency(net, imBatch, numOutputs, opName, ipName='data', stride=2, patchSz=11):
 	'''
@@ -190,6 +191,7 @@ def get_layerdef_for_proto(layerType, layerName, bottom, numOutput=1, **kwargs):
 	layerDef['name']  = '"%s"' % layerName
 	layerDef['type']  = '"%s"' % layerType
 	layerDef['bottom'] =	'"%s"' % bottom
+	#The prms for different layers. 
 	if layerType == 'InnerProduct':
 		layerDef['top']    = '"%s"' % layerName
 		layerDef['param']  = co.OrderedDict()
@@ -219,7 +221,15 @@ def get_layerdef_for_proto(layerType, layerName, bottom, numOutput=1, **kwargs):
 		assert kwargs.has_key('bottom2')
 		bottom2 = make_key('bottom', layerDef.keys())
 		layerDef[bottom2] = '"%s"' % kwargs['bottom2']
-		layerDef['top']   = '"%s"' % kwargs['top']	
+		layerDef['top']   = '"%s"' % kwargs['top']
+	elif layerType in ['DeployData']:
+		layerDef['input'] = '"%s"' % layerName
+		ipDims = kwargs['ipDims'] #(batch_size, channels, h, w)
+		layerDef['input_dim'] = ipDims[0]
+		key  = make_key('input_dim', layerDef.keys())
+		layerDef[key] = ipDims[1]
+		layerDef[make_key('input_dim', layerDef.keys())] = ipDims[2]		
+		layerDef[make_key('input_dim', layerDef.keys())] = ipDims[3]		
 	else:
 		raise Exception('%s layer type not found' % layerType)
 	'''	
@@ -537,6 +547,8 @@ def write_proto_param(fid, protoData, numTabs=0):
 	'''
 	tabStr = '\t ' * numTabs 
 	for (key, data) in protoData.iteritems():
+		if data is None:
+			continue
 		key = strip_key(key)
 		if isinstance(data, dict):
 			line = '%s %s { \n' % (tabStr,key)
@@ -547,6 +559,25 @@ def write_proto_param(fid, protoData, numTabs=0):
 		else:
 			line = '%s %s: %s \n' % (tabStr, key, data)
 			fid.write(line)
+
+##
+# Write proto param for a layer
+def write_proto_param_layer(fid, protoData):
+	'''
+		fid      : File Handle
+		protoData: The data that needs to be written 
+	'''
+	assert protoData.has_key('name') and protoData.has_key('type'),\
+		'layer must have a name and a type'
+	name, layerType = protoData['name'][1:-1], protoData['type'][1:-1]
+	if layerType =='DeployData':
+		layerProto = copy.deepcopy(protoData)
+		del layerProto['name'], layerProto['bottom'], layerProto['type']
+		write_proto_param(fid, layerProto, 0)
+	else:	
+		fid.write('layer { \n')
+		write_proto_param(fid, protoData, numTabs=0)
+		fid.write('} \n')
 
 
 class ProtoDef():
@@ -590,12 +621,53 @@ class ProtoDef():
 		#The last line of iniData_ is going to be "layer {", so remove it. 
 		self.initData_ = self.initData_[:-1]
 
+	@classmethod
+	def deploy_from_proto(initDef, dataLayerNames=['data'], imSz=[[3,128,128]]):
+		if isinstance(initDef):
+			netDef = copy.deepcopy(initDef) 
+		else:
+			assert isinstance(initDef, str), 'Invalid format of netDef'
+			netDef = ProtoDef(initDef)
+		netDef.make_deploy(dataLayerNames=dataLayerNames, imSz=imSz)
+		return netDef
+
 	##
 	# Convert a network into a siamese network. 
-	def make_siamese():
+	def make_siamese(self):
 		print "WARNING: Only Convolution and InnerProduct layers are assumed to have params"
 		print "To be completed"	
 
+	##
+	#Make a deploy prototxt file
+	def make_deploy(self, dataLayerNames=['data'], imSz=[[3,128,128]]):
+		'''
+			the deployNet will have only 1 phase, by default it will be set to TRAIN
+			From the original network copy the data layers of the test phase and all
+			other layers from the training phase. 
+		'''
+		deployNet = co.OrderedDict()
+		for ph in ProtoDef.ProtoPhases:
+			deployNet[ph] = co.OrderedDict()
+
+		trPhase = 'TRAIN'
+		tePhase = 'TEST'
+		#Copy the data layers from the test phase
+		for name,sz in zip(dataLayerNames, imSz):
+			assert self.layers_[tePhase].has_key(name), '%s data layer not found' % name
+			batchSzPath = ou.find_path_key(self.layers_[tePhase][name], 'batch_size')
+			batchSz     = ou.get_item_recursive_key(self.layers_[tePhase][name], batchSzPath)
+			layerName   = self.layers_[tePhase][name]['name']
+			sz          = [batchSz] + sz
+			szDict = {'ipDims': sz}
+			deployNet[trPhase][name] = get_layerdef_for_proto('DeployData', name, None, **szDict)	
+		#Copy all the other layers from the training network
+		for name in self.layers_[trPhase].keys():
+			if name in dataLayerNames:
+				continue
+			else:
+				deployNet[trPhase][name] = copy.deepcopy(self.layers_[trPhase][name])
+		self.layers_ = copy.deepcopy(deployNet)	
+	
 	##
 	# Write the prototxt architecture file
 	def write(self, outFile):
@@ -605,23 +677,17 @@ class ProtoDef():
 				fid.write(l)
 			#Write TRAIN/TEST Layers
 			for (key, data) in self.layers_['TRAIN'].iteritems():
-				fid.write('layer { \n')
-				write_proto_param(fid, data, numTabs=0)
-				fid.write('} \n')
+				write_proto_param_layer(fid, data)
 				#Write the test layer if it is present.  
 				if self.layers_['TEST'].has_key(key):
-					fid.write('layer { \n')
-					write_proto_param(fid, self.layers_['TEST'][key], numTabs=0)
-					fid.write('} \n')
+					write_proto_param_layer(fid, self.layers_['TEST'][key])
 			#Write the layers in TEST which were not their in TRAIN
 			testKeys = self.layers_['TEST'].keys()
 			for key in testKeys:
 				if key in self.layers_['TRAIN'].keys():
 					continue
 				else:
-					fid.write('layer { \n')
-					write_proto_param(fid, self.layers_['TEST'][key], numTabs=0)
-					fid.write('} \n')
+					write_proto_param_layer(fid, self.layers_['TEST'][key], numTabs=0)
 
 	##
 	# Find the layers that have learning rates
@@ -651,13 +717,13 @@ class ProtoDef():
 	def set_std_all(self, std):
 		layerNames = self.find_learning_layers()
 		for ph in layerNames.keys():
-			phLayers = layerNames[ph]
-			for name in phLayers:
-				keyPath = ou.find_path_key(phLayers[name], 'weight_filler')
+			for name in layerNames[ph]:
+				keyPath = ou.find_path_key(self.layers_[ph][name], 'weight_filler')
 				if len(keyPath) > 0:
-					fillerType = ou.get_item_recursive_key(phLayers[name], keyPath + ['weight_filler', 'type'])
+					fillerType = ou.get_item_recursive_key(self.layers_[ph][name], 
+												keyPath + ['type'])
 					if fillerType=='"gaussian"':
-						keyPath = keyPath + ['weight_filler', 'std']
+						keyPath = keyPath + ['std']
 						ou.set_recursive_key(self.layers_[ph][name], keyPath, std)
 					else:
 						print "Filler type for %s is not gaussian" % name
@@ -686,7 +752,16 @@ class ProtoDef():
 				count += 1
 				if count == len(lNames):
 					doFlag = False
-		
+
+	##
+  def get_layer_property(self, layerName, propName, phase='TRAIN', propNum=0):
+    '''
+      See documentation of set_layer_property for meaning of variable names. 
+    '''
+		#Modify the propName to account for duplicates
+		propName = propName + '_$dup$' * propNum
+		return ou.get_item_dict(self.layers_[phase][layerName], propName)	
+	
 	##					
 	def set_layer_property(self, layerName, propName, value, phase='TRAIN',  propNum=0): 
 		'''
@@ -970,13 +1045,15 @@ class CaffeExperiment:
 		self.dirs_['snap'] = os.path.join(snapDirPrefix, dataExpName)  
 
 		#Relevant files. 
-		self.files_ = {}
-		solverFile  = solverPrefix + '_' + caffeExpName + '.prototxt'
-		defFile     = defPrefix    + '_' + caffeExpName + '.prototxt'
-		logFile     = logPrefix + '_' + '%s' + '_' + caffeExpName + '.txt'
-		runFile     = runPrefix + '_' + '%s' + '_' + caffeExpName + '.sh'
+		self.files_   = {}
+		solverFile    = solverPrefix + '_' + caffeExpName + '.prototxt'
+		defFile       = defPrefix    + '_' + caffeExpName + '.prototxt'
+		defDeployFile = defPrefix    + '_' + caffeExpName + '_deploy.prototxt'
+		logFile       = logPrefix + '_' + '%s' + '_' + caffeExpName + '.txt'
+		runFile       = runPrefix + '_' + '%s' + '_' + caffeExpName + '.sh'
 		self.files_['solver'] = os.path.join(self.dirs_['exp'], solverFile) 
-		self.files_['netdef'] = os.path.join(self.dirs_['exp'], defFile) 
+		self.files_['netdef'] = os.path.join(self.dirs_['exp'], defFile)
+		self.files_['netdefDeploy'] = os.path.join(self.dirs_['exp'], defDeployFile) 
 		self.files_['logTrain'] = os.path.join(self.dirs_['exp'], logFile % 'train')
 		self.files_['logTest']  = os.path.join(self.dirs_['exp'], logFile % 'test')
 		self.files_['runTrain'] = os.path.join(self.dirs_['exp'], runFile % 'train')
@@ -1013,6 +1090,10 @@ class CaffeExperiment:
 	##
 	def del_layer(self, layerName):
 		self.expFile_.netDef_.del_layer(layerName) 
+
+	## Get layer property
+	def get_layer_property(self, layerName, propName, **kwargs)
+		return self.expFile_.netDef_.get_layer_property(layerName, propName, **kwargs)
 
 	## Set the property. 	
 	def set_layer_property(self, layerName, propName, value, **kwargs):
@@ -1056,7 +1137,21 @@ class CaffeExperiment:
 		if writeTest:
 			assert testIter is not None and modelIter is not None, 'Missing variables'
 			self.expFile_.write_run_test(modelIter, testIter)		
+
+	## Make the deploy file. 
+	def make_deploy(self, dataLayerNames, imSz):
+		self.deployProto_ = ProtoDef.deploy_from_proto(self.exp_.expFile_.netDef,
+									 dataLayerNames=dataLayerNames, imSz=imSz)
+		self.deployProto_.write(self.files_['netdefDeploy'])
 	
+	## Get the deploy proto
+	def get_deploy_proto(self):	
+		return self.deployProto_
+
+	## Get deploy file
+	def get_deploy_file(self):
+		return self.files_['netdefDeploy']		
+
 	##
 	# Run the experiment
 	def run(self):
@@ -1064,6 +1159,59 @@ class CaffeExperiment:
 	
 	def get_test_accuracy(self):
 		return test_log2acc(self.files_['logTest'])
+
+
+class CaffeTest:
+	##
+	# Intialize using an instance of CaffeExperiment and a lmdb that needs
+	# to be used for testing
+	@classmethod
+	def from_caffe_exp_lmdb(caffeExp, lmdbTest, doubleDb=False, deviceId=0):
+		self      = CaffeTest()
+		self.exp_ = caffeExp
+		self.db_  = mpio.DbReader(lmdbTest)
+		self.device_ = deviceId
+
+	## 
+	# Run the test
+	def run_test(self, dataLayerNames=['data'], labelBlob=['label'], 
+							 imSz=[[3,128,128]], modelIterations=10000):
+		'''
+			This will simply store the gt and predicted labels
+			dataLayerName  : Layer to which feed the data
+			labelBlob      : The name of the label blob
+			imSz           : The size of the input image
+			modelIterations: The number of iterations for which caffe-model needs to be used.  
+		'''
+		assert len(dataLayerNames)==1
+		#Make the deploy file
+		self.exp_.make_deploy(dataLayerNames = dataLayerNames, imSz = imSz)
+		self.netdef_ = self.exp_.get_deploy_file()
+		#Name of the model
+		self.model_  = self.exp_.get_snapshot_name(numIter=modelIterations)
+		#Setup the network
+		self.net_    = mp.MyNet(self.netdef_, self.model_, deviceId=self.device_,
+											testMode=True)
+		#Set the data pre-processing
+		meanFile = self.exp_.get_layer_property(dataLayerNames[0], 'mean_file')
+		if meanFile is not None:
+			meanFile = meanFile[1:-1]
+			print 'Using mean file: %s' % meanFile
+		else:
+			print 'No mean file found'
+
+		scale = self.exp_.get_layer_property(dataLayerNames[0], 'scale')
+		if scale is not None:
+			scale = float(scale)
+			print 'Setting scale as :%f' % scale
+		else:
+			scale = None
+		self.net_.set_preprocess(ipname = dataLayerNames[0], isBlobFormat=True,
+										imageDims = (imSz[0][1], imSz[0][1], imSz[0][2]),
+										rawScale = scale, meanDat = meanFile)  
+
+	def close(self):
+		self.db_.close()	
 
  
 def make_experiment_repeats(modelDir, defPrefix,

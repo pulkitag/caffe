@@ -230,11 +230,18 @@ def get_pretrain_info(preTrainStr):
 
 	if preTrainStr == 'alex':
 		netFile = '/data1/pulkitag/caffe_models/caffe_imagenet_train_iter_310000'
-	elif preTrainStr == 'rotObjs_kmedoids30_20_iter60K':
+
+	elif preTrainStr in  ['rotObjs_kmedoids30_20_iter60K', 'rotObjs_kmedoids30_20_nodrop_iter120K']:
 		snapshotDir   = '/data1/pulkitag/snapshots/keypoints/'
 		imSz          = 128
-		numIterations = 60000
-		modelName  =  'keypoints_siamese_scratch_iter_%d.caffemodel' % numIterations
+		if preTrainStr == 'rotObjs_kmedoids30_20_iter60K':
+			numIterations = 60000
+			modelName  =  'keypoints_siamese_scratch_iter_%d.caffemodel' % numIterations
+		elif preTrainStr == 'rotObjs_kmedoids30_20_nodrop_iter120K':
+			numIterations = 120000
+			modelName  =  'keypoints_siamese_scratch_nodrop_fc6_iter_%d.caffemodel' % numIterations
+		else:
+			raise Exception('Unrecognized preTrainStr')
 		netFile = os.path.join(snapshotDir, 'exprotObjs_lblkmedoids30_20_imSz%d'% imSz, modelName) 
 		defFile = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/caltech101/exp/keynet_full.prototxt' 
 	else:
@@ -272,7 +279,7 @@ def get_modify_layers(maxLayer):
  		
 
 def get_caffe_prms(isPreTrain=False, maxLayer=5, isFineLast=True,
-									 preTrainStr=None, initLr=0.01, initStd=0.01):
+									 preTrainStr=None, initLr=0.01, initStd=0.01, maxIter=5000):
 	'''
 		isPreTrain : Use a pretrained network for performing classification.  		
 		maxLayer   : How many layers to consider in the alexnet train.
@@ -285,6 +292,7 @@ def get_caffe_prms(isPreTrain=False, maxLayer=5, isFineLast=True,
 	cPrms['isFineLast']  = isFineLast
 	cPrms['initLr']      = initLr
 	cPrms['initStd']     = initStd
+	cPrms['maxIter']     = maxIter
 	expStr = []
 	if isPreTrain:
 		assert preTrainStr is not None, 'preTrainStr cannot be none'
@@ -304,9 +312,9 @@ def get_caffe_prms(isPreTrain=False, maxLayer=5, isFineLast=True,
 		#For backward compatibility nothing is added if initLr=0.01
 		expStr.append('inLr%.0e' % initLr)
 
-	if std != 0.01:
+	if initStd != 0.01:
 		#For backward compatilibility nothing is added if std=0.01
-		expStr.append('inSd%.0e' % std)
+		expStr.append('inSd%.0e' % initStd)
 
 	#Final str
 	expStr = ''.join(s + '_' for s in expStr)
@@ -326,8 +334,8 @@ def get_experiment_object(prms, cPrms, deviceId=1):
 
 
 def get_solver(cPrms):
-	solArgs = {'test_iter': 10,	'test_interval': 500, 'base_lr': cPrms['initLr'],
-						 'gamma': 0.5, 'stepsize': 1000, 'max_iter': 10000,
+	solArgs = {'test_iter': 100,	'test_interval': 500, 'base_lr': cPrms['initLr'],
+						 'gamma': 0.5, 'stepsize': 1000, 'max_iter': cPrms['maxIter'],
 				    'snapshot': 2000, 'lr_policy': '"step"'}
 	sol = mpu.make_solver(**solArgs) 
 	return sol
@@ -371,7 +379,7 @@ def setup_experiment(prms, cPrms, deviceId=1):
 	#Set the learning rates and weight decays to zero if required. 
 	if cPrms['isFineLast']:
 		caffeExp.finetune_above(opName)
-
+	#return caffeExp
 	#Set the Stds of layers
 	caffeExp.set_std_gaussian_weight_init(cPrms['initStd'])
 	
@@ -383,7 +391,7 @@ def make_experiment(prms, cPrms, deviceId=1):
 	caffeExp = setup_experiment(prms, cPrms, deviceId=deviceId)
 	netFile, defFile = get_pretrain_info(cPrms['preTrainStr'])	
 	#Write the files
-	caffeExp.make(modelFile=netFile, writeTest=True, testIter=100, modelIter=10000)
+	caffeExp.make(modelFile=netFile, writeTest=True, testIter=100, modelIter=cPrms['maxIter'])
 	return caffeExp
 
 def run_experiment(prms, cPrms, deviceId=1):
@@ -394,15 +402,15 @@ def run_experiment(prms, cPrms, deviceId=1):
 # Run the experiment when the weights are randomly initialized
 def run_random_experiment(isFineLast=True):
 	prms    = get_prms()
-	mxLayer = [1,2,3,4]
-	#mxLayer =  [5,6]
+	#mxLayer = [1,2,3,4]
+	mxLayer =  [1,2,3,4]
 	for l in mxLayer:
 		if isFineLast or l > 4:
 			initStd = 0.01
 			initLr  = 0.01
 		else:
 			initStd = 0.001
-			initLr  = 0.001
+			initLr  = 1e-4
 		cPrms = get_caffe_prms(maxLayer=l, isFineLast=isFineLast, initLr=initLr, initStd=initStd)
 		run_experiment(prms, cPrms, deviceId=0) #0 corresponds to second K40  
 
@@ -422,4 +430,41 @@ def run_pretrain_experiment(preTrainStr='rotObjs_kmedoids30_20_iter60K', isFineL
 def get_experiment_acc(prms, cPrms):
 	caffeExp = setup_experiment(prms, cPrms)
 	return caffeExp.get_test_accuracy()	
+
+##
+#
+def run_standard_experiment(isFineLast=True, initLr=0.01, initStd=0.01):
+	prms = get_prms(imSz=128, numTrain=30, numTest=-1, runNum=0) 
+	mxLayer = [1, 2, 3, 4, 5, 6]
+
+	#Random init
+	for l in mxLayer:
+		cPrms = get_caffe_prms(maxLayer=l, isFineLast=isFineLast, initLr=initLr, initStd=initStd)
+		run_experiment(prms, cPrms, deviceId=0) #0 corresponds to second K40
+
+	#PreTrain init
+	preTrainStrs= ['rotObjs_kmedoids30_20_iter60K', 'rotObjs_kmedoids30_20_nodrop_iter120K']
+	for preTrainStr in preTrainStrs:	
+		for l in mxLayer:
+			cPrms = get_caffe_prms(isPreTrain=True, maxLayer=l, 
+														 preTrainStr=preTrainStr, isFineLast=isFineLast, initLr=initLr)
+			run_experiment(prms, cPrms, deviceId=0) #0 corresponds to second K40
+
+
+def run_standard_experiment_tune(isFineLast=False, initLr=0.01, initStd=0.01):
+	prms = get_prms(imSz=128, numTrain=30, numTest=-1, runNum=0) 
+	mxLayer = [5, 6]
+
+	#Random init
+	for l in mxLayer:
+		cPrms = get_caffe_prms(maxLayer=l, isFineLast=isFineLast, initLr=initLr, initStd=initStd)
+		run_experiment(prms, cPrms, deviceId=1) #0 corresponds to second K40
+
+	#PreTrain init
+	preTrainStrs= ['rotObjs_kmedoids30_20_iter60K', 'rotObjs_kmedoids30_20_nodrop_iter120K']
+	for preTrainStr in preTrainStrs:	
+		for l in mxLayer:
+			cPrms = get_caffe_prms(isPreTrain=True, maxLayer=l, 
+														 preTrainStr=preTrainStr, isFineLast=isFineLast, initLr=initLr)
+			run_experiment(prms, cPrms, deviceId=1) #0 corresponds to second K40
 
