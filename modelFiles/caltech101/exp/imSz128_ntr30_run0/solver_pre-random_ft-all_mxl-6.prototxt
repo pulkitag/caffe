@@ -13,5 +13,5 @@
  snapshot: 2000 
  snapshot_prefix: "/data1/pulkitag/caltech101/snapshots/imSz128_ntr30_run0/caffenet_pre-random_ft-all_mxl-6" 
  solver_mode: GPU 
- device_id: 1 
+ device_id: 0 
  debug_info: false 

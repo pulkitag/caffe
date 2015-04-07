@@ -16,9 +16,10 @@ def get_basic_paths():
 	paths['dataset']   = 'caltech101' 
 	paths['imDir']     = '/data1/pulkitag/data_sets/caltech101/101_ObjectCategories/'
 	paths['splitsDir'] = '/data1/pulkitag/caltech101/train_test_splits/'
-	paths['lmdbDir']   = '/data1/pulkitag/caltech101/lmdb-store/'
+	paths['lmdbDir']   = '/data0/pulkitag/caltech101/lmdb-store/'
 	paths['expDir']    = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/caltech101/exp/'
 	paths['snapDir']   = '/data1/pulkitag/caltech101/snapshots/'
+	paths['resDir']    = '/data1/pulkitag/caltech101/results/'
 	return paths	
 
 ##
@@ -50,6 +51,7 @@ def get_prms(imSz=128, numTrain=30, numTest=-1, runNum=0):
 	paths['lmdb'] = {}
 	paths['lmdb']['train'] = os.path.join(paths['lmdbDir'], 'train-%s-lmdb' % expStr)
 	paths['lmdb']['test']  = os.path.join(paths['lmdbDir'], 'test-%s-lmdb' % expStr)
+	paths['resFile']       = os.path.join(paths['resDir'], expStr, '%s.h5')
 	prms['paths'] = paths
 	return prms 
 
@@ -238,7 +240,7 @@ def get_pretrain_info(preTrainStr):
 
 	if preTrainStr == 'alex':
 		netFile = '/data1/pulkitag/caffe_models/caffe_imagenet_train_iter_310000'
-
+		defFile = '/data1/pulkitag/caffe_models/bvlc_reference/caffenet_full.prototxt'
 	elif preTrainStr in  ['rotObjs_kmedoids30_20_iter60K', 'rotObjs_kmedoids30_20_nodrop_iter120K']:
 		snapshotDir   = '/data1/pulkitag/snapshots/keypoints/'
 		imSz          = 128
@@ -258,23 +260,33 @@ def get_pretrain_info(preTrainStr):
 
 
 #List the layers to modify in order to get the network. 
-def get_modify_layers(maxLayer):
+def get_modify_layers(maxLayer, preTrainStr):
 	assert maxLayer >= 1, 'All layers cannot be deleted'
 	#Layers that need to be deleted so that maxLayer can be achieved.
 	delLayer = {}
+	delLayer['l8'] = ['fc8']
+	delLayer['l7'] = ['drop7','relu7','fc7']
 	delLayer['l6'] = ['drop6','relu6','fc6']
 	delLayer['l5'] = ['pool5','relu5','conv5']
 	delLayer['l4'] = ['relu4', 'conv4']
 	delLayer['l3'] = ['relu3', 'conv3','norm2']
 	delLayer['l2'] = ['pool2', 'relu2', 'conv2', 'norm1']
 	allDelLayers = []
-	if maxLayer < 6:
-		for l in range(6,maxLayer,-1):
+
+	#Find the del layers
+	if preTrainStr == 'alex':
+		maxPossibleLayer = 8
+	else:
+		maxPossibleLayer = 6
+	if maxLayer < maxPossibleLayer:
+		for l in range(maxPossibleLayer, maxLayer, -1):
 			allDelLayers = allDelLayers + delLayer['l%d' % l]
 	allDelLayers = allDelLayers + ['accuracy', 'loss', 'class_fc']	
 
 	#The last feature layer.
 	lfLayer       = {}
+	lfLayer['l8'] = 'fc8'
+	lfLayer['l7'] = 'drop7'
 	lfLayer['l6'] = 'drop6'
 	lfLayer['l5'] = 'pool5'
 	lfLayer['l4'] = 'relu4'
@@ -328,7 +340,7 @@ def get_caffe_prms(isPreTrain=False, maxLayer=5, isFineLast=True,
 	expStr = ''.join(s + '_' for s in expStr)
 	expStr = expStr[0:-1]
 	cPrms['expStr']    = expStr
-	cPrms['delLayers'], cPrms['lastLayer'] = get_modify_layers(maxLayer)	
+	cPrms['delLayers'], cPrms['lastLayer'] = get_modify_layers(maxLayer, preTrainStr)	
 	return cPrms
 
 
@@ -402,26 +414,88 @@ def make_experiment(prms, cPrms, deviceId=1):
 	caffeExp.make(modelFile=netFile, writeTest=True, testIter=100, modelIter=cPrms['maxIter'])
 	return caffeExp
 
+##
 def run_experiment(prms, cPrms, deviceId=1):
 	caffeExp = make_experiment(prms, cPrms, deviceId=deviceId)
 	caffeExp.run()
 
-def run_test():
-	prms  = get_prms()
-	cPrms = get_caffe_prms(maxLayer=2) 
+##
+def run_experiment_alexnet():
+	prms  = get_prms(imSz=256)
+	maxLayers = [1,2,3,4,5,6,7]
+	for l in maxLayers:
+		cPrms = get_caffe_prms(isPreTrain=True, preTrainStr='alex', maxLayer=l,  isFineLast=True)
+		run_experiment(prms, cPrms, deviceId=1)
+
+## 
+def run_test(prms, cPrms, cropH=112, cropW=112, imH=128, imW=128):
 	caffeExp  = setup_experiment(prms, cPrms)
 	caffeTest = mpu.CaffeTest.from_caffe_exp_lmdb(caffeExp, prms['paths']['lmdb']['test'])
-	assert isinstance(caffeTest, mpu.CaffeTest)
-	caffeTest.setup_network(['class_fc'], imH=128, imW=128,
+	caffeTest.setup_network(['class_fc'], imH=imH, imW=imW,
+								 cropH=cropH, cropW=cropW, channels=3,
+								 modelIterations=cPrms['maxIter'] + 1)
+	caffeTest.run_test()
+	resFile  = prms['paths']['resFile'] % cPrms['expStr']
+	dirName  = os.path.dirname(resFile)
+	if not os.path.exists(dirName):
+		os.makedirs(dirName)
+	caffeTest.save_performance(['acc', 'accClassMean'], resFile)
+
+##
+def save_all_accuracies():
+	prms = get_prms()
+	isFineLast  = [True, False]
+	maxLayer    = [1,2,3,4,5,6]
+	preTrain    = [True, False]
+	preTrainStr = ['rotObjs_kmedoids30_20_iter60K', None]
+	initLr      = [0.001, 0.01]
+	
+	for isFine in isFineLast:
+		for (pre,preStr,lr) in zip(preTrain, preTrainStr, initLr):
+			for l in maxLayer:
+				cPrms = get_caffe_prms(isPreTrain = pre, preTrainStr=preStr,
+									isFineLast=isFine, maxLayer=l, initLr=lr)
+				run_test(prms, cPrms)
+
+
+##
+# Ensure that the input images read using command line caffe
+# and my python pipeline are similar
+def debug_input_image():
+	prms  = get_prms()
+	cPrms = get_caffe_prms(maxLayer=1)
+	batchSz = 50
+	caffeExp  = setup_experiment(prms, cPrms)
+	caffeTest = mpu.CaffeTest.from_caffe_exp_lmdb(caffeExp, prms['paths']['lmdb']['test'])
+	caffeTest.setup_network(['class_fc'], batchSz=batchSz, imH=128, imW=128,
 								 cropH=112, cropW=112, channels=3, modelIterations=5001)
-	return caffeTest
+
+	caffeDebug = mpu.CaffeDebug.from_caffe_exp(caffeExp, modelIterations=5001)
+	caffeDebug.set_debug_output_name(['data'])
+	
+	#Get the raw image from the LMDB
+	lmdbName = prms['paths']['lmdb']['test']
+	db       = mpio.DbReader(lmdbName)
+	crop     = caffeTest.net_.crop
+	meanFile = caffeTest.exp_.get_layer_property('data', 'mean_file')
+	meanFile = meanFile[1:-1]
+	meanData = mp.read_mean(meanFile)
+	meanData = meanData[:,crop[0]:crop[2], crop[1]:crop[3]]
+
+	for i in range(5):
+		pyData, pyLbl, isEnd = caffeTest.get_data()
+		pyProc = caffeTest.net_.preprocess_batch(pyData)	
+		cmdData       = caffeDebug.next()
+		rawIm,rawLbs  = db.read_batch(batchSz)
+		im            = rawIm[:,:,crop[0]:crop[2],crop[1]:crop[3]]
+		im            = im - meanData
+		pdb.set_trace()
 
 ##
 # Run the experiment when the weights are randomly initialized
 def run_random_experiment(isFineLast=True):
 	prms    = get_prms()
-	#mxLayer = [1,2,3,4]
-	mxLayer =  [1,2,3,4]
+	mxLayer =  [5,6,1,2,3,4]
 	for l in mxLayer:
 		if isFineLast or l > 4:
 			initStd = 0.01
@@ -436,8 +510,8 @@ def run_random_experiment(isFineLast=True):
 #
 def run_pretrain_experiment(preTrainStr='rotObjs_kmedoids30_20_iter60K', isFineLast=True):	
 	prms    = get_prms()
-	#mxLayer = [1,2,3,4,5,6]
-	mxLayer = [5,6]
+	mxLayer = [1,2,3,4,5,6]
+	#mxLayer = [5,6]
 	for l in mxLayer:
 		cPrms = get_caffe_prms(isPreTrain=True, maxLayer=l, 
 													 preTrainStr=preTrainStr, isFineLast=isFineLast, initLr=0.001)

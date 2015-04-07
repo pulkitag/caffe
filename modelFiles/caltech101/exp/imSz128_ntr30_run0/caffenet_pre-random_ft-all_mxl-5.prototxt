@@ -13,7 +13,7 @@ layer {
 	  mean_file: "/data1/pulkitag/keypoints/leveldb_store/keypoints_im128_ch3_mean.binaryproto" 
  } 
  data_param { 
-	  source: "/data1/pulkitag/caltech101/lmdb-store/train-imSz128_ntr30_run0-lmdb" 
+	  source: "/data0/pulkitag/caltech101/lmdb-store/train-imSz128_ntr30_run0-lmdb" 
 	  batch_size: 256 
 	  backend: LMDB 
  } 
@@ -32,7 +32,7 @@ layer {
 	  mean_file: "/data1/pulkitag/keypoints/leveldb_store/keypoints_im128_ch3_mean.binaryproto" 
  } 
  data_param { 
-	  source: "/data1/pulkitag/caltech101/lmdb-store/test-imSz128_ntr30_run0-lmdb" 
+	  source: "/data0/pulkitag/caltech101/lmdb-store/test-imSz128_ntr30_run0-lmdb" 
 	  batch_size: 50 
 	  backend: LMDB 
  } 

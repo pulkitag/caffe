@@ -325,7 +325,10 @@ class MyNet:
 		self.transformer[ipName] = caffe.io.Transformer({ipName: self.net.blobs[ipName].data.shape})
 		#Note blobFormat will be so used that finally the image will need to be flipped. 
 		self.transformer[ipName].set_transpose(ipName, (2,0,1))	
-	
+
+		if isBlobFormat:
+			assert chSwap is None, 'With Blob format chSwap should be none' 
+
 		if chSwap is not None:
 			#Required for eg RGB to BGR conversion.
 			self.transformer[ipName].set_channel_swap(ipName, chSwap)
@@ -395,16 +398,20 @@ class MyNet:
 		im_ = np.zeros((len(ims), 
             self.imageDims[0], self.imageDims[1], self.imageDims[2]),
             dtype=np.float32)
+		#Convert to normal image format if required. 
+		if self.isBlobFormat:
+			ims = np.transpose(ims, (0,2,3,1))
+	
 		#Resize the images
+		h, w = ims.shape[1], ims.shape[2]
 		for ix, in_ in enumerate(ims):
-			if self.isBlobFormat:
-				im_[ix] = caffe.io.resize_image(in_.transpose((1,2,0)), self.imageDims[0:2])
+			if h==self.imageDims[0] and w==self.imageDims[1]:
+				im_[ix] = np.copy(in_)
 			else:
 				im_[ix] = caffe.io.resize_image(in_, self.imageDims[0:2])
 
 		#Required cropping
 		im_ = im_[:,self.crop[0]:self.crop[2], self.crop[1]:self.crop[3],:]	
-		
 		#Applying the preprocessing
 		caffe_in = np.zeros(np.array(im_.shape)[[0,3,1,2]], dtype=np.float32)
 		for ix, in_ in enumerate(im_):

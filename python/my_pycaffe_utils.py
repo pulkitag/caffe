@@ -14,6 +14,7 @@ import collections as co
 import other_utils as ou
 import shutil
 import copy
+import h5py as h5
 
 def zf_saliency(net, imBatch, numOutputs, opName, ipName='data', stride=2, patchSz=11):
 	'''
@@ -810,6 +811,28 @@ class ProtoDef():
 					del self.layers_[phase][l]
 
 	##
+	def del_all_layers_above(self, layerName):
+		'''
+			Delete all layers above layerName
+			layerName will not be deleted. 	
+		'''
+		delLayers = co.OrderedDict()
+		for ph in ProtoDef.ProtoPhases:
+			delLayers[ph] = co.OrderedDict()
+			encounterFlag = False
+			#Find the layers to delete
+			for name in self.layers_[ph]:
+				if not encounterFlag and name != layerName:
+					continue
+				if name==layerName:
+					encounterFlag = True
+				if encouterFlag:
+					delLayers[ph].append(name)
+			#Delete the layers
+			for name in delLayers[ph]:
+				self.del_layer(name)
+	
+	##
 	# Get the name of the top of the last layer. 
 	def get_last_top_name(self, phase='TRAIN'):
 		'''
@@ -1096,6 +1119,10 @@ class CaffeExperiment:
 	def del_layer(self, layerName):
 		self.expFile_.netDef_.del_layer(layerName) 
 
+	##
+	def del_all_layers_above(self, layerName):
+		self.expFile_.netDef_.del_all_layers_above(layerName)
+
 	## Get layer property
 	def get_layer_property(self, layerName, propName, **kwargs):
 		return self.expFile_.netDef_.get_layer_property(layerName, propName, **kwargs)
@@ -1220,7 +1247,7 @@ class CaffeTest:
 			scale = None
 		self.net_.set_preprocess(ipName = dataLayerNames[0], isBlobFormat=True,
 										imageDims = (imH, imW, channels),
-										cropDims  = (cropH, cropW),
+										cropDims  = (cropH, cropW), chSwap=None,
 										rawScale = scale, meanDat = meanFile)  
 		self.ip_      = dataLayerNames[0]
 		self.op_      = opNames
@@ -1244,8 +1271,8 @@ class CaffeTest:
 	## 
 	# Run the test
 	def run_test(self):
-		self.gtLb_ = []
-		self.pdLb_ = []
+		self.gtLb_   = []
+		self.pdFeat_ = []
 		runFlag = True
 		while runFlag:
 			data, label, isEnd = self.get_data()
@@ -1264,14 +1291,85 @@ class CaffeTest:
 					opDat = op[key]
 				else:
 					opDat = np.concatenate((opDat, op[key]), axis=1)
-			self.pdLb_.append(opDat.squeeze())		
+			self.pdFeat_.append(opDat.squeeze())		
 			self.gtLb_.append(label.squeeze())
-		self.pdLb_ = np.concatenate(self.pdLb_)
-		self.gtLb_ = np.concatenate(self.gtLb_)
+		self.pdFeat_ = np.concatenate(self.pdFeat_)
+		self.gtLb_   = np.concatenate(self.gtLb_)
+
+	##
+	# Compute Accuracy
+	def compute_performance(self, accType='accClassMean'):
+		'''
+			accType: 
+				accClassMean: Compute accuracy of each class and then take the mean
+				acc         : Overall accuracy	
+		'''
+		if accType in ['accClassMean', 'acc']:
+			self.pdLb_ = np.argmax(self.pdFeat_, axis=1)
+			if accType == 'acc':
+				tp        = np.sum(self.pdLb_ == self.gtLb_)
+				self.acc_ = float(tp)/self.pdLb_.shape[0]
+				return self.acc_
+			else:
+				cls   = np.unique(self.gtLb_)
+				clAcc = []
+				for cl in cls:
+					tp = np.sum((self.pdLb_ == cl) & (self.gtLb_ == cl))
+					N  = np.sum(self.gtLb_ == cl)
+					clAcc.append(float(tp)/N)
+				clAcc = np.array(clAcc)
+				self.accClassMean_ = np.mean(clAcc)
+				return self.accClassMean_  
+		else:
+			raise Exception('Accuracy type %s not recognized' % accType)	
+	
+	##
+	# Save Accuracy
+	def save_performance(self, accTypes, outFile):
+		fid = h5.File(outFile, 'w')
+		for key in accTypes:
+			acc  = np.array([self.compute_performance(accType=key)]) 
+			dat  = fid.create_dataset(key, acc.shape, dtype='f')
+			dat[:] = acc[:]
+		fid.close()
+
 
 	def close(self):
 		self.db_.close()	
 
+##
+# Useful when some layers need to be deleted and output needs to be compared
+# to some other output
+class CaffeDebug:
+	@classmethod
+	def from_caffe_exp(cls, caffeExp, modelIterations, deviceId=0):
+		self         = cls()
+		self.exp_    = caffeExp
+		self.device_ = deviceId
+		self.modelIters_ = modelIterations
+		self.setup_net()
+		return self
+
+	##
+	def setup_net(self):
+		self.model_  = self.exp_.get_snapshot_name(numIter=self.modelIters_)
+		self.netdef_ = self.exp_.files_['netdef']
+		#Setup the network
+		self.net_    = mp.MyNet(self.netdef_, self.model_, deviceId=self.device_,
+											testMode=True)
+
+	##
+	def set_debug_output_name(self, name):
+		assert isinstance(name, list)
+		assert len(name)==1
+		self.op_ = name
+		#self.exp_.del_all_layers_above(name)	
+
+	## The data corresponding to the next batch
+	def next(self):
+		op = self.net_.forward_all(blobs=self.op_, noInputs=True)
+		return op[self.op_[0]]	
+	
  
 def make_experiment_repeats(modelDir, defPrefix,
 									 solverPrefix='solver', repNum=0, deviceId=0, suffix=None, 
