@@ -185,9 +185,73 @@ def read_layerdefs_from_proto(fName):
 		
 	return layerNames, topNames, layerDef
 
+## Produces names for layers
+class LayerNameGenerator: 
+	def __init__(self):
+		self.count_ = 0 # counts the total number of layers
+		self.nc_ = {} #Naming convention 
+		self.nc_['InnerProduct']  = 'fc'
+		self.nc_['ReLU']          = 'relu'
+		self.nc_['Concat']        = 'concat'
+		self.nc_['EuclideanLoss'] = 'loss' 
+		self.lastType_ = None
+
+	def next_name(self, layerType):
+		assert layerType in self.nc_.keys(), 'layerType %s not found' % layerType
+		prefix = self.nc_[layerType]
+		if layerType in ['ReLU','Pool'] and self.lastType_ in ['InnerProduct', 'Convolution']:
+			pass
+		elif layerType == 'Concat':
+			#Don't increment the counter for concatenation layer. 
+			pass
+		else:
+			self.count_ += 1
+		name = '%s%d' % (prefix, self.count_)
+		self.lastType_ = layerType
+		return name
+
+##
+# Get protos for different objects needed in netdef .prototxt
+def get_proto_dict(protoType, key, **kwargs):
+	'''
+		protoType: Type of proto to generate
+		key      : the key to look for in kwargs
+	'''
+	#Initt the proto
+	if kwargs.has_key(key):
+		pArgs = kwargs[key]
+	else:
+		pArgs = {}
+	pDict = co.OrderedDict()
+	#Make the proto
+	if protoType in ['param_w', 'param_b']:
+		if protoType == 'param_w':
+			defVals = {'lr_mult': str(1), 'decay_mult': str(1)}
+		else:
+			defVals = {'lr_mult': str(2), 'decay_mult': str(0)}
+		#Name is not necessary
+		if pArgs.has_key('name'):
+				pDict['name'] = '"%s"' % pArgs['name']
+		for key in defVals:
+			if key in pArgs:
+				pDict[key] = pArgs[key]
+			else:
+				pDict[key] = defVals[key]
+	else:	
+		raise Exception('Prototype %s not recognized' % protoType)
+	return copy.deepcopy(pDict)
+
 ##
 # Generate String for writing down a protofile for a layer. 
 def get_layerdef_for_proto(layerType, layerName, bottom, numOutput=1, **kwargs):
+	'''
+		I recommend the following strategy for making layers:
+			a. Make the basic layer architecture using this function.
+			b. Modify this architecture as needed to change the layers. 
+		
+		##numOutput is depreciated. Instead use num_output in kwargs
+
+	'''
 	layerDef = co.OrderedDict()
 	layerDef['name']  = '"%s"' % layerName
 	layerDef['type']  = '"%s"' % layerType
@@ -195,34 +259,63 @@ def get_layerdef_for_proto(layerType, layerName, bottom, numOutput=1, **kwargs):
 	#The prms for different layers. 
 	if layerType == 'InnerProduct':
 		layerDef['top']    = '"%s"' % layerName
-		layerDef['param']  = co.OrderedDict()
-		layerDef['param']['lr_mult']    = '1'
-		layerDef['param']['decay_mult'] = '1'
+		layerDef['param'] = get_proto_dict('param_w', 'param', **kwargs)
 		paramDup = make_key('param', layerDef.keys())
-		layerDef[paramDup] = co.OrderedDict()
-		layerDef[paramDup]['lr_mult']    = '2'
-		layerDef[paramDup]['decay_mult'] = '0'
+		layerDef[paramDup] = get_proto_dict('param_b', paramDup, **kwargs)
 		ipKey = 'inner_product_param'
 		layerDef[ipKey]  = co.OrderedDict()
-		layerDef[ipKey]['num_output'] = str(numOutput)
+		if kwargs.has_key('num_output'):
+			layerDef[ipKey]['num_output'] = kwargs['num_output']
+		else:
+			layerDef[ipKey]['num_output'] = str(numOutput)
 		layerDef[ipKey]['weight_filler'] = {}
 		layerDef[ipKey]['weight_filler']['type'] = '"gaussian"'
 		layerDef[ipKey]['weight_filler']['std']  = str(0.005)
 		layerDef[ipKey]['bias_filler'] = {}
 		layerDef[ipKey]['bias_filler']['type'] = '"constant"'
 		layerDef[ipKey]['bias_filler']['value']  = str(0.)
+
 	elif layerType=='Silence':
 		#Nothing to be done
 		pass
+
 	elif layerType=='Dropout':
 		layerDef['top']    = '"%s"' % kwargs['top']
 		layerDef['dropout_param'] = co.OrderedDict()
 		layerDef['dropout_param']['dropout_ratio'] = str(kwargs['dropout_ratio'])
-	elif layerType in ['Accuracy', 'SoftmaxWithLoss']:
+
+	elif layerType in ['Accuracy']:
 		assert kwargs.has_key('bottom2')
 		bottom2 = make_key('bottom', layerDef.keys())
 		layerDef[bottom2] = '"%s"' % kwargs['bottom2']
 		layerDef['top']   = '"%s"' % kwargs['top']
+
+	elif layerType in ['EuclideanLoss', 'SoftmaxWithLoss']:
+		assert kwargs.has_key('bottom2')
+		bottom2 = make_key('bottom', layerDef.keys())
+		layerDef[bottom2] = '"%s"' % kwargs['bottom2']
+		if kwargs.has_key('top'):
+			layerDef['top']   = '"%s"' % kwargs['top']
+		else:
+			layerDef['top']   = '"%s"' % layerName
+		layerDef['loss_weight'] = 1
+
+	elif layerType == 'Concat':
+		assert kwargs.has_key('bottom2')
+		assert kwargs.has_key('concat_dim')
+		bottom2 = make_key('bottom', layerDef.keys())
+		layerDef[bottom2] = '"%s"' % kwargs['bottom2']
+		layerDef['concat_param'] = co.OrderedDict()
+		layerDef['concat_param']['concat_dim'] = kwargs['concat_dim']
+		layerDef['top']   = '"%s"' % layerName
+
+	elif layerType == 'ReLU':
+		if kwargs.has_key('top'):
+			topName = kwargs['top']
+		else:
+			topName = layerName
+		layerDef['top'] = '"%s"' % topName
+	
 	elif layerType in ['DeployData']:
 		layerDef['input'] = '"%s"' % layerName
 		ipDims = kwargs['ipDims'] #(batch_size, channels, h, w)
@@ -233,42 +326,39 @@ def get_layerdef_for_proto(layerType, layerName, bottom, numOutput=1, **kwargs):
 		layerDef[make_key('input_dim', layerDef.keys())] = ipDims[3]		
 	else:
 		raise Exception('%s layer type not found' % layerType)
-	'''	
-	defStr = []
-	defStr.append('layer { \n')
-	defStr.append('  name: "%s" \n' % layerName)
-	if layerType == 'InnerProduct':
-		defStr.append('  type: "InnerProduct" \n')
-		defStr.append('	 bottom: "%s" \n' % bottom)
-		defStr.append('  top: "%s" \n' % layerName)
-		defStr.append('  param { \n')
-		defStr.append('    lr_mult: 1 \n')
-		defStr.append('    decay_mult: 1 \n')
-		defStr.append('  } \n')
-		defStr.append('  param { \n')
-		defStr.append('    lr_mult: 2 \n')
-		defStr.append('    decay_mult: 0 \n')
-		defStr.append('  } \n')
-		defStr.append('  inner_product_param { \n')
-		defStr.append('    num_output: %d \n' % numOutput)
-		defStr.append('    weight_filler { \n')
-		defStr.append('      type: "gaussian" \n')
-		defStr.append('      std:  0.005 \n')
-		defStr.append('    } \n')
-		defStr.append('    bias_filler { \n')
-		defStr.append('      type: "constant" \n')
-		defStr.append('      value:  0. \n')
-		defStr.append('    } \n')
-		defStr.append('  } \n')
-	if layerType == 'Silence'
-		defStr.append('  type: "Silence" \n')
-		defStr.append('	 bottom: "%s" \n' % bottom)
-	else:
-		raise Exception('%s layer type not found' % layerType)
-	defStr.append('} \n')
-	return defStr	
-	'''
 	return layerDef
+
+##
+# Get the layerdefs for siamese layers
+def get_siamese_layerdef_for_proto(layerType, layerName, bottom, numOutput=1, **kwargs):
+	if layerType in ['InnerProduct']:
+		paramKey    = 'param'
+		paramDupKey = make_key('param', [paramKey])
+		#Weight param name
+		wName = ou.get_item_dict(kwargs, [paramKey] + ['name'])
+		if wName is None:
+			wName = layerName + '_w'
+		#Bias param name
+		bName = ou.get_item_dict(kwargs, [paramDupKey] + ['name']) 
+		if bName is None:
+			 bName = layerName + '_b'
+		#Set the info
+		kwargs['param'] = {}
+		kwargs['param']['name'] = wName
+		kwargs[paramDupKey] = {}
+		kwargs[paramDupKey]['name'] = bName
+	elif layerType in ['ReLU', 'Pool']:
+		pass
+	else:
+		raise Exception('Siamese layer not supported for %s' % layerType)
+		
+	#First Siamese layer
+	def1 = get_layerdef_for_proto(layerType, layerName, bottom, numOutput=numOutput, **kwargs)
+	#Second Siamese layer
+	layerName = layerName + '_p'
+	bottom    = bottom + '_p'
+	def2 = get_layerdef_for_proto(layerType, layerName, bottom, numOutput=numOutput, **kwargs)
+	return def1, def2
 
 
 def find_in_line(l, findType):

@@ -10,30 +10,6 @@ import my_pycaffe_io as mpio
 import my_pycaffe_utils as mpu
 import pdb
 
-SET_NAMES = ['train', 'test']
-
-def get_lmdb_name_old(prms, setName):
-	dbDir  = prms['paths']['lmdbDir']
-	repNum = prms['repNum']
-	if setName == 'train':
-		dbDir = os.path.join(dbDir, 'train')
-	elif setName == 'test':
-		dbDir = os.path.join(dbDir, 'test')
-	else:
-		raise Exception('Unrecognized Set Name')
-
-	if repNum is not None:
-		expName = expName + ('_rep%d' % repNum)
-
-	if expName in ['normal', 'null_transform']:
-		imFile = os.path.join(dbDir, 'images_labels_' + expName + '-lmdb')
-		lbFile = []
-	else:
-		imFile = os.path.join(dbDir, 'images_' + expName + '-lmdb')
-		lbFile = os.path.join(dbDir, 'labels_' + expName + '-lmdb')
-	return imFile, lbFile
-
-
 def get_paths():
 	paths = {}
 	paths['dataset'] = 'mnist'
@@ -44,64 +20,20 @@ def get_paths():
 	return paths
 
 
-def get_prms(transform='rotTrans', maxRot=10, maxDeltaRot=10, maxDeltaTrans=3, 
-						isOld=False, baseLineMode=False, runNum=0, numTrainEx=1e+06, numTestEx=1e+04):
+def get_prms(transform='rotTrans', maxRot=10, maxDeltaRot=10, maxDeltaTrans=3):
 	'''
 		Ideally I should finetune both for classification + rotation training
 		But, I don't think I have time to try to make that work. 
-		First what I will try is to learn good filters using just unsupervised training.  
+		First what I will try is to learn good filters using 
 	'''
 	paths = get_paths()
 	prms  = {}
-	prms['transform']     = transform
-	prms['maxRot']        = maxRot
-	prms['maxDeltaRot']   = maxDeltaRot
-	prms['maxDeltaTrans'] = maxDeltaTrans
-	prms['isOld']         = isOld
-	prms['baseLineMode']  = baseLineMode
-	prms['runNum']        = runNum
-	prms['numEx']          = {}
-	prms['numEx']['train'] = numTrainEx
-	prms['numEx']['test']  = numTestEx 
-
-	prms['paths']         = paths	
-
-	if isOld:  
-		if transform == 'normal':
-			expName = 'normal'
-		else:
-			if baseLineMode:
-				expName = 'mnist_baseline_transform_classify_%s_dRot%d_dTrn%d_mxRot%d_nLbl%.0e_numEx%.0e'\
-									% (setName, maxDeltaRot, maxDeltaTrans, maxRot, numLabels, numEx)
-			else:
-				expName = 'mnist_transform_classify_%s_dRot%d_dTrn%d_mxRot%d_nLbl%.0e_numEx%.0e'\
-									 % (setName, maxDeltaRot, maxDeltaTrans, maxRot, numLabels, numEx)
+	if baseLineMode:
+		expName = 'mnist_baseline_transform_classify_%s_dRot%d_dTrn%d_mxRot%d_nLbl%.0e_numEx%.0e' % (setName, maxDeltaRot, maxDeltaTrans, maxRot, numLabels, numEx)
 	else:
-		expName = 'tf-%s' % prms['transform']
-		if transform=='rotTrans':
-			expName = expName + '_dRot%d_dTrn%d_mxRot%d_tr%.0e_run%d' %\
-							 (maxDeltaRot, maxDeltaTrans, maxRot, numTrainEx, runNum)
-			teExpName = teExpName + '_dRot%d_dTrn%d_mxRot%d_te%.0e_run%d' %\
-							 (maxDeltaRot, maxDeltaTrans, maxRot, numTestEx, runNum)
-		else:
-			raise Exception('Unrecognized transform type')		
-	prms['expName'] = expName
+		expName = 'mnist_transform_classify_%s_dRot%d_dTrn%d_mxRot%d_nLbl%.0e_numEx%.0e' % (setName, maxDeltaRot, maxDeltaTrans, maxRot, numLabels, numEx)
+	
 
-	paths['lmdb'] = {}
-	paths['lmdb']['train'] = {}
-	paths['lmdb']['test'] = {}
-	if not isOld:
-		paths['lmdb']['train']['im'] = os.path.join(paths['lmdbDir'], 'train','images_%s-lmdb' % expName)
-		paths['lmdb']['train']['lb'] = os.path.join(paths['lmdbDir'], 'train','labels_%s-lmdb' % expName)
-		paths['lmdb']['test']['im'] = os.path.join(paths['lmdbDir'], 'test', 'images_%s-lmdb' % teExpName)
-		paths['lmdb']['test']['lb'] = os.path.join(paths['lmdbDir'], 'test', 'labels_%s-lmdb' % teExpName)
-	else:
-		paths['lmdb']['train']['im'], paths['lmdb']['train']['lb'] = \
-					get_lmdb_name_old(prms, 'train')
-		paths['lmdb']['test']['im'], paths['lmdb']['test']['lb'] = \
-					get_lmdb_name_old(prms, 'test')
-
-	paths['resFile'] = os.path.join(paths['resDir'], expName, '%s.h5') #%s by caffePrms
 
 	prms['paths'] = paths
 	return prms
@@ -127,29 +59,50 @@ def load_images(setName = 'train'):
 	
 	return im, label
 
-##
-def make_normal_lmdb(prms, setName):
+
+def get_lmdb_name(expName, setName, repNum=None):
+	dbDir = '/data1/pulkitag/mnist/lmdb-store/' 
+	if setName == 'train':
+		dbDir = os.path.join(dbDir, 'train')
+	elif setName == 'test':
+		dbDir = os.path.join(dbDir, 'test')
+	else:
+		raise Exception('Unrecognized Set Name')
+
+	if repNum is not None:
+		expName = expName + ('_rep%d' % repNum)
+
+	if expName in ['normal', 'null_transform']:
+		imFile = os.path.join(dbDir, 'images_labels_' + expName + '-lmdb')
+		lbFile = []
+	else:
+		imFile = os.path.join(dbDir, 'images_' + expName + '-lmdb')
+		lbFile = os.path.join(dbDir, 'labels_' + expName + '-lmdb')
+	return imFile, lbFile
+
+
+def make_normal_lmdb(setName='test'):
 	'''
 		The Standard MNIST LMDBs
 	'''
-	assert prms['expName'] == 'normal'
-	db  = mpio.DbSaver(prms['paths'][setName]['im'])
+	expName = 'normal'	
+	dbFile, [] = get_lmdb_name('normal', setName)
+	db  = mpio.DbSaver(dbFile)
 	im, label = load_images(setName)
 	N, nr, nc = im.shape
 	im        = im.reshape((N, 1, nr, nc))
 	label     = label.squeeze()
 	label     = label.astype(np.int)
 	db.add_batch(im, label)	
-	db.close()
 
-##
-def make_null_transform_lmdb(prms, setName='test'):
+
+def make_null_transform_lmdb(setName='test'):
 	'''
 		The LMDB with standard Images - but in a siamese way. 
 	'''
-	assert prms['expName'] == 'null_transform'
-	db  = mpio.DbSaver(prms['paths'][setName]['im'])
 	expName = 'null_transform'
+	dbFile, [] = get_lmdb_name(expName, setName)
+	db  = mpio.DbSaver(dbFile)
 	im, label = load_images(setName)
 	#Arrange the labels
 	label     = label.squeeze()
@@ -163,7 +116,6 @@ def make_null_transform_lmdb(prms, setName='test'):
 	print ims.shape
 	ims       = ims.reshape((N, 2, nr, nc))
 	db.add_batch(ims, label)	
-	db.close()
 
 
 def make_same_transform_lmdb(setName='test', maxDeltaTrans=3, maxRot=10):
@@ -231,67 +183,15 @@ def transform_im(im, deltaX, deltaY, theta):
 	return im
 
 
-def sample_transform(maxVal, randState = None):
-	if randState is None:
-		val = int(round(np.random.random() * maxVal))
-		rnd = np.random.random()
-	else:
-		val = int(round(randState.random.random() * maxVal))
-		rnd = randState.random.random()
+def sample_transform(maxVal):
+	val = int(round(np.random.random() * maxVal))
+	rnd = np.random.random()
 	if rnd > 0.5:
 		sgn = 1
 	else:
 		sgn = -1
 	return sgn * val
 
-
-def make_transform_db(prms):
-	for sNum,s in enumerate(SET_NAMES):
-		numEx  = prms['numEx'][s]
-		repNum = prms['repNum']
-		imFile, lbFile = prms['paths'][s]['im'], prms['paths'][s]['lb'] 	
-		db     = mpio.DoubleDbSaver(imFile, lbFile)
-		#Image and label data	
-		ims, clLbs  = load_images(setName=setName)
-		N, nr, nc = ims.shape
-	
-		oldState  = np.random.get_state()
-		randSeed  = np.random.seed(3 * (2 * sNum * 100 + 1) + (repNum + 1) * 2)
-		randState = np.random.state(randSeed)
-		idxs = randState.random_integers(0, N-1, numEx)
-
-		#Start Writing the data
-		count   = 0
-		batchSz = 1000
-		imBatch = np.zeros((batchSz, 2, nr, nc)).astype(np.uint8)
-		lbBatch = np.zeros((batchSz, 3, 1, 1)).astype(np.float)
-		for (i,idx) in enumerate(idxs):
-			im = ims[idx]
-			#lb = lbs[idx]	
-			#Get the Transformation
-			x1, y1, r1 = sample_transform(maxDeltaTrans, randState),\
-									 sample_transform(maxDeltaTrans, randState), sample_transform(maxDeltaRot, randState)
-			delx, dely, delr = sample_transform(maxDeltaTrans, randState),\
-									 sample_transform(maxDeltaTrans, randState), sample_transform(maxDeltaRot, randState)
-			x2, y2, r2 = x1 + delx, y1 + dely, r1 + delr
-			delx, dely, delr = np.float32(delx), np.float32(dely), np.float32(delr)
-			delx, dely, delr = delx / maxDeltaTrans, dely / maxDeltaTrans, delr / maxDeltaRot
-		
-			#Transform the image
-			imBatch[count,0,:,:]  = transform_im(im, x1, y1, r1)
-			imBatch[count,1,:,:]  = transform_im(im, x2, y2, r2)
-			lbBatch[count,:,:,:]  = np.asarray([delx, dely, delr]).reshape((3,1,1)) 
-			count += 1
-			#Save to db
-			if count==batchSz or i == len(idxs)-1:
-				print 'Processed %d files' % i
-				imBatch = imBatch[0:count]
-				lbBatch = lbBatch[0:count]
-				db.add_batch((imBatch, lbBatch), imAsFloat=(False, True))
-				count = 0
-				imBatch = np.zeros((batchSz, 2, nr, nc)).astype(np.uint8)
-				lbBatch = np.zeros((batchSz, 3, 1, 1)).astype(np.float)
-		np.random.set_state(oldState)
 
 
 def make_transform_label_db(setName='train',numLabels=1000, 
@@ -307,7 +207,6 @@ def make_transform_label_db(setName='train',numLabels=1000,
 		baseLineMode : If this is true then only save images that have classification labels
 		repNum       : If the lmdb for repeats should be made or not. 
 	'''
-	
 	ims, lbs  = load_images(setName=setName)
 	N, nr, nc = ims.shape
 

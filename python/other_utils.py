@@ -4,7 +4,7 @@
 import numpy as np
 import scipy.misc as scm
 import matplotlib.pyplot as plt
-
+import copy
 ##
 # Verify if all the keys are present recursively in the dict
 def verify_recursive_key(data, keyNames):
@@ -43,19 +43,31 @@ def get_item_recursive_key(data, keyNames):
 # Find the path to the key in a recursive dictionary. 
 def find_path_key(data, keyName):
 	'''
-		Returns path to the first key that is found.
+		Returns path to the first key of name keyName that is found.
+		if keyName is a list - [k1, k2 ..kp] then find in data[k1][k2]...[kp-1] the key kp
 	'''
-	path = []
-	#print keyName
+	path    = []
+	prevKey = []
 	if not isinstance(data, dict):
 		return path
+	#Find if all keys except the last one exist or not. 
+	if isinstance(keyName, list):
+		data = copy.deepcopy(data)
+		for key in keyName[0:-1]:
+			if key not in data:
+				return []
+			else:
+				data = data[key]
+		prevKey = keyName[0:-1]
+		keyName = keyName[-1]
+
 	if data.has_key(keyName):
 		return [keyName]
 	else:
 		for key in data.keys():
 			pathFound = find_path_key(data[key], keyName)
 			if len(pathFound) > 0:
-				return [key] + pathFound
+				return prevKey + [key] + pathFound
 	return path
 
 ##
