@@ -135,7 +135,7 @@ class DbSaver:
 		else:
 			itrtr = zip(range(self.count, self.count + ims.shape[0]), ims, labels)
 
-		print svIdx.shape, ims.shape, labels.shape
+		#print svIdx.shape, ims.shape, labels.shape
 		for idx, im, lb in itrtr:
 			if not imAsFloat:
 				im    = im.astype(np.uint8)

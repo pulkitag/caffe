@@ -470,10 +470,21 @@ class MyNet:
 		return copy.deepcopy(ops) 
 
 
-	def vis_weights(self, blobName, blobNum=0, ax=None, titleName=None): 
+	def vis_weights(self, blobName, blobNum=0, ax=None, titleName=None, isFc=False): 
 		assert blobName in self.net.blobs, 'BlobName not found'
-		dat  = self.net.params[blobName][blobNum].data
-		vis_square(dat.transpose(0,2,3,1), ax=ax, titleName=titleName)	
+		dat  = copy.deepcopy(self.net.params[blobName][blobNum].data)
+		if isFc:
+			dat = dat.transpose((2,3,0,1))
+			print dat.shape
+			assert dat.shape[2]==1 and dat.shape[3]==1
+			ch = dat.shape[1]
+			assert np.sqrt(ch)*np.sqrt(ch)==ch, 'Cannot transform to filter'
+			h,w = int(np.sqrt(ch)), int(np.sqrt(ch))
+			dat = np.reshape(dat,(dat.shape[0],h,w,1))
+			print dat.shape
+			vis_square(dat, ax=ax, titleName=titleName)	
+		else:
+			vis_square(dat.transpose(0,2,3,1), ax=ax, titleName=titleName)	
 
 
 class MySolver:

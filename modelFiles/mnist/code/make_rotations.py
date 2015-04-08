@@ -34,10 +34,13 @@ def get_lmdb_name_old(prms, setName):
 	return imFile, lbFile
 
 
-def get_paths():
+def get_paths(isOld=False):
 	paths = {}
 	paths['dataset'] = 'mnist'
-	paths['lmdbDir'] = '/data1/pulkitag/mnist/lmdb-store/'
+	if isOld:
+		paths['lmdbDir'] = '/data1/pulkitag/mnist/lmdb-store/'
+	else:
+		paths['lmdbDir'] = '/data0/pulkitag/mnist/lmdb-store/'
 	paths['expDir']  = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/mnist/exp/'
 	paths['snapDir'] = '/data1/pulkitag/mnist/snapshots/'
 	paths['resDir']  = '/data1/pulkitag/mnist/results/'
@@ -51,7 +54,7 @@ def get_prms(transform='rotTrans', maxRot=10, maxDeltaRot=10, maxDeltaTrans=3,
 		But, I don't think I have time to try to make that work. 
 		First what I will try is to learn good filters using just unsupervised training.  
 	'''
-	paths = get_paths()
+	paths = get_paths(isOld)
 	prms  = {}
 	prms['transform']     = transform
 	prms['maxRot']        = maxRot
@@ -59,7 +62,7 @@ def get_prms(transform='rotTrans', maxRot=10, maxDeltaRot=10, maxDeltaTrans=3,
 	prms['maxDeltaTrans'] = maxDeltaTrans
 	prms['isOld']         = isOld
 	prms['baseLineMode']  = baseLineMode
-	prms['runNum']        = runNum
+	prms['repNum']        = runNum
 	prms['numEx']          = {}
 	prms['numEx']['train'] = numTrainEx
 	prms['numEx']['test']  = numTestEx 
@@ -81,8 +84,13 @@ def get_prms(transform='rotTrans', maxRot=10, maxDeltaRot=10, maxDeltaTrans=3,
 		if transform=='rotTrans':
 			expName = expName + '_dRot%d_dTrn%d_mxRot%d_tr%.0e_run%d' %\
 							 (maxDeltaRot, maxDeltaTrans, maxRot, numTrainEx, runNum)
-			teExpName = teExpName + '_dRot%d_dTrn%d_mxRot%d_te%.0e_run%d' %\
+			teExpName = expName + '_dRot%d_dTrn%d_mxRot%d_te%.0e_run%d' %\
 							 (maxDeltaRot, maxDeltaTrans, maxRot, numTestEx, runNum)
+		elif transform=='normal':
+			expStr    = 'normal'
+			assert numTestEx==1e+04, 'There should be 10K test examples for normal exp'
+			expName   = expStr + 'tr%.0e_run%d' % (numTrainEx, runNum)
+			teExpName = expStr + 'te%.0e_run%d' % (numTestEx, runNum)
 		else:
 			raise Exception('Unrecognized transform type')		
 	prms['expName'] = expName
@@ -132,14 +140,27 @@ def make_normal_lmdb(prms, setName):
 	'''
 		The Standard MNIST LMDBs
 	'''
-	assert prms['expName'] == 'normal'
-	db  = mpio.DbSaver(prms['paths'][setName]['im'])
+	assert prms['transform'] == 'normal'
+	db  = mpio.DbSaver(prms['paths']['lmdb'][setName]['im'])
 	im, label = load_images(setName)
 	N, nr, nc = im.shape
 	im        = im.reshape((N, 1, nr, nc))
 	label     = label.squeeze()
 	label     = label.astype(np.int)
-	db.add_batch(im, label)	
+	repNum    = prms['repNum']
+
+	if setName=='train':
+		oldState  = np.random.get_state()
+		randSeed  = np.random.seed(3 * (2 * 1* 100 + 1) + (repNum + 1) * 2)
+		randState = np.random.RandomState(randSeed)
+		assert prms['numEx'][setName] <= N
+		perm      = randState.permutation(N)
+		perm      = perm[0:prms['numEx'][setName]]
+		np.random.set_state(oldState)
+	else:
+		perm = range(N)
+
+	db.add_batch(im[perm], label[perm])	
 	db.close()
 
 ##
@@ -236,8 +257,8 @@ def sample_transform(maxVal, randState = None):
 		val = int(round(np.random.random() * maxVal))
 		rnd = np.random.random()
 	else:
-		val = int(round(randState.random.random() * maxVal))
-		rnd = randState.random.random()
+		val = int(round(randState.rand() * maxVal))
+		rnd = randState.rand()
 	if rnd > 0.5:
 		sgn = 1
 	else:
@@ -249,15 +270,15 @@ def make_transform_db(prms):
 	for sNum,s in enumerate(SET_NAMES):
 		numEx  = prms['numEx'][s]
 		repNum = prms['repNum']
-		imFile, lbFile = prms['paths'][s]['im'], prms['paths'][s]['lb'] 	
+		imFile, lbFile = prms['paths']['lmdb'][s]['im'], prms['paths']['lmdb'][s]['lb'] 	
 		db     = mpio.DoubleDbSaver(imFile, lbFile)
 		#Image and label data	
-		ims, clLbs  = load_images(setName=setName)
+		ims, clLbs  = load_images(setName=s)
 		N, nr, nc = ims.shape
 	
 		oldState  = np.random.get_state()
 		randSeed  = np.random.seed(3 * (2 * sNum * 100 + 1) + (repNum + 1) * 2)
-		randState = np.random.state(randSeed)
+		randState = np.random.RandomState(randSeed)
 		idxs = randState.random_integers(0, N-1, numEx)
 
 		#Start Writing the data
@@ -265,17 +286,21 @@ def make_transform_db(prms):
 		batchSz = 1000
 		imBatch = np.zeros((batchSz, 2, nr, nc)).astype(np.uint8)
 		lbBatch = np.zeros((batchSz, 3, 1, 1)).astype(np.float)
+
+		maxDeltaTrans, maxDeltaRot, maxRot = prms['maxDeltaTrans'],\
+														 prms['maxDeltaRot'], prms['maxRot'] 
 		for (i,idx) in enumerate(idxs):
 			im = ims[idx]
 			#lb = lbs[idx]	
 			#Get the Transformation
 			x1, y1, r1 = sample_transform(maxDeltaTrans, randState),\
-									 sample_transform(maxDeltaTrans, randState), sample_transform(maxDeltaRot, randState)
+									 sample_transform(maxDeltaTrans, randState), sample_transform(maxRot, randState)
 			delx, dely, delr = sample_transform(maxDeltaTrans, randState),\
 									 sample_transform(maxDeltaTrans, randState), sample_transform(maxDeltaRot, randState)
 			x2, y2, r2 = x1 + delx, y1 + dely, r1 + delr
 			delx, dely, delr = np.float32(delx), np.float32(dely), np.float32(delr)
-			delx, dely, delr = delx / maxDeltaTrans, dely / maxDeltaTrans, delr / maxDeltaRot
+			delx, dely, delr = delx / (maxDeltaTrans + 1e-6), dely / (maxDeltaTrans + 1e-6),\
+												 delr / (maxDeltaRot + 1e-6)
 		
 			#Transform the image
 			imBatch[count,0,:,:]  = transform_im(im, x1, y1, r1)
@@ -284,7 +309,7 @@ def make_transform_db(prms):
 			count += 1
 			#Save to db
 			if count==batchSz or i == len(idxs)-1:
-				print 'Processed %d files' % i
+				print 'Processed %d files' % (i+1)
 				imBatch = imBatch[0:count]
 				lbBatch = lbBatch[0:count]
 				db.add_batch((imBatch, lbBatch), imAsFloat=(False, True))
@@ -292,6 +317,20 @@ def make_transform_db(prms):
 				imBatch = np.zeros((batchSz, 2, nr, nc)).astype(np.uint8)
 				lbBatch = np.zeros((batchSz, 3, 1, 1)).astype(np.float)
 		np.random.set_state(oldState)
+		
+		## Verify that all examples have been stored.
+		#im-db
+		dbRead = mpio.DbReader(imFile)
+		saveCount = dbRead.get_count()
+		assert saveCount == numEx, 'All examples have not been stored'
+		dbRead.close()
+		#Label-db
+		dbRead = mpio.DbReader(lbFile)
+		saveCount = dbRead.get_count()
+		assert saveCount == numEx, 'All examples have not been stored'
+		dbRead.close()
+
+
 
 
 def make_transform_label_db(setName='train',numLabels=1000, 
@@ -468,7 +507,7 @@ def get_lmdb(setName='test', maxDeltaRot=5, maxDeltaTrans=2,
 	return db
 
 
-def vis_lmdb(db, fig=None):
+def vis_lmdb(db, fig=None, isClassLbl=False):
 	data, lb = db.read_next()
 	ch,h,w = data.shape
 	im1      = data[0,:,:]
@@ -476,7 +515,10 @@ def vis_lmdb(db, fig=None):
 	
 	if isinstance(lb, np.ndarray):
 		lb       = np.squeeze(lb)
-		lbStr = 'Class: %f, delx: %f, dely: %f, delr: %f' % (lb[0], lb[1], lb[2], lb[3])
+		if isClassLbl:
+			lbStr = 'Class: %f, delx: %f, dely: %f, delr: %f' % (lb[0], lb[1], lb[2], lb[3])
+		else:
+			lbStr = 'delx: %f, dely: %f, delr: %f' % (lb[0], lb[1], lb[2])
 	else:
 		lbStr = 'Label: %d' % lb		
 

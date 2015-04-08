@@ -194,6 +194,10 @@ class LayerNameGenerator:
 		self.nc_['ReLU']          = 'relu'
 		self.nc_['Concat']        = 'concat'
 		self.nc_['EuclideanLoss'] = 'loss' 
+		self.nc_['SoftmaxWithLoss'] = 'loss' 
+		self.nc_['Dropout']       = 'drop' 
+		self.nc_['Convolution']   = 'conv'
+		self.nc_['Accuracy']      = 'accuracy'
 		self.lastType_ = None
 
 	def next_name(self, layerType):
@@ -250,6 +254,7 @@ def get_layerdef_for_proto(layerType, layerName, bottom, numOutput=1, **kwargs):
 			b. Modify this architecture as needed to change the layers. 
 		
 		##numOutput is depreciated. Instead use num_output in kwargs
+		##kwargs will override all other parameters
 
 	'''
 	layerDef = co.OrderedDict()
@@ -275,12 +280,39 @@ def get_layerdef_for_proto(layerType, layerName, bottom, numOutput=1, **kwargs):
 		layerDef[ipKey]['bias_filler']['type'] = '"constant"'
 		layerDef[ipKey]['bias_filler']['value']  = str(0.)
 
+	elif layerType == 'Convolution':
+		layerDef['top']    = '"%s"' % layerName
+		layerDef['param'] = get_proto_dict('param_w', 'param', **kwargs)
+		paramDup = make_key('param', layerDef.keys())
+		layerDef[paramDup] = get_proto_dict('param_b', paramDup, **kwargs)
+		ipKey = 'convolution_param'
+		layerDef[ipKey]  = co.OrderedDict()
+		if kwargs.has_key('num_output'):
+			layerDef[ipKey]['num_output'] = kwargs['num_output']
+		else:
+			layerDef[ipKey]['num_output'] = str(numOutput)
+		layerDef[ipKey]['kernel_size']  = kwargs['kernel_size']
+		layerDef[ipKey]['stride']       = kwargs['stride']
+		if kwargs.has_key('pad'):
+			layerDef[ipKey]['pad'] = kwargs['pad']
+		if kwargs.has_key('group'):
+			layerDef[ipKey]['group'] = kwargs['group']	
+		layerDef[ipKey]['weight_filler'] = {}
+		layerDef[ipKey]['weight_filler']['type'] = '"gaussian"'
+		layerDef[ipKey]['weight_filler']['std']  = str(0.01)
+		layerDef[ipKey]['bias_filler'] = {}
+		layerDef[ipKey]['bias_filler']['type'] = '"constant"'
+		layerDef[ipKey]['bias_filler']['value']  = str(0.)
+
 	elif layerType=='Silence':
 		#Nothing to be done
 		pass
 
 	elif layerType=='Dropout':
-		layerDef['top']    = '"%s"' % kwargs['top']
+		if kwargs.has_key('top'):
+			layerDef['top']    = '"%s"' % kwargs['top']
+		else:
+			layerDef['top']   = '"%s"' % layerName
 		layerDef['dropout_param'] = co.OrderedDict()
 		layerDef['dropout_param']['dropout_ratio'] = str(kwargs['dropout_ratio'])
 
@@ -288,7 +320,10 @@ def get_layerdef_for_proto(layerType, layerName, bottom, numOutput=1, **kwargs):
 		assert kwargs.has_key('bottom2')
 		bottom2 = make_key('bottom', layerDef.keys())
 		layerDef[bottom2] = '"%s"' % kwargs['bottom2']
-		layerDef['top']   = '"%s"' % kwargs['top']
+		if kwargs.has_key('top'):
+			layerDef['top']   = '"%s"' % kwargs['top']
+		else:
+			layerDef['top']   = '"%s"' % layerName
 
 	elif layerType in ['EuclideanLoss', 'SoftmaxWithLoss']:
 		assert kwargs.has_key('bottom2')
@@ -331,7 +366,7 @@ def get_layerdef_for_proto(layerType, layerName, bottom, numOutput=1, **kwargs):
 ##
 # Get the layerdefs for siamese layers
 def get_siamese_layerdef_for_proto(layerType, layerName, bottom, numOutput=1, **kwargs):
-	if layerType in ['InnerProduct']:
+	if layerType in ['InnerProduct', 'Convolution']:
 		paramKey    = 'param'
 		paramDupKey = make_key('param', [paramKey])
 		#Weight param name
@@ -1157,6 +1192,8 @@ class CaffeExperiment:
 			log        file     : expDir + logPrefix    + caffeExpName
 			run        file     : expDir + runPrefix    + caffeExpName 
 		'''
+		self.dataExpName_  = dataExpName
+		self.caffeExpName_ = caffeExpName
 		#Relevant directories. 
 		self.dirs_  = {}
 		self.dirs_['exp']  = os.path.join(expDirPrefix,  dataExpName)
@@ -1247,6 +1284,9 @@ class CaffeExperiment:
 		'''
 			modelFile - file to finetune from if needed.
 			writeTest - if the test file needs to be written. 
+			if writeTest is True:
+				testIter :  For number of iterations the test needs to be run.
+				modelIter:  Used for estimating the model used for running the tests. 
 		'''
 		if not os.path.exists(self.dirs_['exp']):
 			os.makedirs(self.dirs_['exp'])
