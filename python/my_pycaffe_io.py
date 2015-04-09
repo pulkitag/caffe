@@ -308,6 +308,10 @@ class GenericWindowWriter:
 		self.lblSz_ = lblSz 
 		self.count_ = 0 #The number of examples written. 
 
+		dirName = os.path.dirname(fileName)
+		if not os.path.exists(dirName):
+			os.makedirs(dirName)
+
 		self.fid_ = open(self.file_, 'w')	
 		self.fid_.write('# GenericDataLayer\n')
 		self.fid_.write('%d\n' % self.num_) #Num Examples. 
@@ -332,7 +336,8 @@ class GenericWindowWriter:
 
 	##
 	def write(self, lbl, *args):
-		assert len(args)==self.numIm_, 'Wrong input arguments'
+		assert len(args)==self.numIm_, 'Wrong input arguments: (%d v/s %d)' % (len(args),self.numIm_)
+		self.fid_.write('# %d\n' % self.count_)
 		#Write the images
 		for arg in args:
 			imName, imSz, bbox = arg
@@ -340,7 +345,7 @@ class GenericWindowWriter:
 		
 		#Write the label
 		lbStr = ['%f '] * self.lblSz_
-		lbStr = [lbS % lb for (lb, lbS) in zip(lbl, lbStr)]
+		lbStr = ''.join(lbS % lb for (lb, lbS) in zip(lbl, lbStr))
 		lbStr = lbStr[:-1] + '\n'
 		self.fid_.write(lbStr)
 		self.count_ += 1

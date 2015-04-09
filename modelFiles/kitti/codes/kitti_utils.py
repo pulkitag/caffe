@@ -13,11 +13,14 @@ def get_paths():
 	svDir   = '/data0/pulkitag/kitti/'
 	expDir  = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/kitti/exp/'
 	snapDir = '/data1/pulkitag/projRotate/snapshots/kitti/'
+	imDir   = '/data0/pulkitag/data_sets/kitti/odometry/'
 	prms    = {}
 	prms['odoPath']     = os.path.join(dirName, 'odometry')
 	prms['poseFile']    = os.path.join(prms['odoPath'], 'dataset', 'poses', '%02d.txt')
-	prms['leftImFile']  = os.path.join(prms['odoPath'], 'dataset', 'sequences', '%02d','image_2','%06d.png')
-	prms['rightImFile'] = os.path.join(prms['odoPath'], 'dataset', 'sequences', '%02d','image_3','%06d.png')
+	prms['rawLeftImFile']  = os.path.join(imDir, 'dataset', 'sequences', '%02d','image_2','%06d.png')
+	prms['rawRightImFile'] = os.path.join(imDir, 'dataset', 'sequences', '%02d','image_3','%06d.png')
+	prms['leftImFile']  = os.path.join(imDir, 'dataset', 'sequences','imSz256', '%02d','image_2','%06d.jpg')
+	prms['rightImFile'] = os.path.join(imDir, 'dataset', 'sequences','imSz256', '%02d','image_3','%06d.jpg')
 	prms['lmdbDir']     = os.path.join(svDir, 'lmdb-store')
 	prms['windowDir']   = os.path.join(svDir, 'window-files')
 	prms['expDir']      = expDir
@@ -44,19 +47,38 @@ def get_prms(poseType='euler', nrmlzType='zScoreScaleSeperate',
 	prms['concatLayer']  = concatLayer  
 	prms['maxFrameDiff'] = maxFrameDiff
 
+	prms['numSamples'] = {}
+	prms['numSamples']['train'] = numTrainSamples
+	prms['numSamples']['test']  = numTestSamples
+
+	if poseType == 'euler':
+		prms['labelSz'] = 6
+	elif poseType == 'sigMotion':
+		prms['labelSz'] = 3
+	else:
+		raise Exception('PoseType %s not recognized' % poseType)
+
 	if isOld:
 		expName = 'consequent_pose-%s_nrmlz-%s_imSz%d'\
-								 % (poseType, nrmlz, imSz) 
+								 % (poseType, nrmlzType, imSz) 
+		teExpName = expName
 	else:
-		expName = 'mxDiff-%d_pose-%s_nrmlz-%s_imSz%d_concat-%s_nTr-%d'\
-								 % (maxFrameDiff, poseType, nrmlz, imSz, concatLayer, numTrainSamples) 
+		expName   = 'mxDiff-%d_pose-%s_nrmlz-%s_imSz%d_concat-%s_nTr-%d'\
+								 % (maxFrameDiff, poseType, nrmlzType, imSz, concatLayer, numTrainSamples) 
+		teExpName =  'mxDiff-%d_pose-%s_nrmlz-%s_imSz%d_concat-%s_nTe-%d'\
+								 % (maxFrameDiff, poseType, nrmlzType, imSz, concatLayer, numTestSamples) 
+
 	prms['expName'] = expName
 
 	paths['windowFile'] = {}
-	paths['windowFile']['train'] = 'train_%s.txt' % expName
-	paths['windowFile']['test']  = 'test_%s.txt'  % expName
+	paths['windowFile']['train'] = os.path.join(paths['windowDir'], 'train_%s.txt' % expName)
+	paths['windowFile']['test']  = os.path.join(paths['windowDir'], 'test_%s.txt'  % teExpName)
 	
 	prms['paths'] = paths
+	#Get the pose stats
+	prms['poseStats'] = {}
+	prms['poseStats']['mu'], prms['poseStats']['sd'], prms['poseStats']['scale'] =\
+						get_pose_stats(prms)
 	return prms
 
 ##
@@ -122,15 +144,15 @@ def get_train_test_seqnum(setName):
 	return seq
 
 
-def read_poses(seqNum=0):
+def read_poses(prms, seqNum=0):
 	'''
 		Provides the pose wrt to frame 1 in the form of (deltaX, deltaY, deltaZ, thetaZ, thetaY, thetaX
 	'''
 	if seqNum > 10 or seqNum < 0:
 		raise Exception('Poses are only present for seqNum 0 to 10')
 
-	paths  = get_paths()
-	psFile = paths['poseFile'] % seqNum
+	#paths  = get_paths()
+	psFile = prms['paths']['poseFile'] % seqNum
 
 	fid     = open(psFile, 'r')
 	lines   = fid.readlines()
@@ -142,10 +164,11 @@ def read_poses(seqNum=0):
 	return allVals
 
 
-def plot_pose(seqNum='all', poseType='euler'):
+def plot_pose(prms, seqNum='all'):
 	'''
 		Plots the pose information for the Kitti dataset. 
 	'''	
+	poseType = prms['pose']
 	allNum = get_num_images()
 	if isinstance(seqNum,int):
 		seqNum = [seqNum]
@@ -159,7 +182,7 @@ def plot_pose(seqNum='all', poseType='euler'):
 	names  = ['X', 'Y', 'Z', 'thetaZ', 'thetaY', 'thetaX']
 
 	#Get Pose Statistics
-	mu, sd, sc  = get_pose_stats(poseType) 
+	mu, sd, sc  = get_pose_stats(prms) 
 	mu, sd, sc  = mu.reshape(1,6), sd.reshape(1,6), sc.reshape(1,6)
 	
 	poses = []
@@ -239,31 +262,28 @@ def read_images(seqNum=0, cam='left', imSz=256):
 	return ims	
 
 
-def get_image_pose(seqNum=0, cam='left', imSz=256):
-	poses  = read_poses(seqNum)
+def get_image_pose(prms, seqNum=0, cam='left', imSz=256):
+	poses  = read_poses(prms, seqNum)
 	ims    = read_images(seqNum, cam, imSz)
 	return ims, poses
 
 
-def get_pose_stats(poseType):
+def get_pose_stats(prms):
 	'''
 		Compute the pose stats by sampling 100 examples from each sequence
 	'''
-	if poseType=='euler':
-		lbLength = 6
-	else: 
-		raise Exception('Unrecognized poseType')
+	lbLength = prms['labelSz']
 
 	allPose = np.zeros((100 * 11, lbLength))
 	count = 0
 	for seqNum in range(0,11):
-		poses = read_poses(seqNum)
+		poses = read_poses(prms, seqNum)
 		N     = poses.shape[0]
 		perm  = np.random.permutation(N-1)
 		perm  = perm[0:100]
 		for i in range(100):
 			p1, p2 =	poses[perm[i]], poses[perm[i]+1]
-			allPose[count]  = get_pose_label(p1, p2, poseType).reshape(lbLength,)
+			allPose[count]  = get_pose_label(p1, p2, prms['pose']).reshape(lbLength,)
 			count += 1
 			
 	muPose = np.mean(allPose,axis=0).reshape((lbLength,1,1))
@@ -274,11 +294,15 @@ def get_pose_stats(poseType):
 	return muPose, sdPose, scaleFactor
 
 
-def make_consequent_lmdb(poseType='euler', imSz=256, nrmlz='zScoreScaleSeperate', setName='train'):
+def make_consequent_lmdb(prms, setName='train'):
 	'''
 		Take left and right images from all the sequences, get the poses and make the lmdb.
 		Testing sequences are 6 and 9
 	'''
+	poseType = prms['poseType']
+	imSz     = prms['imSz']
+	nrmlz    = prms['nrmlz']
+
 	expName = 'consequent_pose-%s_nrmlz-%s_imSz%d' % (poseType, nrmlz, imSz) 
 	imF, lbF = get_lmdb_names(expName, setName)
 	db       = mpio.DoubleDbSaver(imF, lbF)
@@ -294,11 +318,11 @@ def make_consequent_lmdb(poseType='euler', imSz=256, nrmlz='zScoreScaleSeperate'
 		raise Exception('Pose Type Not Recognized')	
 
 	if nrmlz=='zScore':
-		muPose, sdPose,_ = get_pose_stats(poseType)
+		muPose, sdPose,_ = get_pose_stats(prms)
 	elif nrmlz in ['zScoreScale']:
-		muPose, sdPose, scale = get_pose_stats(poseType)
+		muPose, sdPose, scale = get_pose_stats(prms)
 	elif nrmlz in ['zScoreScaleSeperate']:
-		muPose, sdPose, scale = get_pose_stats(poseType)
+		muPose, sdPose, scale = get_pose_stats(prms)
 		transMax = np.max(scale[0:3])
 		rotMax   = np.max(scale[3:])
 		transScale = scale[0:3] / transMax
@@ -364,7 +388,7 @@ def get_pose_label(pose1, pose2, poseType):
 		lb = np.zeros((6,1,1))
 		lb[0:3] = (t2 - t1).reshape((3,1,1))
 		lb[3], lb[4], lb[5] = ru.mat2euler(np.dot(r2.transpose(), r1))
-	if poseType == 'sigMotion':
+	elif poseType == 'sigMotion':
 		#Consider only the directions along which there is significant motion.
 		# Translation along X,Z and rotation about Y
 		lb = np.zeros((3,1,1))
@@ -373,7 +397,7 @@ def get_pose_label(pose1, pose2, poseType):
 		_, lb[2], _= ru.mat2euler(np.dot(r2.transpose(), r1))
 		 
 	else:
-		raise Exception('Pose Type Not Recognized')	
+		raise Exception('Pose Type %s Not Recognized' % poseType)	
 
 	return lb		
 

@@ -135,3 +135,38 @@ def read_crop_im(imName, bbox, **kwargs):
 	return crop_im(im, bbox, **kwargs)	
 
 
+##
+# Makes a table from dict
+def make_table(**kwargs):
+	'''
+		kwargs should contains keys and lists as the values.
+	'''
+	for i,key in enumerate(kwargs.keys()):
+		if i==0:
+			L = len(kwargs[key])
+		else:
+			assert L == len(kwargs[key]), 'Wrong length for %s' % key
+
+	N = len(kwargs.keys())
+	formatStr = "{:<15} "
+	lines = []
+	lines.append(''.join(formatStr.format(k) for k in kwargs.keys()) + '\n')
+	lines.append('-' * 15 * N + '\n')
+
+	for i in range(L):
+		line = ''
+		for key in kwargs.keys():
+			if isinstance(kwargs[key][i], int):
+				fStr = '%d'
+			elif isinstance(kwargs[key][i], np.float32) or isinstance(kwargs[key][i], np.float64):
+				fStr = '%.3f'
+			elif isinstance(kwargs[key][i], str):
+				fStr = '%s'
+			else:
+				fStr = '%s'
+			line = line + formatStr.format(fStr % kwargs[key][i])
+		line = line + '\n'
+		lines.append(line)	
+	
+	for l in lines:
+		print l

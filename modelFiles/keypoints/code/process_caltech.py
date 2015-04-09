@@ -8,6 +8,7 @@ import collections as co
 import my_pycaffe_io as mpio
 import scipy.misc as scm
 import other_utils as ou
+import h5py as h5
 
 ##
 # Get the basic paths
@@ -356,7 +357,7 @@ def get_experiment_object(prms, cPrms, deviceId=1):
 def get_solver(cPrms):
 	solArgs = {'test_iter': 100,	'test_interval': 500, 'base_lr': cPrms['initLr'],
 						 'gamma': 0.5, 'stepsize': 1000, 'max_iter': cPrms['maxIter'],
-				    'snapshot': 2000, 'lr_policy': '"step"'}
+				    'snapshot': 2000, 'lr_policy': '"step"', 'debug_info': 'true'}
 	sol = mpu.make_solver(**solArgs) 
 	return sol
 
@@ -419,14 +420,6 @@ def run_experiment(prms, cPrms, deviceId=1):
 	caffeExp = make_experiment(prms, cPrms, deviceId=deviceId)
 	caffeExp.run()
 
-##
-def run_experiment_alexnet():
-	prms  = get_prms(imSz=256)
-	maxLayers = [1,2,3,4,5,6,7]
-	for l in maxLayers:
-		cPrms = get_caffe_prms(isPreTrain=True, preTrainStr='alex', maxLayer=l,  isFineLast=True)
-		run_experiment(prms, cPrms, deviceId=1)
-
 ## 
 def run_test(prms, cPrms, cropH=112, cropW=112, imH=128, imW=128):
 	caffeExp  = setup_experiment(prms, cPrms)
@@ -442,19 +435,53 @@ def run_test(prms, cPrms, cropH=112, cropW=112, imH=128, imW=128):
 	caffeTest.save_performance(['acc', 'accClassMean'], resFile)
 
 ##
+# Read all the accuracies
+def read_accuracy(prms, isPreTrain=False, preTrainStr=None,
+									isFineLast=True,  maxLayer = [1,2,3,4,5,6], initLr=0.01, initStd=0.01):
+
+	acc, accClass = [], []
+	for l in maxLayer:
+		cPrms = get_caffe_prms(isPreTrain=isPreTrain, preTrainStr=preTrainStr,
+												isFineLast=isFineLast, maxLayer=l, initLr=initLr, initStd=initStd)
+		print prms['expName'], cPrms['expStr']
+		resFile = prms['paths']['resFile'] % cPrms['expStr']
+		res     = h5.File(resFile, 'r')
+		acc.append(res['acc'][:])
+		accClass.append(res['accClassMean'][:])
+		res.close()
+	return np.concatenate(acc), np.concatenate(accClass)
+
+##
 def save_all_accuracies():
 	prms = get_prms()
+
+	'''
 	isFineLast  = [True, False]
 	maxLayer    = [1,2,3,4,5,6]
 	preTrain    = [True, False]
 	preTrainStr = ['rotObjs_kmedoids30_20_iter60K', None]
 	initLr      = [0.001, 0.01]
+	'''
+
+	'''
+	isFineLast  = [False]
+	maxLayer    = [5,6]
+	preTrain    = [True, False]
+	preTrainStr = ['rotObjs_kmedoids30_20_iter60K', None]
+	initLr      = [0.01, 0.01]
+	'''
+
+	isFineLast  = [False]
+	maxLayer    = [1,2,3,4]
+	preTrain    = [False]
+	preTrainStr = [None]
+	initLr      = [1e-4]
 	
 	for isFine in isFineLast:
 		for (pre,preStr,lr) in zip(preTrain, preTrainStr, initLr):
-			for l in maxLayer:
+			for l in reversed(maxLayer):
 				cPrms = get_caffe_prms(isPreTrain = pre, preTrainStr=preStr,
-									isFineLast=isFine, maxLayer=l, initLr=lr)
+									isFineLast=isFine, maxLayer=l, initLr=lr, initStd=0.001)
 				run_test(prms, cPrms)
 
 
@@ -559,4 +586,21 @@ def run_standard_experiment_tune(isFineLast=False, initLr=0.01, initStd=0.01):
 			cPrms = get_caffe_prms(isPreTrain=True, maxLayer=l, 
 														 preTrainStr=preTrainStr, isFineLast=isFineLast, initLr=initLr)
 			run_experiment(prms, cPrms, deviceId=1) #0 corresponds to second K40
+
+##
+def run_experiment_alexnet():
+	prms  = get_prms(imSz=256)
+	maxLayers = [1,2,3,4,5,6,7]
+	for l in maxLayers:
+		cPrms = get_caffe_prms(isPreTrain=True, preTrainStr='alex', maxLayer=l,  isFineLast=True)
+		run_experiment(prms, cPrms, deviceId=1)
+
+##
+def save_accuracy_alexnet():
+	prms = get_prms(imSz=256)
+	maxLayers = [1,2,3,4,5,6,7]
+	for l in maxLayers:
+		cPrms = get_caffe_prms(isPreTrain=True, preTrainStr='alex', maxLayer=l,  isFineLast=True)
+		run_test(prms, cPrms, cropH=227, cropW=227, imH=256, imW=256 )
+
 

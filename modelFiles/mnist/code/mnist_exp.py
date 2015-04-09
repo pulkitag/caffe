@@ -220,11 +220,37 @@ def run_networks_conv():
 	deviceId = 2
 	nw = []
 	
-	nw.append( [('Convolution',{'num_output': 96, 'kernel_size': 11, 'stride': 5}),
-						  ('ReLU',{}),('Concat',{'concat_dim':1}),
-						 ('InnerProduct',{'num_output': 100}),('ReLU',{}), 
-						 ('InnerProduct',{'num_output': 3}), ('EuclideanLoss',{'bottom2': 'label'})] )
+	nw.append( [('Convolution',{'num_output': 96, 'kernel_size': 7, 'stride': 3}), ('ReLU',{}),
+							('Convolution',{'num_output': 200, 'kernel_size': 5, 'stride': 2}), ('ReLU',{}),
+							('Concat',{'concat_dim':1}),
+						  ('InnerProduct',{'num_output': 400}),('ReLU',{}), 
+						  ('InnerProduct',{'num_output': 3}), ('EuclideanLoss',{'bottom2': 'label'})] )
+
+	nw.append( [('Convolution',{'num_output': 96, 'kernel_size': 7, 'stride': 3}), ('ReLU',{}),
+							('Convolution',{'num_output': 500, 'kernel_size': 5, 'stride': 2}), ('ReLU',{}),
+							('Concat',{'concat_dim':1}),
+						  ('InnerProduct',{'num_output': 500}),('ReLU',{}), ('Dropout', {'dropout_ratio': 0.5}), 
+						  ('InnerProduct',{'num_output': 3}), ('EuclideanLoss',{'bottom2': 'label'})] )
 	
+	nw.append( [('Convolution',{'num_output': 96, 'kernel_size': 7, 'stride': 3}), ('ReLU',{}),
+							('Convolution',{'num_output': 250, 'kernel_size': 5, 'stride': 2}), ('ReLU',{}),
+							('Concat',{'concat_dim':1}),
+						  ('InnerProduct',{'num_output': 1000}),('ReLU',{}), ('Dropout', {'dropout_ratio': 0.5}), 
+						  ('InnerProduct',{'num_output': 3}), ('EuclideanLoss',{'bottom2': 'label'})] )
+	
+	nw.append( [('Convolution',{'num_output': 96, 'kernel_size': 7, 'stride': 3}), ('ReLU',{}),
+							('Convolution',{'num_output': 250, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+							('Concat',{'concat_dim':1}),
+						  ('InnerProduct',{'num_output': 1000}),('ReLU',{}), ('Dropout', {'dropout_ratio': 0.5}), 
+						  ('InnerProduct',{'num_output': 3}), ('EuclideanLoss',{'bottom2': 'label'})] )
+	
+	nw.append( [('Convolution',{'num_output': 200, 'kernel_size': 7, 'stride': 3}), ('ReLU',{}),
+							('Convolution',{'num_output': 200, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+							('Concat',{'concat_dim':1}),
+						  ('InnerProduct',{'num_output': 1000}),('ReLU',{}), ('Dropout', {'dropout_ratio': 0.5}), 
+						  ('InnerProduct',{'num_output': 3}), ('EuclideanLoss',{'bottom2': 'label'})] )
+	
+
 	prms  = mr.get_prms(maxRot=10, maxDeltaRot=30)
 	for nn in nw:
 		cPrms = get_caffe_prms(nn, isSiamese=True)

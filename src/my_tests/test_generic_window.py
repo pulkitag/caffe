@@ -5,8 +5,11 @@ import pdb
 import caffe
 import os
 
-rootFolder = "/data1/pulkitag/data_sets/pascal_3d/PASCAL3D+_release1.1/Images/"
-sFile       = '/data1/pulkitag/data_sets/pascal_3d/my/window_file_val.txt'
+sFile =  "/data0/pulkitag/kitti/window-files/test_mxDiff-7_pose-sigMotion_nrmlz-zScoreScaleSeperate_imSz256_concat-fc6_nTe-10000.txt"
+rootFolder = "/data1/pulkitag/data_sets/kitti/odometry/dataset/sequences/" 
+
+#rootFolder = "/data1/pulkitag/data_sets/pascal_3d/PASCAL3D+_release1.1/Images/"
+#sFile       = '/data1/pulkitag/data_sets/pascal_3d/my/window_file_val.txt'
 protoFile   = 'generic_window.prototxt'
 
 def read_window_file(fName=sFile):

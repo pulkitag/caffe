@@ -446,11 +446,11 @@ def process_debug_log(logFile, setName='train'):
 	iters  = []
 	
 	#Variable Intialization
-	allBlobOp, allBlobParam, allBlobDiff = {}, {}, {}
-	blobOp, blobParam, blobDiff = {}, {}, {}
+	allBlobOp, allBlobParam, allBlobDiff, allBlobUpdate = {}, {}, {}, {}
+	blobOp, blobParam, blobDiff, blobUpdate = {}, {}, {}, {}
 	for name in layerNames:
-		allBlobOp[name], allBlobParam[name], allBlobDiff[name] = [], [], []
-		blobOp[name], blobParam[name], blobDiff[name] = [], [], []
+		allBlobOp[name], allBlobParam[name], allBlobDiff[name], allBlobUpdate[name] = [], [], [], []
+		blobOp[name], blobParam[name], blobDiff[name], blobUpdate[name] = [], [], [], []
 
 	#Only when seeFlag is set to True, we will collect the required data stats.  
 	seeFlag    = False
@@ -478,7 +478,8 @@ def process_debug_log(logFile, setName='train'):
 						allBlobOp[name].append(blobOp[name])
 						allBlobParam[name].append(blobParam[name])
 						allBlobDiff[name].append(blobDiff[name])
-						blobOp[name], blobParam[name], blobDiff[name] = [], [], []
+						allBlobUpdate[name].append(blobUpdate[name])
+						blobOp[name], blobParam[name], blobDiff[name], blobUpdate[name] = [], [], [], []
 					appendFlag = False
 	
 		#Find the data stored by the blobs
@@ -497,16 +498,30 @@ def process_debug_log(logFile, setName='train'):
 			if 'param blob' in l:
 				blobDiff[lName].append(float(l.split()[-1]))
 
+		#Find the update
+		if seeFlag and 'Update' in l and 'Layer' in l:
+			#appendFlag=True
+			lName = find_in_line(l, 'layerName')
+			assert 'diff' in l
+			assert l.split()[-2] == 'diff:', 'I Found %s instead of diff:' % l.split()[-2]
+			blobUpdate[lName].append(float(l.split()[-1]))	 
+
 	fid.close()
+	pdb.set_trace()
 	for name in layerNames:
+		print name
 		data = [np.array(a).reshape(1,len(a)) for a in allBlobOp[name]]
 		allBlobOp[name] = np.concatenate(data, axis=0)
 		data = [np.array(a).reshape(1,len(a)) for a in allBlobParam[name]]
 		allBlobParam[name] = np.concatenate(data, axis=0)
 		data = [np.array(a).reshape(1,len(a)) for a in allBlobDiff[name]]
 		allBlobDiff[name] = np.concatenate(data, axis=0)
-
-	return allBlobOp, allBlobParam, allBlobDiff, layerNames, iters
+		data = [np.array(a).reshape(1,len(a)) for a in allBlobUpdate[name]]
+		allBlobUpdate[name] = np.concatenate(data, axis=0)
+		
+	#If there are K blobs in a layer, then the size will N * K where N is the number of samples
+	# and K is the number of blobs. 
+	return allBlobOp, allBlobParam, allBlobDiff, allBlobUpdate, layerNames, iters
 
 
 def plot_debug_subplots_(data, subPlotNum, label, col, fig, 
@@ -540,7 +555,14 @@ def plot_debug_subplots_(data, subPlotNum, label, col, fig,
 ##
 # Plots the weight and features values from a debug enabled log file. 
 def plot_debug_log(logFile, setName='train', plotNames=None):
-	blobOp, blobParam, blobDiff, layerNames, iterNum = process_debug_log(logFile, setName=setName)
+	'''
+		blobOp: The output of the blob
+		blobParam : The weight of the blobs
+		blobDiff  : The gradients of the blob
+		blobUpdate: The update for the blob. 
+	'''
+	blobOp, blobParam, blobDiff, blobUpdate, layerNames, iterNum\
+							 = process_debug_log(logFile, setName=setName)
 	if plotNames is not None:
 		for p in plotNames:
 			assert p in layerNames, '%s layer not found' % p
@@ -554,14 +576,31 @@ def plot_debug_log(logFile, setName='train', plotNames=None):
 	for count,name in enumerate(plotNames):
 		fig = plt.figure()
 		col = plt.cm.jet(colIdx[count])
-		numPlots = blobOp[name].shape[1] + blobParam[name].shape[1] + blobDiff[name].shape[1]
+		#Number of plots
+		numPlots = blobOp[name].shape[1] + blobParam[name].shape[1] +\
+							 blobDiff[name].shape[1] + blobUpdate[name].shape[1]
+		#Plot the data
 		plot_debug_subplots_(blobOp[name], 1, name + '_data', col,
 												 fig, numPlots=numPlots)
+		#Plot the norms of the weights. 
 		plot_debug_subplots_(blobParam[name], 1 + blobOp[name].shape[1],
 										name + '_weights', col, fig, numPlots=numPlots)
+		#Norms of the gradient
 		plot_debug_subplots_(blobDiff[name],
 							 1 + blobOp[name].shape[1] + blobParam[name].shape[1],
 							 name + '_diff', col,  fig, numPlots=numPlots)
+		#The ratio of update/weights
+		lUpdate = blobUpdate[name]
+		ratio   = np.zeros(lUpdate.shape)	
+		if lUpdate.shape[1]>0:
+			for d in lUpdate.shape[1]:
+				idx = blobParam[name][:,d] == 0	
+				ratio[:,d] = lUpdate[:,d] / blobParam[name][:,d] 
+				ratio[idx,d] = 0
+			plot_debug_subplots_(ratio,
+				1 + blobOp[name].shape[1] + blobParam[name].shape[1] + blobDiff[name].shape[1],
+				name + '_ration', col, fig, numPlots=numPlots)	
+	
 	plt.show()	
 
 
