@@ -170,3 +170,6 @@ def make_table(**kwargs):
 	
 	for l in lines:
 		print l
+
+##
+# Finds the bins

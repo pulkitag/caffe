@@ -30,7 +30,8 @@ def get_paths():
 
 def get_prms(poseType='euler', nrmlzType='zScoreScaleSeperate', 
 						 imSz=256, concatLayer='fc6', maxFrameDiff=1,
-						 numTrainSamples=1e+06, numTestSamples=1e+04, isOld=False):
+						 numTrainSamples=1e+06, numTestSamples=1e+04, isOld=False,
+						 lossType='classify', classificationType='independent'):
 	'''
 		poseType   : How pose is being used.
 		nrmlzType  : The way the pose data has been normalized.
@@ -46,27 +47,62 @@ def get_prms(poseType='euler', nrmlzType='zScoreScaleSeperate',
 	prms['imSz']         = imSz
 	prms['concatLayer']  = concatLayer  
 	prms['maxFrameDiff'] = maxFrameDiff
+	prms['lossType']     = lossType
+	prms['classType']    = classificationType
 
 	prms['numSamples'] = {}
 	prms['numSamples']['train'] = numTrainSamples
 	prms['numSamples']['test']  = numTestSamples
 
 	if poseType == 'euler':
-		prms['labelSz'] = 6
+		prms['labelSz']  = 6
+		prms['numTrans'] = 3
+		prms['numRot']   = 3
 	elif poseType == 'sigMotion':
-		prms['labelSz'] = 3
+		prms['labelSz']  = 3
+		prms['numTrans'] = 2
+		prms['numRot']   = 1
 	else:
 		raise Exception('PoseType %s not recognized' % poseType)
+
+	if lossType=='classify' and classificationType=='independent':
+		assert nrmlzType=='zScoreScaleSeperate'
+		#See iPython Notebook label visualization
+		#All the labels are normalized to the same range and then put them in
+		# bins
+		binSz    = (1.0/7)*maxFrameDiff
+		numBins  = 10
+		binRange         = np.linspace(-binSz*numBins, binSz*numBins, 2*numBins)
+		prms['binRange'] = binRange 
+		prms['binCount'] = 2 * numBins + 2 #+2 for lower and greater than the bounds
 
 	if isOld:
 		expName = 'consequent_pose-%s_nrmlz-%s_imSz%d'\
 								 % (poseType, nrmlzType, imSz) 
 		teExpName = expName
 	else:
+		expStr = []
+		if lossType=='classify':
+			if classificationType=='independent':
+				expStr.append('los-cls-ind-bn%d' % prms['binCount'])
+			else:
+				raise Exception('classification type not recognized')
+		elif lossType=='regress':
+			pass
+		else:
+			raise Exception('Loss Type not recognized')
+		
+		expStr = ''.join(s + '_' for s in expStr)
+		expStr = expStr[:-1]
+		if len(expStr) > 0:
+			expStr = expStr + '_'
+
 		expName   = 'mxDiff-%d_pose-%s_nrmlz-%s_imSz%d_concat-%s_nTr-%d'\
 								 % (maxFrameDiff, poseType, nrmlzType, imSz, concatLayer, numTrainSamples) 
 		teExpName =  'mxDiff-%d_pose-%s_nrmlz-%s_imSz%d_concat-%s_nTe-%d'\
 								 % (maxFrameDiff, poseType, nrmlzType, imSz, concatLayer, numTestSamples) 
+		expName   = expStr + expName
+		teExpname = expStr + teExpName 
 
 	prms['expName'] = expName
 

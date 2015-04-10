@@ -456,35 +456,32 @@ def process_debug_log(logFile, setName='train'):
 	seeFlag    = False
 	updateFlag = False
 	appendFlag = False
+	writeFlag  = False
 	for (count, l) in enumerate(lines):
-		#Find the start of a new and relevant iteration  
-		if 'Iteration' in l:
-			if setName=='train':
-				if not ('lr' in l):
-					seeFlag    = False
-					continue
-			else:
-				if 'Testing' not in l:
-					seeFlag = False
-					continue
-			
+		#Find the start of a new and relevant iteration 
+		if 'Forward' in l and writeFlag == True:
+			for name in layerNames:
+				allBlobOp[name].append(blobOp[name])
+				allBlobParam[name].append(blobParam[name])
+				allBlobDiff[name].append(blobDiff[name])
+				allBlobUpdate[name].append(blobUpdate[name])
+				blobOp[name], blobParam[name], blobDiff[name], blobUpdate[name] = [], [], [], []
+			writeFlag = False
+
+		#The training log starts after the line Test Net Output
+		if setName=='train' and ('Test' in l and 'output' in l):
 			seeFlag = True
+			print "Setting to true"
+
+		#If there is a testing network then set the seeFlag to False	
+		if setName=='train' and 'Testing' in l:
+			seeFlag = False
+
+		if seeFlag and 'Iteration' in l and 'lr' in l: 	
 			iterNum = find_in_line(l, 'iterNum')
 			iters.append(iterNum)	
-			if len(iters) > 1:
-				#print len(iters), appendFlag
-				if appendFlag:
-					for name in layerNames:
-						allBlobOp[name].append(blobOp[name])
-						allBlobParam[name].append(blobParam[name])
-						allBlobDiff[name].append(blobDiff[name])
-						allBlobUpdate[name].append(blobUpdate[name])
-						blobOp[name], blobParam[name], blobDiff[name], blobUpdate[name] = [], [], [], []
-					appendFlag = False
-	
-		#Find the data stored by the blobs
+		
 		if seeFlag and 'Forward' in l:
-			appendFlag = True
 			lName = find_in_line(l, 'layerName')	
 			if 'top blob' in l:	
 				blobOp[lName].append(float(l.split()[-1]))
@@ -493,21 +490,20 @@ def process_debug_log(logFile, setName='train'):
 
 		#Find the back propogated diffs
 		if seeFlag and ('Backward' in l) and ('Layer' in l):
-			appendFlag = True
 			lName = find_in_line(l, 'layerName')
 			if 'param blob' in l:
 				blobDiff[lName].append(float(l.split()[-1]))
 
 		#Find the update
 		if seeFlag and 'Update' in l and 'Layer' in l:
-			#appendFlag=True
+			#Forward after the update is the time when we need to write.
+			writeFlag = True
 			lName = find_in_line(l, 'layerName')
 			assert 'diff' in l
 			assert l.split()[-2] == 'diff:', 'I Found %s instead of diff:' % l.split()[-2]
 			blobUpdate[lName].append(float(l.split()[-1]))	 
 
 	fid.close()
-	pdb.set_trace()
 	for name in layerNames:
 		print name
 		data = [np.array(a).reshape(1,len(a)) for a in allBlobOp[name]]
@@ -593,7 +589,7 @@ def plot_debug_log(logFile, setName='train', plotNames=None):
 		lUpdate = blobUpdate[name]
 		ratio   = np.zeros(lUpdate.shape)	
 		if lUpdate.shape[1]>0:
-			for d in lUpdate.shape[1]:
+			for d in range(lUpdate.shape[1]):
 				idx = blobParam[name][:,d] == 0	
 				ratio[:,d] = lUpdate[:,d] / blobParam[name][:,d] 
 				ratio[idx,d] = 0

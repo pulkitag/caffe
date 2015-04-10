@@ -291,6 +291,48 @@ class DoubleDbReader:
 		for db in self.dbs_:
 			db.close()
 
+##
+# For reading generic window reader. 
+class GenericWindowReader:
+	def __init__(self, fileName):
+		self.fid_ = open(fileName,'r')
+		line      = self.fid_.readline()
+		assert(line.split()[1] == 'GenericDataLayer')
+		self.num_   = int(self.fid_.readline())
+		self.numIm_ = int(self.fid_.readline())
+		self.lblSz_ = int(self.fid_.readline()) 
+		self.count_ = 0
+
+	def read_next(self):
+		if self.count_ == self.num_:
+			print "All lines already read"
+			return None, None
+		count = int(self.fid_.readline().split()[1])
+		assert count == self.count_
+		self.count_ += 1
+		imDat = []
+		for n in range(self.numIm_): 
+			imDat.append(self.fid_.readline())
+		lbls = self.fid_.readline().split()
+		lbls = np.array([float(l) for l in lbls]).reshape(1,self.lblSz_)
+		return imDat, lbls
+				
+	def get_all_labels(self):
+		readFlag = True
+		lbls     = []
+		while readFlag:
+			_, lbl = self.read_next()
+			if lbl is None:
+				readFlag = False
+				continue
+			else:
+				lbls.append(lbl)
+		lbls = np.concatenate(lbls)
+		return lbls
+		
+	def close(self):
+		self.fid_.close()
+
 
 ##
 # For writing generic window file layers. 

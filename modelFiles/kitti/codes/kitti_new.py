@@ -6,6 +6,9 @@ import pdb
 import os
 import my_pycaffe_utils as mpu
 import scipy.misc as scm
+import myutils as myu
+import copy
+
 SET_NAMES = ['train', 'test']
 
 ##
@@ -73,11 +76,25 @@ def get_pose_label_normalized(prms, pose1, pose2):
 			Same as zScorScale but scale the rotation and translations
 			seperately. 
 		'''
+		nT = prms['numTrans'] #Number of translation dimensions.
+		nR = prms['numRot']   #Number of rotation dimensions.
+		transMax = np.max(scale[0:nT])
+		rotMax   = np.max(scale[nT:])
+		transScale = scale[0:nT] / transMax
+		rotScale   = scale[nT:]  / rotMax
+		scale      = np.concatenate((transScale, rotScale), axis=0)
+
 		lbBatch = lbBatch - muPose
 		lbBatch = lbBatch / sdPose	
 		lbBatch = lbBatch * scale
 	else:
 		raise Exception('Nrmlz Type Not Recognized')
+
+	if prms['lossType'] == 'classify':
+		for i in range(lbBatch.shape[0]):
+			#+1 because we clip everything below a certain value to the zeroth bin.
+			lbBatch[i] = 1 + myu.find_bin(lbBatch[i].squeeze(), prms['binRange']) 
+
 	return lbBatch
 	
 ##
@@ -240,13 +257,13 @@ def setup_experiment(prms, cPrms):
 
 	#The base file to start with
 	baseFilePath = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/kitti/base_files'
-	if cPrms['concatLayer'] == 'fc6':
-		baseFile = 'kitti_siamese_window_fc6.prototxt'
-	if cPrms['concatLayer'] == 'conv5':
-		baseFile = 'kitti_siamese_window_conv5.prototxt'
+	baseFileStr  = 'kitti_siamese_window_%s' % cPrms['concatLayer']
+	if prms['lossType'] == 'classify':
+		baseStr = '_cls-trn%d-rot%d' % (trnSz, rotSz)
 	else:
-		raise Exception('Base file cannot be found for the required parameters')
-	baseFile = os.path.join(baseFilePath, baseFile)
+		baseStr = ''
+	baseFile = os.path.join(baseFilePath, baseFileStr + baseStr + '.prototxt')
+	print baseFile
 
 	protoDef = mpu.ProtoDef(baseFile)	 
 	solDef   = cPrms['solver']
@@ -259,12 +276,22 @@ def setup_experiment(prms, cPrms):
 			'"%s"' % prms['paths']['windowFile']['train'], phase='TRAIN')
 	caffeExp.set_layer_property('window_data', ['generic_window_data_param', 'source'],
 			'"%s"' % prms['paths']['windowFile']['test'], phase='TEST')
-	#Set the size of the rotation and translation layers
-	caffeExp.set_layer_property('translation_fc', ['inner_product_param', 'num_output'],
-							trnSz, phase='TRAIN')
-	caffeExp.set_layer_property('rotation_fc', ['inner_product_param', 'num_output'],
-							rotSz, phase='TRAIN')
-	
+
+
+	if prms['lossType'] == 'classify':
+		for t in range(trnSz):
+			caffeExp.set_layer_property('translation_fc_%d' % (t+1), ['inner_product_param', 'num_output'],
+									prms['binCount'], phase='TRAIN')
+		for r in range(rotSz):
+			caffeExp.set_layer_property('rotation_fc_%d' % (r+1), ['inner_product_param', 'num_output'],
+									prms['binCount'], phase='TRAIN')
+	else:
+		#Set the size of the rotation and translation layers
+		caffeExp.set_layer_property('translation_fc', ['inner_product_param', 'num_output'],
+								trnSz, phase='TRAIN')
+		caffeExp.set_layer_property('rotation_fc', ['inner_product_param', 'num_output'],
+								rotSz, phase='TRAIN')
+
 	#Decide the slice point for the label
 	#The slice point is decided by the translation labels.	
 	caffeExp.set_layer_property('slice_label', ['slice_param', 'slice_point'], trnSz)	
