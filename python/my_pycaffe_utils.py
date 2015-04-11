@@ -198,12 +198,15 @@ class LayerNameGenerator:
 		self.nc_['Dropout']       = 'drop' 
 		self.nc_['Convolution']   = 'conv'
 		self.nc_['Accuracy']      = 'accuracy'
+		self.nc_['Pooling']       = 'pool'
 		self.lastType_ = None
 
 	def next_name(self, layerType):
 		assert layerType in self.nc_.keys(), 'layerType %s not found' % layerType
 		prefix = self.nc_[layerType]
-		if layerType in ['ReLU','Pool'] and self.lastType_ in ['InnerProduct', 'Convolution']:
+		if layerType in ['ReLU','Pooling'] and self.lastType_ in ['InnerProduct', 'Convolution']:
+			pass
+		elif layerType in ['Pooling'] and self.lastType_ in ['ReLU']:
 			pass
 		elif layerType == 'Concat':
 			#Don't increment the counter for concatenation layer. 
@@ -304,6 +307,24 @@ def get_layerdef_for_proto(layerType, layerName, bottom, numOutput=1, **kwargs):
 		layerDef[ipKey]['bias_filler']['type'] = '"constant"'
 		layerDef[ipKey]['bias_filler']['value']  = str(0.)
 
+	elif layerType == 'ReLU':
+		if kwargs.has_key('top'):
+			topName = kwargs['top']
+		else:
+			topName = layerName
+		layerDef['top'] = '"%s"' % topName
+
+	elif layerType == 'Pooling':
+		if kwargs.has_key('top'):
+			topName = kwargs['top']
+		else:
+			topName = layerName
+		layerDef['top'] = '"%s"' % topName
+		layerDef['pooling_param'] = {}
+		layerDef['pooling_param']['pool'] = 'MAX'
+		layerDef['pooling_param']['kernel_size'] = kwargs['kernel_size']
+		layerDef['pooling_param']['stride']      = kwargs['stride']
+
 	elif layerType=='Silence':
 		#Nothing to be done
 		pass
@@ -344,13 +365,7 @@ def get_layerdef_for_proto(layerType, layerName, bottom, numOutput=1, **kwargs):
 		layerDef['concat_param']['concat_dim'] = kwargs['concat_dim']
 		layerDef['top']   = '"%s"' % layerName
 
-	elif layerType == 'ReLU':
-		if kwargs.has_key('top'):
-			topName = kwargs['top']
-		else:
-			topName = layerName
-		layerDef['top'] = '"%s"' % topName
-	
+		
 	elif layerType in ['DeployData']:
 		layerDef['input'] = '"%s"' % layerName
 		ipDims = kwargs['ipDims'] #(batch_size, channels, h, w)
@@ -1007,6 +1022,16 @@ class ProtoDef():
 		topName = self.layers_[phase][lastKey]['top'][1:-1]
 		return topName
 
+	##
+	# Get the layerNames from the type of the layer. 
+	def get_layernames_from_type(self, layerType, phase='TRAIN'):
+		layerNames = []
+		for lName in self.layers_[phase].keys():
+			lType = self.layers_[phase][lName]['type'][1:-1]
+			if lType == layerType:
+				layerNames.append(lName)
+		return layerNames
+
 ##
 # Class for making the solver_prototxt
 class SolverDef:
@@ -1296,6 +1321,10 @@ class CaffeExperiment:
 	##
 	def add_layer(self, layerName, layer, phase):
 		self.expFile_.netDef_.add_layer(layerName, layer, phase)
+	##
+	# Get the layerNames from the type of the layer. 
+	def get_layernames_from_type(self, layerType, phase='TRAIN'):
+		return self.expFile_.netDef_.get_layernames_from_type(layerType, phase=phase)
 
 	##
 	def get_snapshot_name(self, numIter=10000):
@@ -1368,21 +1397,27 @@ class CaffeTest:
 		self.exp_ = caffeExp
 		self.db_  = mpio.DbReader(lmdbTest)
 		self.device_ = deviceId
-		self.ipMode_ = 'lmdb'
+		self.ipMode_    = 'lmdb'
+		self.testCount_ = 0
 		return self
 
 	##
 	def setup_network(self, opNames, dataLayerNames=['data'], labelBlob=['label'], 
 						 imH=128, imW=128, cropH=112, cropW=112, channels=3,
 						 modelIterations=10000, 
-						 batchSz=100, delLayers=['accuracy', 'loss']):
+						 batchSz=100, delLayers=['accuracy', 'loss'],
+						 maxClassCount=None, maxLabel=None):
 		'''
 			This will simply store the gt and predicted labels
 			opName         : The layer from which the predicted features need to be taken.
 											 should be a list. 
 			dataLayerName  : Layer to which feed the data
 			labelBlob      : The name of the label blob
-			modelIterations: The number of iterations for which caffe-model needs to be used.  
+			modelIterations: The number of iterations for which caffe-model needs to be used. 
+			maxClassCount  : If we want to test so that only maxClassCount examples of each
+											 class are considered.
+			maxLabel       : Used in conjuction with maxClassCount, labels are assumed to be from	
+											 [0, maxLabel) 
 		'''
 		if not isinstance(opNames, list):
 			opNames = [opNames]
@@ -1417,21 +1452,45 @@ class CaffeTest:
 		self.ip_      = dataLayerNames[0]
 		self.op_      = opNames
 		self.batchSz_ = batchSz
+	
+		self.maxClsCount_ = maxClassCount
+		if maxClassCount is not None:
+			assert maxLabel is not None, 'Specify maxLabel'
+			self.clsCount_  = np.zeros((maxLabel,))
+
 
 	def get_data(self):
 		'''
 			Returns: data, label, isEnd
 		'''
 		if self.ipMode_ == 'lmdb':
-			data, label = self.db_.read_batch(self.batchSz_)
-			if data is None:
-				return None, None, True
-			elif data.shape[0] < self.batchSz_:
-				return data, label, True
-			else:
-				return data, label, False
+			readFlag = True
+			readCount = 0
+			allData, allLabel = [], []
+			while readFlag:
+				data, label = self.db_.read_next()
+				if data is None:
+					break
+				if self.maxClsCount_ is not None:
+					if self.clsCount_[label] < self.maxClsCount_:
+						self.clsCount_[label] += 1
+					else:
+						continue	
+	
+				readCount += 1
+				if readCount == self.batchSz_:
+					readFlag = False
+			allData  = np.concatenate(allData)
+			allLabel = np.array(allData) 					
 		else:
 			raise Exception('Data Model not recognized')
+
+		if len(allData) == 0:
+			return None, None, True
+		elif len(allData) < self.batchSz_:
+			return allData, allLabel, True
+		else:
+			return allData, allLabel, False
 
 	## 
 	# Run the test
@@ -1446,7 +1505,7 @@ class CaffeTest:
 					break
 			if isEnd:
 				runFlag = False
-			print 'running: ', data.shape, label.shape
+			#print 'running: ', data.shape, label.shape
 			#Get the features
 			op = self.net_.forward_all(blobs=self.op_, **{self.ip_: data})
 			#If there are multiple outputs - then concatenate them along the channel dim.
@@ -1458,6 +1517,7 @@ class CaffeTest:
 					opDat = np.concatenate((opDat, op[key]), axis=1)
 			self.pdFeat_.append(opDat.squeeze())		
 			self.gtLb_.append(label.squeeze())
+			self.testCount_ += len(label.squeeze())
 		self.pdFeat_ = np.concatenate(self.pdFeat_)
 		self.gtLb_   = np.concatenate(self.gtLb_)
 
@@ -1492,10 +1552,12 @@ class CaffeTest:
 	# Save Accuracy
 	def save_performance(self, accTypes, outFile):
 		fid = h5.File(outFile, 'w')
+		print "Saving accuracies over %d examples" % self.testCount_
 		for key in accTypes:
 			acc  = np.array([self.compute_performance(accType=key)]) 
 			dat  = fid.create_dataset(key, acc.shape, dtype='f')
 			dat[:] = acc[:]
+			print "%s: %.3f" % (key, acc[:])
 		fid.close()
 
 

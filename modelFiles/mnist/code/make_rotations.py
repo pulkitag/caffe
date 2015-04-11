@@ -9,8 +9,9 @@ import os
 import my_pycaffe_io as mpio
 import my_pycaffe_utils as mpu
 import pdb
+import myutils as myu
 
-SET_NAMES = ['train', 'test']
+SET_NAMES = ['test', 'train']
 
 def get_lmdb_name_old(prms, setName):
 	dbDir  = prms['paths']['lmdbDir']
@@ -48,7 +49,8 @@ def get_paths(isOld=False):
 
 
 def get_prms(transform='rotTrans', maxRot=10, maxDeltaRot=10, maxDeltaTrans=3, 
-						isOld=False, baseLineMode=False, runNum=0, numTrainEx=1e+06, numTestEx=1e+04):
+						isOld=False, baseLineMode=False, runNum=0, numTrainEx=1e+06, numTestEx=1e+04,
+						lossType='regress'):
 	'''
 		Ideally I should finetune both for classification + rotation training
 		But, I don't think I have time to try to make that work. 
@@ -66,6 +68,16 @@ def get_prms(transform='rotTrans', maxRot=10, maxDeltaRot=10, maxDeltaTrans=3,
 	prms['numEx']          = {}
 	prms['numEx']['train'] = numTrainEx
 	prms['numEx']['test']  = numTestEx 
+	prms['lossType']       = lossType
+
+	if prms['lossType'] == 'classify':
+		prms['numTrnBins'] = int(2 * maxDeltaTrans + 1)
+		prms['numRotBins'] = int(round((2 * maxDeltaRot + 1) / float(3)))
+		prms['trnBins']    = np.linspace(-maxDeltaTrans - 0.2, maxDeltaTrans + 0.2, prms['numTrnBins'],
+													endpoint=False)
+		prms['rotBins']    = np.linspace(-maxDeltaRot, maxDeltaRot, prms['numRotBins'], endpoint=False)
+		prms['trnLblSz']   = prms['numTrnBins'] + 1 
+		prms['rotLblSz']   = prms['numRotBins'] + 1
 
 	prms['paths']         = paths	
 
@@ -81,6 +93,8 @@ def get_prms(transform='rotTrans', maxRot=10, maxDeltaRot=10, maxDeltaTrans=3,
 									 % (setName, maxDeltaRot, maxDeltaTrans, maxRot, numLabels, numEx)
 	else:
 		expName = 'tf-%s' % prms['transform']
+		if lossType=='classify':
+			expName = expName + '_' + 'cls'
 		if transform=='rotTrans':
 			expName = expName + '_dRot%d_dTrn%d_mxRot%d_tr%.0e_run%d' %\
 							 (maxDeltaRot, maxDeltaTrans, maxRot, numTrainEx, runNum)
@@ -283,7 +297,7 @@ def make_transform_db(prms):
 
 		#Start Writing the data
 		count   = 0
-		batchSz = 1000
+		batchSz = 10000
 		imBatch = np.zeros((batchSz, 2, nr, nc)).astype(np.uint8)
 		lbBatch = np.zeros((batchSz, 3, 1, 1)).astype(np.float)
 
@@ -299,9 +313,18 @@ def make_transform_db(prms):
 									 sample_transform(maxDeltaTrans, randState), sample_transform(maxDeltaRot, randState)
 			x2, y2, r2 = x1 + delx, y1 + dely, r1 + delr
 			delx, dely, delr = np.float32(delx), np.float32(dely), np.float32(delr)
-			delx, dely, delr = delx / (maxDeltaTrans + 1e-6), dely / (maxDeltaTrans + 1e-6),\
+		
+			if prms['lossType'] == 'classify':
+				delx, dely = myu.find_bin(delx, prms['trnBins']),\
+											 myu.find_bin(dely, prms['trnBins'])
+				delr       = myu.find_bin(delr, prms['rotBins'])
+				assert delx >=0 and dely>=0 and delr>=0	
+			else:
+				#For regression do the normalization otherwise not. 
+				delx, dely, delr = delx / (maxDeltaTrans + 1e-6), dely / (maxDeltaTrans + 1e-6),\
 												 delr / (maxDeltaRot + 1e-6)
 		
+
 			#Transform the image
 			imBatch[count,0,:,:]  = transform_im(im, x1, y1, r1)
 			imBatch[count,1,:,:]  = transform_im(im, x2, y2, r2)

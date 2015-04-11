@@ -375,6 +375,10 @@ class CropDataLayer : public BasePrefetchingDataLayer<Dtype> {
 	int read_count_;
 	int num_examples_;
 	bool is_ready_;
+	bool is_random_crop_;
+	unsigned int rand_seed_;
+	//Useful for debugging the layer as it tells what is the layer number. 
+	int layer_num_;
 };
 
 

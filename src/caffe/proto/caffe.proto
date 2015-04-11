@@ -529,6 +529,8 @@ message GenericWindowDataParameter {
   optional string root_folder = 13 [default = ""];
 	// Only to be used by CropDataLayer
 	optional bool is_ready = 14 [default = false];
+	//If random cropping needs to be switched on
+	optional bool random_crop = 15 [default = false];
 }
 
 

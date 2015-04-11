@@ -19,8 +19,16 @@ def get_paths():
 	prms['poseFile']    = os.path.join(prms['odoPath'], 'dataset', 'poses', '%02d.txt')
 	prms['rawLeftImFile']  = os.path.join(imDir, 'dataset', 'sequences', '%02d','image_2','%06d.png')
 	prms['rawRightImFile'] = os.path.join(imDir, 'dataset', 'sequences', '%02d','image_3','%06d.png')
-	prms['leftImFile']  = os.path.join(imDir, 'dataset', 'sequences','imSz256', '%02d','image_2','%06d.jpg')
-	prms['rightImFile'] = os.path.join(imDir, 'dataset', 'sequences','imSz256', '%02d','image_3','%06d.jpg')
+	prms['sz256LeftImFile']  = os.path.join(imDir, 'dataset', 'sequences','imSz256', 
+															'%02d','image_2','%06d.jpg')
+	prms['sz256RightImFile'] = os.path.join(imDir, 'dataset', 'sequences','imSz256', 
+															'%02d','image_3','%06d.jpg')
+
+	prms['leftImFile']  = os.path.join(imDir, 'dataset', 'sequences','asJpg', 
+															'%02d','image_2','%06d.jpg')
+	prms['rightImFile'] = os.path.join(imDir, 'dataset', 'sequences','asJpg', 
+															'%02d','image_3','%06d.jpg')
+
 	prms['lmdbDir']     = os.path.join(svDir, 'lmdb-store')
 	prms['windowDir']   = os.path.join(svDir, 'window-files')
 	prms['expDir']      = expDir
@@ -31,15 +39,19 @@ def get_paths():
 def get_prms(poseType='euler', nrmlzType='zScoreScaleSeperate', 
 						 imSz=256, concatLayer='fc6', maxFrameDiff=1,
 						 numTrainSamples=1e+06, numTestSamples=1e+04, isOld=False,
-						 lossType='classify', classificationType='independent'):
+						 lossType='classify', classificationType='independent',
+						 randomCrop=True):
 	'''
 		poseType   : How pose is being used.
 		nrmlzType  : The way the pose data has been normalized.
 		imSz       : Size of the images being used.
 		concatLayer: The layer used for concatentation in siamese training
 		maxFrameDiff: The maximum range within which frames are considered. 
-		isOld       : Backward compatibility	
+		isOld       : Backward compatibility
+		randomCrop  : Whether to randomly crop the images or not. 	
 	'''
+	if randomCrop:
+		assert imSz is None, "With Random crop imSz should be set to None"
 	paths = get_paths()
 	prms  = {}
 	prms['pose']         = poseType
@@ -49,6 +61,7 @@ def get_prms(poseType='euler', nrmlzType='zScoreScaleSeperate',
 	prms['maxFrameDiff'] = maxFrameDiff
 	prms['lossType']     = lossType
 	prms['classType']    = classificationType
+	prms['randomCrop']   = randomCrop
 
 	prms['numSamples'] = {}
 	prms['numSamples']['train'] = numTrainSamples
@@ -97,10 +110,16 @@ def get_prms(poseType='euler', nrmlzType='zScoreScaleSeperate',
 		if len(expStr) > 0:
 			expStr = expStr + '_'
 
-		expName   = 'mxDiff-%d_pose-%s_nrmlz-%s_imSz%d_concat-%s_nTr-%d'\
-								 % (maxFrameDiff, poseType, nrmlzType, imSz, concatLayer, numTrainSamples) 
-		teExpName =  'mxDiff-%d_pose-%s_nrmlz-%s_imSz%d_concat-%s_nTe-%d'\
-								 % (maxFrameDiff, poseType, nrmlzType, imSz, concatLayer, numTestSamples) 
+		if imSz is not None:
+			imStr = 'imSz%d' % imSz
+		else:
+			assert randomCrop, 'imSz should be none only with random cropping'
+			imStr = 'randcrp'
+
+		expName   = 'mxDiff-%d_pose-%s_nrmlz-%s_%s_concat-%s_nTr-%d'\
+								 % (maxFrameDiff, poseType, nrmlzType, imStr, concatLayer, numTrainSamples) 
+		teExpName =  'mxDiff-%d_pose-%s_nrmlz-%s_%s_concat-%s_nTe-%d'\
+								 % (maxFrameDiff, poseType, nrmlzType, imStr, concatLayer, numTestSamples) 
 		expName   = expStr + expName
 		teExpname = expStr + teExpName 
 
@@ -117,6 +136,7 @@ def get_prms(poseType='euler', nrmlzType='zScoreScaleSeperate',
 						get_pose_stats(prms)
 	return prms
 
+'''
 ##
 # For Old code.
 def get_weight_proto_file(numIter=20000, imSz=256, poseType='euler', nrmlzType='zScoreScaleSeperate',
@@ -141,7 +161,8 @@ def get_weight_proto_file(numIter=20000, imSz=256, poseType='euler', nrmlzType='
 	protoFile  = os.path.join(paths['expDir'], protoStr, fileName)	
 
 	return snapFile, protoFile
-	
+
+'''
 ##
 # This for old code. 
 def get_lmdb_names(expName, setName='train'):
@@ -272,11 +293,11 @@ def plot_pose(prms, seqNum='all'):
 	plt.ion()
 	plt.show()
 	 
-
+'''
 def read_images(seqNum=0, cam='left', imSz=256):
-	'''
-		Read the required images
-	'''
+	##
+	#Read the required images
+	##
 	if cam=='left':
 		imStr = 'leftImFile'
 	elif cam=='right':
@@ -296,13 +317,14 @@ def read_images(seqNum=0, cam='left', imSz=256):
 		im       = scm.imresize(im, (256, 256))
 		ims[i]   = im
 	return ims	
+'''
 
-
+'''
 def get_image_pose(prms, seqNum=0, cam='left', imSz=256):
 	poses  = read_poses(prms, seqNum)
 	ims    = read_images(seqNum, cam, imSz)
 	return ims, poses
-
+'''
 
 def get_pose_stats(prms):
 	'''
@@ -329,12 +351,10 @@ def get_pose_stats(prms):
 	scaleFactor = sdPose / maxSd 
 	return muPose, sdPose, scaleFactor
 
-
+'''
 def make_consequent_lmdb(prms, setName='train'):
-	'''
-		Take left and right images from all the sequences, get the poses and make the lmdb.
-		Testing sequences are 6 and 9
-	'''
+	#	Take left and right images from all the sequences, get the poses and make the lmdb.
+	#	Testing sequences are 6 and 9
 	poseType = prms['poseType']
 	imSz     = prms['imSz']
 	nrmlz    = prms['nrmlz']
@@ -385,23 +405,19 @@ def make_consequent_lmdb(prms, setName='train'):
 				lbBatch = lbBatch - muPose
 				lbBatch = lbBatch / sdPose	
 			elif nrmlz == 'zScoreScale':
-				'''
-					This is good because if a variable doesnot 
-					really changes, then there is going to 
-					negligible change in image because of that. 
-					So its not a good idea to just re-scale to
-				  the same scale on which other more important 
-					factors are changing. So first make everything 
-					sd = 1 and then scale accordingly. 
-				'''
+	#				This is good because if a variable doesnot 
+	#				really changes, then there is going to 
+	#				negligible change in image because of that. 
+	#				So its not a good idea to just re-scale to
+	#			  the same scale on which other more important 
+	#				factors are changing. So first make everything 
+	#				sd = 1 and then scale accordingly. 
 				lbBatch = lbBatch - muPose
 				lbBatch = lbBatch / sdPose	
 				lbBatch = lbBatch * scale
 			elif nrmlz == 'zScoreScaleSeperate':
-				'''
-					Same as zScorScale but scale the rotation and translations
-					seperately. 
-				'''
+	#				Same as zScorScale but scale the rotation and translations
+	#				seperately. 
 				lbBatch = lbBatch - muPose
 				lbBatch = lbBatch / sdPose	
 				lbBatch = lbBatch * scale
@@ -410,7 +426,7 @@ def make_consequent_lmdb(prms, setName='train'):
 			db.add_batch((imBatch, lbBatch), svIdx=(perm[count:count+N-1],perm[count:count+N-1]),
 					 imAsFloat=(False, True))		
 			count = count + N-1
-	
+'''
 
 def get_pose_label(pose1, pose2, poseType):
 	'''

@@ -55,10 +55,17 @@ void CropDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
   is_ready_          = this->layer_param_.generic_window_data_param().is_ready();
   cache_images_      = this->layer_param_.generic_window_data_param().cache_images();
   string root_folder = this->layer_param_.generic_window_data_param().root_folder();
+	is_random_crop_    = this->layer_param_.generic_window_data_param().random_crop();
 
+	if (is_random_crop_){
+    prefetch_rng_.reset(new Caffe::RNG(rand_seed_));
+	}else{
+		prefetch_rng_.reset();
+	}
 
-	prefetch_rng_.reset();
-
+	LOG(INFO) << "Random cropping: " << is_random_crop_;
+	LOG(INFO) << "Crop Size: " 
+      << this->layer_param_.generic_window_data_param().crop_size();
 	LOG(INFO) << "Amount of context padding: "
       << this->layer_param_.generic_window_data_param().context_pad();
   LOG(INFO) << "Crop mode: "
@@ -176,12 +183,15 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
 
 		//Get the image
 		cv::Mat cv_img;
+		int imHeight, imWidth;
 		if (this->cache_images_) {
 			Datum image_cached = image_database_cache_[read_count_];
 			cv_img = DecodeDatumToCVMat(image_cached, true);
 		} else {
 			// load the image containing the window
 			pair<std::string, vector<int> > image = image_database_[read_count_];
+			imHeight = image.second[1];
+			imWidth  = image.second[2];
 			//LOG(INFO) << image.first; 
 			cv_img = cv::imread(image.first, CV_LOAD_IMAGE_COLOR);
 			if (!cv_img.data) {
@@ -195,11 +205,25 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
 		CHECK_EQ(channels, 3);
 
 		// crop window out of image and warp it
-		int x1 = window[CropDataLayer<Dtype>::X1];
-		int y1 = window[CropDataLayer<Dtype>::Y1];
-		int x2 = window[CropDataLayer<Dtype>::X2];
-		int y2 = window[CropDataLayer<Dtype>::Y2];
-
+		int x1, y1, x2, y2;
+		if (is_random_crop_){
+			int maxHeightSt = std::max(0, imHeight - crop_size);
+			int maxWidthSt  = std::max(0, imWidth - crop_size);
+			const unsigned int rand_index_h = PrefetchRand();
+			const unsigned int rand_index_w = PrefetchRand();
+			x1 = rand_index_w % maxWidthSt;
+			y1 = rand_index_h % maxHeightSt;
+			x2 = x1 + crop_size - 1;
+			y2 = y1 + crop_size - 1; 
+			//LOG(INFO) << "Crop Layer num: " << layer_num_ << " dims: " 
+			//					<< x1 <<", " << x2 << ", " << y1 <<", " << ", " << y2;
+		}else{
+			x1 = window[CropDataLayer<Dtype>::X1];
+			y1 = window[CropDataLayer<Dtype>::Y1];
+			x2 = window[CropDataLayer<Dtype>::X2];
+			y2 = window[CropDataLayer<Dtype>::Y2];
+		}
+		
 		int pad_w = 0;
 		int pad_h = 0;
 		if (context_pad > 0 || use_square) {

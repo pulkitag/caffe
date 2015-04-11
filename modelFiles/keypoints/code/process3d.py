@@ -30,6 +30,7 @@ import time
 import myutils as mu
 import my_pycaffe_utils as mpu
 import other_utils as ou
+import rot_utils as ru
 
 CLASS_NAMES = ['aeroplane', 'bicycle', 'boat', 'bottle', 'bus',
 							'car', 'chair', 'diningtable', 'motorbike', 'sofa',
@@ -56,6 +57,14 @@ def get_basic_paths():
 	paths['lmdbDir']   = os.path.join(data0Dir, 'lmdb-store')
 	#Visualization data
 	paths['visDir']    = os.path.join(saveDir, 'vis')
+	#Window File
+	paths['windowDir']  = os.path.join(paths['myData'], 'window_files')
+	ou.create_dir(paths['windowDir'])
+	#Other dir
+	paths['otherDataDir'] = os.path.join(paths['myData'], 'other')
+	ou.create_dir(paths['otherDataDir'])
+	
+	
 	return paths
 
 ##
@@ -63,7 +72,7 @@ def get_basic_paths():
 def get_exp_prms(imSz=128, lblType='diff', cropType='contPad',
 								 numSamplesTrain=40000, numSamplesVal=1000,
 								 mnBbox=50, contPad=16,
-								 azBin=30, elBin=10):
+								 azBin=30, elBin=10, mxRot=30, numMedoids=20):
 	'''
 	 imSz      : Size of the image to use
 	 lblType   : Type of labels to use
@@ -77,7 +86,7 @@ def get_exp_prms(imSz=128, lblType='diff', cropType='contPad',
 	 numSamples:  Number of samples per class
 	 mnBbox    :  Minimum size of bbox to consider. 
 	'''
-	assert lblType  in  ['diff', 'uniform'], 'Unknown lblType encountered'
+	assert lblType  in  ['diff', 'uniform', 'kmedoids'], 'Unknown lblType encountered'
 	assert cropType in  ['resize', 'contPad'], 'Unknown cropType encountered' 
 
 	prms  = {}
@@ -99,6 +108,12 @@ def get_exp_prms(imSz=128, lblType='diff', cropType='contPad',
 
 	if lblType in ['uniform']:
 		lblStr = 'uni-az%del%d' % (azBin, elBin)
+	elif lblType=='kmedoids':
+		prms['mxRot']      = mxRot
+		prms['numMedoids'] = numMedoids
+		lblStr = 'kmed-mx%d-num%d' % (mxRot, numMedoids)
+		paths['medoidFile'] = os.path.join(paths['otherDataDir'],
+													 'rot-kMedoids-mx%d-num%d' % (mxRot, numMedoids))
 	else:
 		lblStr  = '%s' % lblType
 
@@ -127,7 +142,11 @@ def get_exp_prms(imSz=128, lblType='diff', cropType='contPad',
 	paths['lmdb-lb']['val']   = os.path.join(paths['lmdbDir'], 
 														'val_labels_pascal3d_lbl-%s_ns%.0e-lmdb' % (lblStr, numSamplesVal))
 
-	paths['windowFile'] = os.path.join(paths['myData'], 'window_file_%s.txt')
+	paths['windowFile'] = {}
+	paths['windowFile']['train'] = os.path.join(paths['windowDir'], 
+																	'train_window_%s.txt' % prms['expName']) 
+	paths['windowFile']['val']  = os.path.join(paths['windowDir'], 
+																	'val_window_%s.txt' % prms['expName'])
 
 	prms['paths'] = paths
 	return prms
@@ -483,6 +502,10 @@ def get_indexes(prms, className, setName):
 	np.random.set_state(randState)
 	return idx1, idx2
 
+##
+# Save the medoid centers
+def save_medoid_centers(prms):
+	pass	
 
 ##
 # Get labels for single images.
@@ -516,11 +539,14 @@ def get_pair_labels(prms, className, setName):
 	if lblType=='diff':
 		lD      = 2
 		lbClass = np.float32
-	if lblType =='uniform':
+	elif lblType =='uniform':
 		lD      = 2
 		lbClass = np.int32
 		azBins  = np.array(range(0,360, prms['azBin']))
 		elBins  = np.array(range(0,180, prms['elBin']))
+	elif lblType =='kmedoids':
+		lD = 1
+		lbClass = np.int32
 	else:
 		raise Exception('Label Type: %s is not recognized' % lblType)
 
@@ -544,6 +570,14 @@ def get_pair_labels(prms, className, setName):
 		elif lblType == 'uniform':
 			lbl[count,0] = mu.find_bin(az, azBins)
 			lbl[count,1] = mu.find_bin(el, elBins)
+		elif lblType == 'kmedoids':
+			#Conver Euler angles to rotation matrix. 
+			viewDiff = np.dot(view2, np.linalg.inv(view1))
+			theta,_  = ru.rotmat_to_angle_axis(viewDiff)
+			if theta < ((np.pi)*prms['mxRot'])/180.0:
+				lbl[count,0],_ = ru.get_cluster_assignments(viewDiff.reshape((1,3,3)), viewCenters)	
+			else:
+				lbl[count,0] = np.array([prms['numMedoids']])
 		else:
 			raise Exception('Label Type: %s is not recognized' % lblType)
 		count += 1

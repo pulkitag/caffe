@@ -33,6 +33,26 @@ def resize_images(prms):
 				scm.imsave(newIm, im)
 
 ##
+# Save images as jpgs. 
+def save_as_jpg(prms):
+	seqNum = range(11)
+	rawStr = ['rawLeftImFile', 'rawRightImFile']
+	imStr  = ['leftImFile', 'rightImFile']
+	num    = ku.get_num_images()
+	for raw, new in zip(rawStr, imStr):
+		for seq in seqNum:
+			N = num[seq]
+			print seq, N, raw, new
+			rawNames = [prms['paths'][raw] % (seq,i) for i in range(N)]			 
+			newNames = [prms['paths'][new] % (seq,i) for i in range(N)]
+			dirName = os.path.dirname(newNames[0])
+			if not os.path.exists(dirName):
+				os.makedirs(dirName)
+			for rawIm, newIm in zip(rawNames, newNames):
+				im = scm.imread(rawIm)
+				scm.imsave(newIm, im)
+
+##
 # Get the names of images
 def get_imnames(prms, seqNum, camStr):
 	N = ku.get_num_images()[seqNum]
@@ -277,6 +297,12 @@ def setup_experiment(prms, cPrms):
 	caffeExp.set_layer_property('window_data', ['generic_window_data_param', 'source'],
 			'"%s"' % prms['paths']['windowFile']['test'], phase='TEST')
 
+	if prms['randomCrop']:
+		caffeExp.set_layer_property('window_data', ['generic_window_data_param', 'random_crop'],
+			'true', phase='TRAIN')
+		caffeExp.set_layer_property('window_data', ['generic_window_data_param', 'source'],
+			'true', phase='TEST')
+	
 
 	if prms['lossType'] == 'classify':
 		for t in range(trnSz):

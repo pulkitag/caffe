@@ -10,18 +10,20 @@ import my_pycaffe_io as mpio
 import my_pycaffe_utils as mpu
 import pdb
 import make_rotations as mr
+import collections as co
+import h5py as h5
 
+BASE_DIR = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/mnist/base_files/'
 
 def make_def_proto(nw, isSiamese=True, baseFileStr='split_im.prototxt'):
 	'''
 		If is siamese then wait for the Concat layers - and make all layers until then siamese.
 	'''
-	baseDir  = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/mnist/base_files/'
-	baseFile = os.path.join(baseDir, baseFileStr)
+	baseFile = os.path.join(BASE_DIR, baseFileStr)
 	protoDef = mpu.ProtoDef(baseFile)
 
-	if baseFileStr in ['split_im.prototxt', 'normal.prototxt']:
-		lastTop  = 'data'
+	#if baseFileStr in ['split_im.prototxt', 'normal.prototxt']:
+	lastTop  = 'data'
 
 	siameseFlag = isSiamese
 	stream1, stream2 = [], []
@@ -103,6 +105,8 @@ def get_caffe_prms(nw, isSiamese=True, batchSize=128, isTest=False,
 	cPrms['isFineTune'] = isFineTune 
 	cPrms['fineExp']    = fineExp
 	cPrms['fineModelIter'] = fineModelIter
+	#Solver prms
+	cPrms['max_iter'] = max_iter
 
 	expStr = []
 	if isFineTune:
@@ -141,8 +145,15 @@ def setup_experiment(prms, cPrms, deviceId=1):
 	
 	#make the def file
 	if prms['transform'] == 'rotTrans':
-		baseFile  = 'split_im.prototxt'
-		labelName = 'label'
+		if prms['lossType'] == 'classify':
+			baseFile    = 'mnist_cls_top.prototxt'
+			botBaseFile = 'mnist_cls_bot.prototxt'  
+			labelName = 'label'
+		elif prms['lossType'] == 'regress':
+			baseFile  = 'split_im.prototxt'
+			labelName = 'label'
+		else:
+			raise Exception('loss type not recognized')
 	elif prms['transform'] == 'normal':
 		baseFile  = 'normal.prototxt'
 		labelName = 'label' 
@@ -166,6 +177,19 @@ def setup_experiment(prms, cPrms, deviceId=1):
 		caffeExp.set_layer_property(labelName, ['data_param','source'], '"%s"' % trainLbDb, phase='TRAIN')
 		caffeExp.set_layer_property(labelName, ['data_param','batch_size'], cPrms['batchSize'], phase='TRAIN')
 		caffeExp.set_layer_property(labelName, ['data_param','source'], '"%s"' % testLbDb,  phase='TEST')
+		if prms['lossType'] == 'classify':
+			#Connect the loss layers appropriately
+			lastTop = caffeExp.get_last_top_name()
+			botDef = mpu.ProtoDef(os.path.join(BASE_DIR, botBaseFile))
+			for _,l in botDef.layers_['TRAIN'].iteritems():
+				caffeExp.add_layer(l['name'][1:-1], l, phase='TRAIN')	
+			#Make appropriate modifications to the fc layers
+			fcNames = ['delx_fc', 'dely_fc', 'rot_fc']	
+			fcSz    = [prms['trnLblSz'], prms['trnLblSz'], prms['rotLblSz']]
+			for name,sz in zip(fcNames, fcSz):
+				caffeExp.set_layer_property(name, ['bottom'], '"%s"' % lastTop)
+				caffeExp.set_layer_property(name, ['inner_product_param', 'num_output'], sz)
+
 	elif prms['transform'] == 'normal':
 		caffeExp.set_layer_property('data', ['data_param','source'],
 																 '"%s"' % trainImDb, phase='TRAIN')
@@ -194,7 +218,8 @@ def run_experiment(prms, cPrms, deviceId=1):
 def run_networks():
 	deviceId = 2
 	nw = []
-	
+
+	'''	
 	nw.append( [('InnerProduct',{'num_output': 200}),('ReLU',{}),('Concat',{'concat_dim':1}),
 						 ('InnerProduct',{'num_output': 100}),('ReLU',{}), ('Dropout', {'dropout_ratio': 0.5}), 
 						 ('InnerProduct',{'num_output': 3}), ('EuclideanLoss',{'bottom2': 'label'})] )
@@ -206,12 +231,20 @@ def run_networks():
 	nw.append( [('InnerProduct',{'num_output': 500}),('ReLU',{}),('Concat',{'concat_dim':1}),
 						 ('InnerProduct',{'num_output': 100}),('ReLU',{}), ('Dropout', {'dropout_ratio': 0.5}), 
 						 ('InnerProduct',{'num_output': 3}), ('EuclideanLoss',{'bottom2': 'label'})] )
-	
+
 	prms  = mr.get_prms(maxRot=10, maxDeltaRot=30)
+
+	'''
+	
+	nw.append( [('InnerProduct',{'num_output': 200}),('ReLU',{}),('Concat',{'concat_dim':1}),
+						 ('InnerProduct',{'num_output': 100}),('ReLU',{}), ('Dropout', {'dropout_ratio': 0.5})])
+	
+	prms  = mr.get_prms(lossType='classify',maxRot=10, maxDeltaRot=30)
 	for nn in nw:
 		cPrms = get_caffe_prms(nn, isSiamese=True)
 		run_experiment(prms, cPrms, deviceId=deviceId)
-	#caffeExp = make_experiment(prms, cPrms, deviceId=deviceId)
+		#caffeExp = make_experiment(prms, cPrms, deviceId=deviceId)
+		#return caffeExp
 	#return caffeExp
 
 ##
@@ -219,7 +252,8 @@ def run_networks():
 def run_networks_conv():
 	deviceId = 2
 	nw = []
-	
+
+	'''	
 	nw.append( [('Convolution',{'num_output': 96, 'kernel_size': 7, 'stride': 3}), ('ReLU',{}),
 							('Convolution',{'num_output': 200, 'kernel_size': 5, 'stride': 2}), ('ReLU',{}),
 							('Concat',{'concat_dim':1}),
@@ -249,20 +283,50 @@ def run_networks_conv():
 							('Concat',{'concat_dim':1}),
 						  ('InnerProduct',{'num_output': 1000}),('ReLU',{}), ('Dropout', {'dropout_ratio': 0.5}), 
 						  ('InnerProduct',{'num_output': 3}), ('EuclideanLoss',{'bottom2': 'label'})] )
-	
 
 	prms  = mr.get_prms(maxRot=10, maxDeltaRot=30)
+	'''
+	
+	nw.append( [('Convolution',{'num_output': 96, 'kernel_size': 7, 'stride': 3}), ('ReLU',{}),
+							('Convolution',{'num_output': 200, 'kernel_size': 5, 'stride': 2}), ('ReLU',{}),
+							('Concat',{'concat_dim':1}),
+						  ('InnerProduct',{'num_output': 400}),('ReLU',{})] )
+
+	nw.append( [('Convolution',{'num_output': 96, 'kernel_size': 7, 'stride': 3}), ('ReLU',{}),
+							('Convolution',{'num_output': 500, 'kernel_size': 5, 'stride': 2}), ('ReLU',{}),
+							('Concat',{'concat_dim':1}),
+						  ('InnerProduct',{'num_output': 500}),('ReLU',{}), ('Dropout', {'dropout_ratio': 0.5})])
+	
+	nw.append( [('Convolution',{'num_output': 96, 'kernel_size': 7, 'stride': 3}), ('ReLU',{}),
+							('Convolution',{'num_output': 250, 'kernel_size': 5, 'stride': 2}), ('ReLU',{}),
+							('Concat',{'concat_dim':1}),
+						  ('InnerProduct',{'num_output': 1000}),('ReLU',{}), ('Dropout', {'dropout_ratio': 0.5})]) 
+	
+	nw.append( [('Convolution',{'num_output': 96, 'kernel_size': 7, 'stride': 3}), ('ReLU',{}),
+							('Convolution',{'num_output': 250, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+							('Concat',{'concat_dim':1}),
+						  ('InnerProduct',{'num_output': 1000}),('ReLU',{}), ('Dropout', {'dropout_ratio': 0.5})] )
+	
+	nw.append( [('Convolution',{'num_output': 200, 'kernel_size': 7, 'stride': 3}), ('ReLU',{}),
+							('Convolution',{'num_output': 200, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+							('Concat',{'concat_dim':1}),
+						  ('InnerProduct',{'num_output': 1000}),('ReLU',{}), ('Dropout', {'dropout_ratio': 0.5})]) 
+						 
+
+	prms  = mr.get_prms(maxRot=10, maxDeltaRot=30, lossType='classify')
+
 	for nn in nw:
 		cPrms = get_caffe_prms(nn, isSiamese=True)
 		run_experiment(prms, cPrms, deviceId=deviceId)
 
 
-
-def run_finetune():
+	
+def run_finetune(max_iter=5000, stepsize=1000):
 	deviceId = 2
 	sourceNw = []	
 	targetNw = []
- 
+
+	''' 
 	sourceNw.append( [('InnerProduct',{'num_output': 200}),('ReLU',{}),('Concat',{'concat_dim':1}),
 						 ('InnerProduct',{'num_output': 100}),('ReLU',{}), ('Dropout', {'dropout_ratio': 0.5}), 
 						 ('InnerProduct',{'num_output': 3}), ('EuclideanLoss',{'bottom2': 'label'})] )
@@ -272,17 +336,33 @@ def run_finetune():
 						  ('InnerProduct', {'num_output': 10, 'nameDiff': 'ft'}), 
 							('SoftmaxWithLoss', {'bottom2': 'label', 'shareBottomWithNext': True}),
 							('Accuracy', {'bottom2': 'label'})] )
-
+	
 	srcPrms = mr.get_prms(maxRot=10, maxDeltaRot=30)
 	tgtPrms = mr.get_prms(transform='normal', numTrainEx=10000)
-	for snn,tnn in zip(sourceNw, targetNw):	
-		#Source Experiment
-		srcCaffePrms = get_caffe_prms(snn, isSiamese=True)
-		srcExp = setup_experiment(srcPrms, srcCaffePrms)
-		#Target Experiment
-		tgtCaffePrms = get_caffe_prms(tnn, isSiamese=False, isFineTune=True, fineExp=srcExp,
-												fineModelIter=40000)
-		run_experiment(tgtPrms, tgtCaffePrms, deviceId=deviceId)
+	'''
+	sourceNw.append( [('Convolution',{'num_output': 96, 'kernel_size': 7, 'stride': 3}), ('ReLU',{}),
+              ('Convolution',{'num_output': 500, 'kernel_size': 5, 'stride': 2}), ('ReLU',{}),
+              ('Concat',{'concat_dim':1}),
+              ('InnerProduct',{'num_output': 500}),('ReLU',{}), ('Dropout', {'dropout_ratio': 0.5})])	
+
+	targetNw.append( [('Convolution',{'num_output': 96, 'kernel_size': 7, 'stride': 3}), ('ReLU',{}),
+              ('Convolution',{'num_output': 500, 'kernel_size': 5, 'stride': 2}), ('ReLU',{}),
+              ('InnerProduct',{'num_output': 200, 'nameDiff': 'ft'}),('ReLU',{}),
+              ('InnerProduct',{'num_output': 10, 'nameDiff': 'ft'}),
+							('SoftmaxWithLoss', {'bottom2': 'label', 'shareBottomWithNext': True}),
+							('Accuracy', {'bottom2': 'label'})] )
+
+	srcPrms = mr.get_prms(maxRot=10, maxDeltaRot=30, lossType='classify')
+	for numEx in  [100, 1000, 10000]:
+		for snn,tnn in zip(sourceNw, targetNw):	
+			#Source Experiment
+			srcCaffePrms = get_caffe_prms(snn, isSiamese=True)
+			srcExp = setup_experiment(srcPrms, srcCaffePrms)
+			#Target Experiment
+			tgtPrms = mr.get_prms(transform='normal', numTrainEx=numEx)
+			tgtCaffePrms = get_caffe_prms(tnn, isSiamese=False, isFineTune=True, fineExp=srcExp,
+													fineModelIter=40000, max_iter=max_iter, stepsize=stepsize)
+			run_experiment(tgtPrms, tgtCaffePrms, deviceId=deviceId)
 
 
 def run_scratch():
@@ -299,4 +379,112 @@ def run_scratch():
 		cPrms = get_caffe_prms(nn, isSiamese=False)
 		run_experiment(prms, cPrms, deviceId=deviceId)
 
+##
+# Find the adversary network starting from scratch. 
+def find_adversary_scratch(runType='run', max_iter=10000, stepsize=10000):
+	'''
+		runType: run  - just run the experiment
+		         test - test the results.
+						 accuracy - just read the accuracy.  
+	'''	
+	numEx = [100, 1000, 10000]
+	nw = []
+	acc = co.OrderedDict()
+
+	#LeNet
+	nw.append([('Convolution',{'num_output': 20, 'kernel_size': 5, 'stride': 1}), ('ReLU', {}),
+				('Pooling', {'kernel_size': 2, 'stride': 2}),
+				('Convolution', {'num_output': 50, 'kernel_size': 5, 'stride': 1}), ('ReLU', {}),
+				('Pooling', {'kernel_size': 2, 'stride': 2}),
+				('InnerProduct', {'num_output': 500}), ('ReLU', {}), ('InnerProduct', {'num_output': 10}), 
+				('SoftmaxWithLoss', {'bottom2': 'label', 'shareBottomWithNext': True}),
+				('Accuracy', {'bottom2': 'label'})])
+
+	#LeNet with one layer. 
+	nw.append([('Convolution',{'num_output': 20, 'kernel_size': 5, 'stride': 1}), ('ReLU', {}),
+				('Pooling', {'kernel_size': 3, 'stride': 2}),
+				('InnerProduct', {'num_output': 500}), ('ReLU', {}), ('InnerProduct', {'num_output': 10}), 
+				('SoftmaxWithLoss', {'bottom2': 'label', 'shareBottomWithNext': True}),
+				('Accuracy', {'bottom2': 'label'})])
+
+	#LeNet with 96 conv-1
+	nw.append([('Convolution',{'num_output': 96, 'kernel_size': 5, 'stride': 1}), ('ReLU', {}),
+				('Pooling', {'kernel_size': 2, 'stride': 2}),
+				('Convolution', {'num_output': 50, 'kernel_size': 5, 'stride': 1}), ('ReLU', {}),
+				('Pooling', {'kernel_size': 2, 'stride': 2}),
+				('InnerProduct', {'num_output': 500}), ('ReLU', {}), ('InnerProduct', {'num_output': 10}), 
+				('SoftmaxWithLoss', {'bottom2': 'label', 'shareBottomWithNext': True}),
+				('Accuracy', {'bottom2': 'label'})])
+
+	#1-layered N/w
+	nw.append([('Convolution',{'num_output': 96, 'kernel_size': 7, 'stride': 2}), ('ReLU', {}),
+				('Pooling', {'kernel_size': 3, 'stride': 2}),
+				('InnerProduct', {'num_output': 500}), ('ReLU', {}), ('InnerProduct', {'num_output': 10}), 
+				('SoftmaxWithLoss', {'bottom2': 'label', 'shareBottomWithNext': True}),
+				('Accuracy', {'bottom2': 'label'})])
+
+	#1-layered n/w with different kernel size. 
+	nw.append([('Convolution',{'num_output': 96, 'kernel_size': 5, 'stride': 1}), ('ReLU', {}),
+				('Pooling', {'kernel_size': 3, 'stride': 2}),
+				('InnerProduct', {'num_output': 500}), ('ReLU', {}), ('InnerProduct', {'num_output': 10}), 
+				('SoftmaxWithLoss', {'bottom2': 'label', 'shareBottomWithNext': True}),
+				('Accuracy', {'bottom2': 'label'})])
+
+	#Same architecture as one of my networks. 
+ 	nw.append( [('Convolution',{'num_output': 96, 'kernel_size': 7, 'stride': 3}), ('ReLU',{}),
+              ('Convolution',{'num_output': 500, 'kernel_size': 5, 'stride': 2}), ('ReLU',{}),
+              ('InnerProduct',{'num_output': 200, 'nameDiff': 'ft'}),('ReLU',{}),
+              ('InnerProduct',{'num_output': 10, 'nameDiff': 'ft'}),
+              ('SoftmaxWithLoss', {'bottom2': 'label', 'shareBottomWithNext': True}),
+              ('Accuracy', {'bottom2': 'label'})] )
+
+	acc['numExamples'] = numEx
+	for nn in nw:
+		name = nw2name(nn)
+		acc[name] = []
+
+	for ex in numEx:
+		for nn in nw:
+			prms = mr.get_prms(transform='normal', numTrainEx=ex)
+			#I have tried stepsize of 2000 and stepsize of 10000
+			cPrms = get_caffe_prms(nn, isSiamese=False, max_iter=max_iter, stepsize=step_size)
+			if runType == 'run':
+				run_experiment(prms, cPrms, deviceId=0)
+			elif runType == 'test':
+				run_test(prms, cPrms)
+			elif runType == 'accuracy':
+				caffeExp = get_experiment_object(prms, cPrms)
+				name = nw2name(nn)
+				resFile  = prms['paths']['resFile'] % (caffeExp.dataExpName_ + '_' + cPrms['expName'])
+				#print resFile
+				res     = h5.File(resFile, 'r')
+				acc[name].append(res['acc'][:][0])
+				res.close()
+			else:
+				raise Exception('Unrecognized run type %s' % runType)
+	if runType == 'accuracy':
+		return acc, numEx	
+	
+## 
+def run_test(prms, cPrms, cropH=28, cropW=28, imH=28, imW=28):
+	caffeExp  = setup_experiment(prms, cPrms)
+	caffeTest = mpu.CaffeTest.from_caffe_exp_lmdb(caffeExp, prms['paths']['lmdb']['test']['im'])
+	
+	delLayers = []
+	delLayers = delLayers + caffeExp.get_layernames_from_type('Accuracy')
+	delLayers = delLayers + caffeExp.get_layernames_from_type('SoftmaxWithLoss')
+
+	#The last inner product layer is the classification layer.
+	opNames   = caffeExp.get_layernames_from_type('InnerProduct')
+	numOp     = caffeExp.get_layer_property(opNames[-1], 'num_output')
+	assert numOp==10, 'Last FC layer has wrong number of outputs, %d instead of 10' % numOp	
+	caffeTest.setup_network([opNames[-1]], imH=imH, imW=imW,
+								 cropH=cropH, cropW=cropW, channels=1,
+								 modelIterations=cPrms['max_iter'], delLayers=delLayers)
+	caffeTest.run_test()
+	resFile  = prms['paths']['resFile'] % (caffeExp.dataExpName_ + '_' + cPrms['expName'])
+	dirName  = os.path.dirname(resFile)
+	if not os.path.exists(dirName):
+		os.makedirs(dirName)
+	caffeTest.save_performance(['acc', 'accClassMean'], resFile)
 

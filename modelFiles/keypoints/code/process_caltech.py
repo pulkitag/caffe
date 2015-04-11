@@ -535,13 +535,21 @@ def run_random_experiment(isFineLast=True):
 
 ##
 #
-def run_pretrain_experiment(preTrainStr='rotObjs_kmedoids30_20_iter60K', isFineLast=True):	
+def run_pretrain_experiment(preTrainStr='rotObjs_kmedoids30_20_nodrop_iter120K', isFineLast=True):	
 	prms    = get_prms()
-	mxLayer = [1,2,3,4,5,6]
-	#mxLayer = [5,6]
+	#For layers 5,6 I used initLr of 0.001 and std of 0.01
+	#mxLayer = [1,2,3,4,5,6]
+	mxLayer = [1,2,3,4]
 	for l in mxLayer:
+		if l <= 2:
+			initStd = 0.001
+			initLr  = 0.000001
+		else:
+			initStd = 0.001
+			initLr  = 0.0001
 		cPrms = get_caffe_prms(isPreTrain=True, maxLayer=l, 
-													 preTrainStr=preTrainStr, isFineLast=isFineLast, initLr=0.001)
+													 preTrainStr=preTrainStr, isFineLast=isFineLast,
+													 initLr=initLr, initStd=initStd	)
 		run_experiment(prms, cPrms, deviceId=1) #1 corresponds to first K40  
 
 ##

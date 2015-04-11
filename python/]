@@ -5,7 +5,6 @@ import numpy as np
 import scipy.misc as scm
 import matplotlib.pyplot as plt
 import copy
-import os
 ##
 # Verify if all the keys are present recursively in the dict
 def verify_recursive_key(data, keyNames):
@@ -181,36 +180,8 @@ def make_table_rows(**kwargs):
 	for key,val in kwargs.iteritems():
 		maxKeyLen = max(maxKeyLen, len(key))
 	keyLen = maxKeyLen + 15
-	keyStr = "{:<%d} " % keyLen
-	formatStr = "{:<15} "
-	#Lets start printing
-	lines = []
-	count = 0	
-	for key,val in kwargs.iteritems():
-		line = ''
-		line = line + keyStr.format('%s' % key)
-		for v in val:
-			if isinstance(v, int):
-				fStr = '%d'
-			elif isinstance(v, np.float32) or isinstance(v, np.float64):
-				fStr = '%.3f'
-			elif isinstance(v, str):
-				fStr = '%s'
-			else:
-				fStr = '%s'
-			line = line + formatStr.format(fStr % v)
-		line = line + '\n'
-		lines.append(line)
-		if count == 0:
-			lines.append('-' * 100 + '\n')
-			count += 1
-			
-	for l in lines:
-		print l
-
+	#Lets start printing	
+	for key, 
 
 ##
-# Create dir
-def create_dir(dirName):
-	if not os.path.exists(dirName):
-		os.makedirs(dirName)
+# Finds the bins

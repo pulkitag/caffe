@@ -119,6 +119,8 @@ void GenericWindowDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& b
 		//Setup the new layer. 
 		LOG(INFO) << "I am Crop" << i <<" , I am Ready: "
   						<< crop_layer->layer_param_.generic_window_data_param().is_ready();
+		crop_layer->layer_num_ = i;
+		crop_layer->rand_seed_ = 3;
 		crop_layer->SetUp(bottom, top_vec);
 		crop_layer->windows_.clear();
 		crop_layer->image_database_.clear();
