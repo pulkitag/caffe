@@ -325,6 +325,7 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
 		}
 
 		//Clip the image
+		//LOG(INFO) << x1 << ", " << x2 <<", " << y1 << ", " << y2;
 		cv::Rect roi(x1, y1, x2-x1+1, y2-y1+1);
 		cv::Mat cv_cropped_img = cv_img(roi);
 

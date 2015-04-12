@@ -297,10 +297,16 @@ def setup_experiment(prms, cPrms):
 	caffeExp.set_layer_property('window_data', ['generic_window_data_param', 'source'],
 			'"%s"' % prms['paths']['windowFile']['test'], phase='TEST')
 
+	#Set the root folder
+	caffeExp.set_layer_property('window_data', ['generic_window_data_param', 'root_folder'],
+			'"%s"' % prms['paths']['imRootDir'], phase='TRAIN')
+	caffeExp.set_layer_property('window_data', ['generic_window_data_param', 'root_folder'],
+			'"%s"' % prms['paths']['imRootDir'], phase='TEST')
+
 	if prms['randomCrop']:
 		caffeExp.set_layer_property('window_data', ['generic_window_data_param', 'random_crop'],
 			'true', phase='TRAIN')
-		caffeExp.set_layer_property('window_data', ['generic_window_data_param', 'source'],
+		caffeExp.set_layer_property('window_data', ['generic_window_data_param', 'random_crop'],
 			'true', phase='TEST')
 	
 

@@ -210,6 +210,20 @@ def make_table_rows(**kwargs):
 
 
 ##
+# Count the things.
+def count_unique(arr, maxVal=None):
+	if maxVal is None:
+		elms = np.unique(arr)
+	else:
+		elms = range(maxVal+1)
+	count = np.zeros((len(elms),))
+	for i,e in enumerate(elms):
+		count[i] = np.sum(arr==e)
+
+	return count
+	 
+
+##
 # Create dir
 def create_dir(dirName):
 	if not os.path.exists(dirName):

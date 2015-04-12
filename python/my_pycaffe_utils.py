@@ -1467,6 +1467,7 @@ class CaffeTest:
 			readFlag = True
 			readCount = 0
 			allData, allLabel = [], []
+			#Read the data
 			while readFlag:
 				data, label = self.db_.read_next()
 				if data is None:
@@ -1476,12 +1477,16 @@ class CaffeTest:
 						self.clsCount_[label] += 1
 					else:
 						continue	
-	
+				#print data.shape
+				allData.append(data.reshape(((1,) + data.shape)))
+				allLabel.append(label)
 				readCount += 1
 				if readCount == self.batchSz_:
 					readFlag = False
-			allData  = np.concatenate(allData)
-			allLabel = np.array(allData) 					
+			#Accumalate the data
+			if len(allData) > 0:
+				allData  = np.concatenate(allData)
+				allLabel = np.array(allLabel) 					
 		else:
 			raise Exception('Data Model not recognized')
 

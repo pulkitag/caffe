@@ -33,6 +33,8 @@ def get_paths():
 	prms['windowDir']   = os.path.join(svDir, 'window-files')
 	prms['expDir']      = expDir
 	prms['snapDir']     = snapDir 
+	prms['imRootDir']   = os.path.join(imDir, 'dataset', 'sequences')
+
 	return prms
 
 
@@ -52,6 +54,7 @@ def get_prms(poseType='euler', nrmlzType='zScoreScaleSeperate',
 	'''
 	if randomCrop:
 		assert imSz is None, "With Random crop imSz should be set to None"
+
 	paths = get_paths()
 	prms  = {}
 	prms['pose']         = poseType
@@ -112,9 +115,11 @@ def get_prms(poseType='euler', nrmlzType='zScoreScaleSeperate',
 
 		if imSz is not None:
 			imStr = 'imSz%d' % imSz
+			paths['imRootDir'] = os.path.join(paths['imRootDir'], 'imSz%d/', imSz)
 		else:
 			assert randomCrop, 'imSz should be none only with random cropping'
 			imStr = 'randcrp'
+			paths['imRootDir'] = os.path.join(paths['imRootDir'], 'asJpg/')
 
 		expName   = 'mxDiff-%d_pose-%s_nrmlz-%s_%s_concat-%s_nTr-%d'\
 								 % (maxFrameDiff, poseType, nrmlzType, imStr, concatLayer, numTrainSamples) 

@@ -35,6 +35,9 @@ import rot_utils as ru
 CLASS_NAMES = ['aeroplane', 'bicycle', 'boat', 'bottle', 'bus',
 							'car', 'chair', 'diningtable', 'motorbike', 'sofa',
 							'train', 'tvmonitor']
+
+SET_NAMES = ['train', 'val']
+
 ##
 # Get the basic paths
 def get_basic_paths():
@@ -48,7 +51,8 @@ def get_basic_paths():
 	paths['myData']  = '/data1/pulkitag/data_sets/pascal_3d/my/'
 	paths['pascalDir'] = os.path.join(paths['data'], 'PASCAL','VOCdevkit','VOC2012')
 	paths['pascalSet'] = os.path.join(paths['pascalDir'], 'ImageSets', 'Main', '%s_%s.txt') 
-	paths['imDir']     = os.path.join(paths['data'], 'Images')
+	#paths['imDir']     = os.path.join(paths['data'], 'Images/')
+	paths['imDir']     = os.path.join(data0Dir, 'Images/')
 	paths['rawAnnData'] = os.path.join(paths['data'], 'Annotationsv73', '%s_%s') #Fill with class_dataset
 	paths['procAnnData']    = os.path.join(paths['myData'], 'Annotation', '%s_%s.hdf5') #class_setname
 	#Snapshots
@@ -64,7 +68,6 @@ def get_basic_paths():
 	paths['otherDataDir'] = os.path.join(paths['myData'], 'other')
 	ou.create_dir(paths['otherDataDir'])
 	
-	
 	return paths
 
 ##
@@ -77,7 +80,9 @@ def get_exp_prms(imSz=128, lblType='diff', cropType='contPad',
 	 imSz      : Size of the image to use
 	 lblType   : Type of labels to use
 						   'diff'    -- difference in euler angles.
-							 'uniform' -- bin the angles uniformly. 
+							 'uniform' -- bin the angles uniformly.
+							 'kmedoid' -- kMedoids on the rotation matrices.
+								'rotLim' -- limited rotation 
 	 azBin     : Bin size for azimuth
 	 elBin     : Bin size for euler 
 	 cropType  : 'resize' -- just resize the bbox to imSz
@@ -86,7 +91,7 @@ def get_exp_prms(imSz=128, lblType='diff', cropType='contPad',
 	 numSamples:  Number of samples per class
 	 mnBbox    :  Minimum size of bbox to consider. 
 	'''
-	assert lblType  in  ['diff', 'uniform', 'kmedoids'], 'Unknown lblType encountered'
+	assert lblType  in  ['diff', 'uniform', 'kmedoids', 'rotLim'], 'Unknown lblType encountered'
 	assert cropType in  ['resize', 'contPad'], 'Unknown cropType encountered' 
 
 	prms  = {}
@@ -96,6 +101,7 @@ def get_exp_prms(imSz=128, lblType='diff', cropType='contPad',
 	prms['numSamples']['val']   = numSamplesVal
 	#Label info
 	prms['lblType']    =  lblType
+	prms['mxRot']      = mxRot
 	prms['azBin']      =  azBin
 	prms['elBin']      =  elBin
 	prms['cropType']   =  cropType
@@ -108,12 +114,17 @@ def get_exp_prms(imSz=128, lblType='diff', cropType='contPad',
 
 	if lblType in ['uniform']:
 		lblStr = 'uni-az%del%d' % (azBin, elBin)
+		prms['azBinRange']  = np.array(range(0,360, prms['azBin']))
+		prms['elBinRange']  = np.array(range(0,180, prms['elBin']))
 	elif lblType=='kmedoids':
-		prms['mxRot']      = mxRot
 		prms['numMedoids'] = numMedoids
 		lblStr = 'kmed-mx%d-num%d' % (mxRot, numMedoids)
 		paths['medoidFile'] = os.path.join(paths['otherDataDir'],
 													 'rot-kMedoids-mx%d-num%d' % (mxRot, numMedoids))
+	elif lblType == 'rotLim':
+		lblStr = 'lim%d-az%d-el%d' % (prms['mxRot'], azBin, elBin)
+		prms['azBinRange'] = np.array(range(-mxRot, mxRot + azBin, azBin))	
+		prms['elBinRange'] = np.array(range(-mxRot, mxRot + elBin, elBin))
 	else:
 		lblStr  = '%s' % lblType
 
@@ -428,6 +439,7 @@ def save_exp_annotations(prms, forceSave=False):
 			inFid.close()  
 
 ##
+# Now obselete. 
 # Helper function for writing the images for the WindowFile
 def write_window_image_line_(fid, imgName, imgSz, bbox):
 	'''
@@ -445,34 +457,34 @@ def write_window_image_line_(fid, imgName, imgSz, bbox):
 
 ##
 # Print Annotation data into a file.
-def save_window_file(prms, setName='train'): 
-	paths   = prms['paths']
-	outFile = paths['windowFile'] % setName
-	fid     = open(outFile, 'w')
-	fid.write('# GenericDataLayer\n')
-	fid.write('%d\n' % (len(CLASS_NAMES) * prms['numSamples'][setName])) #Num Examples. 
-	fid.write('%d\n' % 2); #Num Images per Example. 
-	fid.write('%d\n' % 3); #Num	Labels
-	count   = 0
-	for clIdx,cl in enumerate(CLASS_NAMES):
-		#ims, idxIm1, idxIm2 = get_pair_images(prms, cl, setName)
-		lbls, idx1 , idx2   = get_pair_labels(prms, cl, setName)
-		annData   = h5.File(paths['annData'] % (cl, setName),'r')
-		imgName   = annData['imgName']
-		bbox      = annData['bbox']
-		imgSz     = annData['imgSz']
-		clCount = 0
-		for (i1,i2) in zip(idx1, idx2):
-			fid.write('# %d\n' % count)
-			imName1 = os.path.join(os.path.dirname(imgName[i1]).split('/')[-1], os.path.basename(imgName[i1]))
-			imName2 = os.path.join(os.path.dirname(imgName[i2]).split('/')[-1], os.path.basename(imgName[i2]))
-			write_window_image_line_(fid, imName1, imgSz[i1], bbox[i1]) 
-			write_window_image_line_(fid, imName2, imgSz[i2], bbox[i2]) 
-			fid.write('%f %f %d\n' % (lbls[clCount][0], lbls[clCount][1], clIdx))
-			clCount += 1
-			count += 1
-		annData.close()
-	fid.close()
+def save_window_file(prms):
+	oldState  = np.random.get_state()
+	randState = np.random.RandomState(3)
+	#Read the data
+	for setName in SET_NAMES:
+		im1, im2,label = [],[],[]
+		for clIdx,cl in enumerate(CLASS_NAMES):
+			lbls, idx1 , idx2   = get_pair_labels(prms, cl, setName)
+			annData   = h5.File(prms['paths']['annData'] % (cl, setName),'r')
+			imgName   = annData['imgName']
+			bbox      = annData['bbox']
+			imgSz     = annData['imgSz']
+			clCount = 0
+			for (i1,i2) in zip(idx1, idx2):
+				im1.append([''.join(s + '/' for s in imgName[i1].split('/')[-2:])[:-1], imgSz[i1], bbox[i1]])
+				im2.append([''.join(s + '/' for s in imgName[i2].split('/')[-2:])[:-1], imgSz[i2], bbox[i2]])
+				label.append([lbls[clCount][0], lbls[clCount][1], clIdx])
+				clCount += 1
+			annData.close()
+		#Save to the file
+		N    = len(im1)
+		perm = randState.permutation(range(N)) 
+		gen = mpio.GenericWindowWriter(prms['paths']['windowFile'][setName],
+						N, 2, 3)
+		for idx in perm:
+			gen.write(label[idx], im1[idx], im2[idx])
+		gen.close()	
+	np.random.set_state(oldState)
 
 
 ##
@@ -484,6 +496,7 @@ def get_indexes(prms, className, setName):
 	paths      = prms['paths']
 	numSamples = prms['numSamples'][setName] 
 	annFile   = paths['annData'] % (className, setName)
+	print annFile
 	annData   = h5.File(annFile, 'r') 
 	N         = annData['euler'].shape[0]
 	annData.close()
@@ -539,11 +552,11 @@ def get_pair_labels(prms, className, setName):
 	if lblType=='diff':
 		lD      = 2
 		lbClass = np.float32
-	elif lblType =='uniform':
+	elif lblType in ['uniform', 'rotLim']:
 		lD      = 2
 		lbClass = np.int32
-		azBins  = np.array(range(0,360, prms['azBin']))
-		elBins  = np.array(range(0,180, prms['elBin']))
+		azBins  = prms['azBinRange']
+		elBins  = prms['elBinRange']
 	elif lblType =='kmedoids':
 		lD = 1
 		lbClass = np.int32
@@ -567,9 +580,19 @@ def get_pair_labels(prms, className, setName):
 			if el > 90:
 				el = -(180 - el)
 			lbl[count,:] = np.array([az, el]).reshape(1,2)
-		elif lblType == 'uniform':
+		elif lblType in ['uniform']:
 			lbl[count,0] = mu.find_bin(az, azBins)
 			lbl[count,1] = mu.find_bin(el, elBins)
+		elif lblType in ['rotLim']:
+			#Convert az, el to [-180,180) respectively and [-90, 90) respectively
+			# For legacy reasons, with the uniform case the binning was (0,360) and
+			# therefore I put rotLim in a different if block, 		
+			if az >= 180:
+				az = -(360 - az)
+			if el >=90:
+				el = -(180 - el)
+			lbl[count,0] = mu.find_bin(az, azBins) + 1
+			lbl[count,1] = mu.find_bin(el, elBins) + 1
 		elif lblType == 'kmedoids':
 			#Conver Euler angles to rotation matrix. 
 			viewDiff = np.dot(view2, np.linalg.inv(view1))
@@ -755,7 +778,7 @@ def vis_lmdb(prms, setName):
 ##
 #
 def get_caffe_prms(isScratch=True, isClassLbl=True, concatLayer='fc6',
-									 noRot=False, concatDrop=False):
+									 noRot=False, concatDrop=False, isWindow=True):
 	'''
 		concatDrop: Whether to have dropouts on the Concat Layers or not'
 	'''
@@ -765,6 +788,7 @@ def get_caffe_prms(isScratch=True, isClassLbl=True, concatLayer='fc6',
 	caffePrms['concatLayer'] = concatLayer
 	caffePrms['noRot']       = noRot
 	caffePrms['concatDrop']  = concatDrop
+	caffePrms['isWindow']    = isWindow
 
 	assert not noRot or isClassLbl, "There is no loss"
  
@@ -803,8 +827,17 @@ def get_experiment_object(prms, caffePrms, deviceId=1):
 ##
 # Make the experiment
 def make_experiment(prms, caffePrms, deviceId=1):
-	sourceExpDir   = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/pascal3d/exp/imSz128_lbl-uni-az30el10_crp-contPad16_ns4e+04_mb50'
-	sourceNetDef   = os.path.join(sourceExpDir, 'caffenet_siamese_fc6.prototxt')
+	sourceExpDir   = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/pascal3d/base_files'
+	if caffePrms['isWindow']:
+		sourceNetDef   = os.path.join(sourceExpDir, 'caffenet_siamese_fc6_window.prototxt')
+		if prms['imSz']==256:
+			wnCropSize = 227
+		elif prms['imSz']==128:
+			wnCropSize = 112
+		else:
+			raise Exception('imSz should be 128 or 256')
+	else:
+		sourceNetDef   = os.path.join(sourceExpDir, 'caffenet_siamese_fc6.prototxt')
 	sourceSolDef   = os.path.join(sourceExpDir, 'solver_train_fc6.prototxt')
 
 	caffeExp = get_experiment_object(prms, caffePrms, deviceId)
@@ -825,6 +858,8 @@ def make_experiment(prms, caffePrms, deviceId=1):
 	if caffePrms['noRot']:
 		caffeExp.del_layer('label')
 		caffeExp.del_layer('slice_label_pair')
+		if caffePrms['isWindow']:
+			caffeExp.del_layer('slice_rotation_label')
 		caffeExp.del_layer(['loss_azimuth', 'loss_elevation'])
 		caffeExp.del_layer(['accuracy_azimuth', 'accuracy_elevation'])
 		caffeExp.del_layer(['fc8_azimuth', 'fc8_elevation'])
@@ -841,6 +876,12 @@ def make_experiment(prms, caffePrms, deviceId=1):
 		dropArgs = {'dropout_ratio': 0.5, 'top': 'fc6'}
 		dropLayer = mpu.get_layerdef_for_proto('Dropout', 'fc6_drop', 'fc6', **dropArgs)	
 		caffeExp.add_layer('fc6_drop', dropLayer, 'TRAIN')
+	else:
+		#Fix the number of bins
+		caffeExp.set_layer_property('fc8_azimuth', ['inner_product_param', 'num_output'],
+				len(prms['azBinRange']) + 2, phase='TRAIN')
+		caffeExp.set_layer_property('fc8_elevation', ['inner_product_param', 'num_output'],
+				len(prms['elBinRange']) + 2, phase='TRAIN')
 
 	#If we have rotation information and concat layer dropout is on
 	if not caffePrms['noRot'] and caffePrms['concatDrop']:
@@ -851,16 +892,36 @@ def make_experiment(prms, caffePrms, deviceId=1):
 		dropLayer = mpu.get_layerdef_for_proto('Dropout', 'fc6_drop_p', 'fc6_p', **dropArgs)	
 		caffeExp.add_layer('fc6_drop_p', dropLayer, 'TRAIN')
 
-	trainImLmdb = prms['paths']['lmdb-im']['train']
-	valImLmdb   = prms['paths']['lmdb-im']['val']
-	trainLbLmdb = prms['paths']['lmdb-lb']['train']
-	valLbLmdb   = prms['paths']['lmdb-lb']['val']
-	caffeExp.set_layer_property('pair_data', ['data_param','source'], '"%s"' % trainImLmdb, phase='TRAIN')
-	caffeExp.set_layer_property('pair_data', ['data_param','batch_size'], 256, phase='TRAIN')
-	caffeExp.set_layer_property('pair_data', ['data_param','source'], '"%s"' % valImLmdb, phase='TEST')
-	if not caffePrms['noRot']:
-		caffeExp.set_layer_property('label',['data_param','source'], '"%s"' % trainLbLmdb, phase='TRAIN')
-		caffeExp.set_layer_property('label',['data_param','batch_size'], 256, phase='TRAIN')
-		caffeExp.set_layer_property('label',['data_param','source'], '"%s"' % valLbLmdb,  phase='TEST')
+	if caffePrms['isWindow']:
+		caffeExp.set_layer_property('window_data', ['generic_window_data_param', 'source'],
+				'"%s"' % prms['paths']['windowFile']['train'], phase='TRAIN')
+		caffeExp.set_layer_property('window_data', ['generic_window_data_param', 'source'],
+				'"%s"' % prms['paths']['windowFile']['val'], phase='TEST')
+		#Set the root folder
+		caffeExp.set_layer_property('window_data', ['generic_window_data_param', 'root_folder'],
+				'"%s"' % prms['paths']['imDir'], phase='TRAIN')
+		caffeExp.set_layer_property('window_data', ['generic_window_data_param', 'root_folder'],
+				'"%s"' % prms['paths']['imDir'], phase='TEST')
+		#Crop Size	
+		caffeExp.set_layer_property('window_data', ['generic_window_data_param', 'crop_size'],
+				wnCropSize, phase='TRAIN')
+		caffeExp.set_layer_property('window_data', ['generic_window_data_param', 'crop_size'],
+				wnCropSize, phase='TEST')
+		#Set the batch size
+		caffeExp.set_layer_property('window_data', ['generic_window_data_param','batch_size'],
+												 256, phase='TRAIN')
+	else:
+		trainImLmdb = prms['paths']['lmdb-im']['train']
+		valImLmdb   = prms['paths']['lmdb-im']['val']
+		trainLbLmdb = prms['paths']['lmdb-lb']['train']
+		valLbLmdb   = prms['paths']['lmdb-lb']['val']
+		caffeExp.set_layer_property('pair_data', ['data_param','source'],
+																 '"%s"' % trainImLmdb, phase='TRAIN')
+		caffeExp.set_layer_property('pair_data', ['data_param','batch_size'], 256, phase='TRAIN')
+		caffeExp.set_layer_property('pair_data', ['data_param','source'], '"%s"' % valImLmdb, phase='TEST')
+		if not caffePrms['noRot']:
+			caffeExp.set_layer_property('label',['data_param','source'], '"%s"' % trainLbLmdb, phase='TRAIN')
+			caffeExp.set_layer_property('label',['data_param','batch_size'], 256, phase='TRAIN')
+			caffeExp.set_layer_property('label',['data_param','source'], '"%s"' % valLbLmdb,  phase='TEST')
 	caffeExp.make()
-	
+		

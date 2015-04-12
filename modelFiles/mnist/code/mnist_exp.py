@@ -250,7 +250,7 @@ def run_networks():
 ##
 # Run Convolutional Filters
 def run_networks_conv():
-	deviceId = 2
+	deviceId = 0
 	nw = []
 
 	'''	
@@ -286,7 +286,8 @@ def run_networks_conv():
 
 	prms  = mr.get_prms(maxRot=10, maxDeltaRot=30)
 	'''
-	
+
+	'''	
 	nw.append( [('Convolution',{'num_output': 96, 'kernel_size': 7, 'stride': 3}), ('ReLU',{}),
 							('Convolution',{'num_output': 200, 'kernel_size': 5, 'stride': 2}), ('ReLU',{}),
 							('Concat',{'concat_dim':1}),
@@ -311,9 +312,10 @@ def run_networks_conv():
 							('Convolution',{'num_output': 200, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
 							('Concat',{'concat_dim':1}),
 						  ('InnerProduct',{'num_output': 1000}),('ReLU',{}), ('Dropout', {'dropout_ratio': 0.5})]) 
-						 
+	'''	
+	nw.append( [('Convolution', {'num_output': 50, 'kernel_size': 5, 'stride': 2})])			 
 
-	prms  = mr.get_prms(maxRot=10, maxDeltaRot=30, lossType='classify')
+	prms  = mr.get_prms(maxRot=10, maxDeltaRot=30, lossType='classify', numTrainEx=1e+07)
 
 	for nn in nw:
 		cPrms = get_caffe_prms(nn, isSiamese=True)
@@ -352,7 +354,8 @@ def run_finetune(max_iter=5000, stepsize=1000):
 							('SoftmaxWithLoss', {'bottom2': 'label', 'shareBottomWithNext': True}),
 							('Accuracy', {'bottom2': 'label'})] )
 
-	srcPrms = mr.get_prms(maxRot=10, maxDeltaRot=30, lossType='classify')
+	srcPrms = mr.get_prms(maxRot=10, maxDeltaRot=30,
+					 lossType='classify', numTrainEx=1e+7)
 	for numEx in  [100, 1000, 10000]:
 		for snn,tnn in zip(sourceNw, targetNw):	
 			#Source Experiment
@@ -447,7 +450,7 @@ def find_adversary_scratch(runType='run', max_iter=10000, stepsize=10000):
 		for nn in nw:
 			prms = mr.get_prms(transform='normal', numTrainEx=ex)
 			#I have tried stepsize of 2000 and stepsize of 10000
-			cPrms = get_caffe_prms(nn, isSiamese=False, max_iter=max_iter, stepsize=step_size)
+			cPrms = get_caffe_prms(nn, isSiamese=False, max_iter=max_iter, stepsize=stepsize)
 			if runType == 'run':
 				run_experiment(prms, cPrms, deviceId=0)
 			elif runType == 'test':
