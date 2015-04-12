@@ -939,8 +939,16 @@ class ProtoDef():
 		'''
 			See documentation of set_layer_property for meaning of variable names. 
 		'''
-		#Modify the propName to account for duplicates
-		propName = propName + '_$dup$' * propNum
+		if not isinstance(propName, list):
+			#Modify the propName to account for duplicates
+			propName = propName + '_$dup$' * propNum
+			propName = [propName]
+		else:
+			if isinstance(propNum, list):
+				assert len(propNum)==len(propName), 'Lengths mismatch'
+				propName = [p + i * '_$dup$' for (p,i) in zip(propName, propNum)]
+			else:
+				assert propNum==0,'propNum is not appropriately specified'
 		return ou.get_item_dict(self.layers_[phase][layerName], propName)	
 
 	##					
@@ -993,16 +1001,16 @@ class ProtoDef():
 		'''
 		delLayers = co.OrderedDict()
 		for ph in ProtoDef.ProtoPhases:
-			delLayers[ph] = co.OrderedDict()
+			delLayers[ph] = []
 			encounterFlag = False
 			#Find the layers to delete
 			for name in self.layers_[ph]:
 				if not encounterFlag and name != layerName:
 					continue
+				if encounterFlag:
+					delLayers[ph].append(name)
 				if name==layerName:
 					encounterFlag = True
-				if encouterFlag:
-					delLayers[ph].append(name)
 			#Delete the layers
 			for name in delLayers[ph]:
 				self.del_layer(name)

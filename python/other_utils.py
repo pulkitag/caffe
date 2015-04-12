@@ -73,6 +73,7 @@ def find_path_key(data, keyName):
 
 ##
 # Find an item in dict
+# keyName should be a string or an list of a single name. 
 def get_item_dict(data, keyName):
 	keyPath = find_path_key(data, keyName)
 	if len(keyPath)==0:

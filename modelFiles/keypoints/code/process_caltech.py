@@ -300,11 +300,14 @@ def get_modify_layers(maxLayer, preTrainStr):
  		
 
 def get_caffe_prms(isPreTrain=False, maxLayer=5, isFineLast=True,
-									 preTrainStr=None, initLr=0.01, initStd=0.01, maxIter=5000):
+									 preTrainStr=None, initLr=0.01, initStd=0.01, maxIter=5000,
+									 testNum=None):
 	'''
 		isPreTrain : Use a pretrained network for performing classification.  		
 		maxLayer   : How many layers to consider in the alexnet train.
 		isFineLast : Whether to finetune only the last layer or all layers. 
+		testNum    : If None then test on all examples
+								 otherwise, use maximum testNum per class. 
 	'''
 	cPrms  = {}
 	cPrms['isPreTrain']  = isPreTrain
@@ -314,6 +317,7 @@ def get_caffe_prms(isPreTrain=False, maxLayer=5, isFineLast=True,
 	cPrms['initLr']      = initLr
 	cPrms['initStd']     = initStd
 	cPrms['maxIter']     = maxIter
+	cPrms['testNum']     = testNum
 	expStr = []
 	if isPreTrain:
 		assert preTrainStr is not None, 'preTrainStr cannot be none'
@@ -420,19 +424,38 @@ def run_experiment(prms, cPrms, deviceId=1):
 	caffeExp = make_experiment(prms, cPrms, deviceId=deviceId)
 	caffeExp.run()
 
+##
+# Get the name of the result file
+def get_res_file(prms, cPrms):
+	if cPrms['testNum'] is not None:
+		resFile = prms['paths']['resFile'] % (cPrms['expStr'] + '_numTestOn-%d' % cPrms['testNum'])
+	else:
+		resFile = prms['paths']['resFile'] % cPrms['expStr']
+	return resFile
+
 ## 
 def run_test(prms, cPrms, cropH=112, cropW=112, imH=128, imW=128):
 	caffeExp  = setup_experiment(prms, cPrms)
 	caffeTest = mpu.CaffeTest.from_caffe_exp_lmdb(caffeExp, prms['paths']['lmdb']['test'])
 	caffeTest.setup_network(['class_fc'], imH=imH, imW=imW,
 								 cropH=cropH, cropW=cropW, channels=3,
-								 modelIterations=cPrms['maxIter'] + 1)
+								 modelIterations=cPrms['maxIter'] + 1,
+								 maxClassCount=cPrms['testNum'], maxLabel=101)
 	caffeTest.run_test()
-	resFile  = prms['paths']['resFile'] % cPrms['expStr']
+	resFile  = get_res_file(prms, cPrms)
 	dirName  = os.path.dirname(resFile)
 	if not os.path.exists(dirName):
 		os.makedirs(dirName)
 	caffeTest.save_performance(['acc', 'accClassMean'], resFile)
+
+##
+# res file to the accuracy.
+def resfile2acc(prms, cPrms):
+	resFile = get_res_file(prms, cPrms)
+	res     = h5.File(resFile, 'r')
+	acc,accClass =  res['acc'][:], res['accClassMean'][:]
+	res.close()
+	return acc, accClass
 
 ##
 # Read all the accuracies
@@ -444,7 +467,7 @@ def read_accuracy(prms, isPreTrain=False, preTrainStr=None,
 		cPrms = get_caffe_prms(isPreTrain=isPreTrain, preTrainStr=preTrainStr,
 												isFineLast=isFineLast, maxLayer=l, initLr=initLr, initStd=initStd)
 		print prms['expName'], cPrms['expStr']
-		resFile = prms['paths']['resFile'] % cPrms['expStr']
+		resFile = get_res_file(prms, cPrms)
 		res     = h5.File(resFile, 'r')
 		acc.append(res['acc'][:])
 		accClass.append(res['accClassMean'][:])
@@ -535,23 +558,45 @@ def run_random_experiment(isFineLast=True):
 
 ##
 #
-def run_pretrain_experiment(preTrainStr='rotObjs_kmedoids30_20_nodrop_iter120K', isFineLast=True):	
+def run_pretrain_experiment(preTrainStr='rotObjs_kmedoids30_20_nodrop_iter120K', isFineLast=True,
+								runType='run', testNum=None):	
+	'''
+		runType: 'run' run the experiment
+							'test' perform test
+	'''
 	prms    = get_prms()
 	#For layers 5,6 I used initLr of 0.001 and std of 0.01
-	#mxLayer = [1,2,3,4,5,6]
-	mxLayer = [1,2,3,4]
+	mxLayer = [1,2,3,4,5,6]
+	#mxLayer = [5,6]
+	clsAcc  = []
 	for l in mxLayer:
-		if l <= 2:
-			initStd = 0.001
-			initLr  = 0.000001
+		if isFineLast:
+			initStd= 0.01
+			initLr = 0.001
 		else:
-			initStd = 0.001
-			initLr  = 0.0001
+			if l <= 2:
+				initStd = 0.001
+				initLr  = 0.000001
+			elif l<=4:
+				initStd = 0.001
+				initLr  = 0.0001
+			else:
+				initStd = 0.01
+				initLr  = 0.001
 		cPrms = get_caffe_prms(isPreTrain=True, maxLayer=l, 
 													 preTrainStr=preTrainStr, isFineLast=isFineLast,
-													 initLr=initLr, initStd=initStd	)
-		run_experiment(prms, cPrms, deviceId=1) #1 corresponds to first K40  
+													 initLr=initLr, initStd=initStd, testNum=testNum)
+		if runType=='run':
+			run_experiment(prms, cPrms, deviceId=1) #1 corresponds to first K40  
+		elif runType == 'test':
+			run_test(prms, cPrms)
+		elif runType == 'acc':
+			_,accL = resfile2acc(prms,cPrms)
+			clsAcc.append(accL)
 
+	if runType=='acc':
+		return clsAcc
+	
 ##
 # Accumulate results for an experiment
 def get_experiment_acc(prms, cPrms):
