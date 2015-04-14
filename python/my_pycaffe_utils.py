@@ -1383,6 +1383,7 @@ class CaffeExperiment:
 	 
 		self.expFile_.write_netdef()
 		self.expFile_.write_solver()
+		print "MODEL: %s" % modelFile
 		self.expFile_.write_run_train(modelFile)
 		if writeTest:
 			assert testIter is not None and modelIter is not None, 'Missing variables'

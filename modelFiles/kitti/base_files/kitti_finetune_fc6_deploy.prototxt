@@ -10,7 +10,7 @@ layer {
   transform_param {
     mirror: false
     crop_size: 227
-    mean_file: "/data0/pulkitag/kitti/lmdb-store/kitti_mean.binaryproto"
+    mean_file: "/data0/pulkitag/kitti/lmdb-store/kitti_mean_deploy.binaryproto"
   }
   data_param {
     source: "/data0/pulkitag/kitti/lmdb-store/images_train_consequent_pose-euler_nrmlz-zScoreScaleSeperate_imSz256-lmdb"
@@ -29,7 +29,7 @@ layer {
   transform_param {
     mirror: false
     crop_size: 227
-    mean_file: "/data0/pulkitag/kitti/lmdb-store/kitti_mean.binaryproto"
+    mean_file: "/data0/pulkitag/kitti/lmdb-store/kitti_mean_deploy.binaryproto"
   }
   data_param {
     source: "/data0/pulkitag/kitti/lmdb-store/images_train_consequent_pose-euler_nrmlz-zScoreScaleSeperate_imSz256-lmdb"
@@ -330,12 +330,12 @@ layer {
 }
 layer {
   name: "loss"
-  type: "SoftmaxwithLoss"
+  type: "SoftmaxWithLoss"
   bottom: "class_fc"
   bottom: "label"
   top: "loss"
 }
-layer{
+layer {
 	name: "accuracy"
 	type: "Accuracy"
 	bottom: "class_fc"

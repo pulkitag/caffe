@@ -224,11 +224,18 @@ def make_window_file(prms):
 	np.random.set_state(oldState)
 
 
-def get_solver(cPrms):
-	solArgs = {'test_iter': 100,	'test_interval': 1000, 'base_lr': 0.001,
-						 'gamma': 0.5, 'stepsize': 20000, 'max_iter': 250000,
-				    'snapshot': 10000, 'lr_policy': '"step"', 'debug_info': 'true',
-						'weight_decay': 0.0005}
+def get_solver(cPrms, isFine=False):
+	if isFine:
+		base_lr  = cPrms['fine']['base_lr']
+		max_iter = cPrms['fine']['max_iter']
+	else:
+		base_lr  = 0.001
+		max_iter = 250000 
+	solArgs = {'test_iter': 100,	'test_interval': 1000,
+						 'base_lr': base_lr, 'gamma': 0.5, 'stepsize': 20000,
+						 'max_iter': max_iter, 'snapshot': 10000, 
+						 'lr_policy': '"step"', 'debug_info': 'true',
+						 'weight_decay': 0.0005}
 	sol = mpu.make_solver(**solArgs) 
 	return sol
 
@@ -239,7 +246,8 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 									isFineTune=False, sourceModelIter=100000,
 									 lrAbove=None,
 									fine_base_lr=0.001, fineRunNum=1, fineNumData=1, 
-									fineMaxLayer=None, fineDataSet='sun'):
+									fineMaxLayer=None, fineDataSet='sun',
+									fineMaxIter = 40000):
 	'''
 		sourceModelIter: The number of model iterations of the source model to consider
 		fine_max_iter  : The maximum iterations to which the target model should be trained.
@@ -254,7 +262,6 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 	caffePrms['deviceId']    = deviceId
 	caffePrms['contextPad']  = contextPad
 	caffePrms['imSz']        = imSz
-	caffePrms['isFineTune']  = isFineTune
 	caffePrms['fine']        = {}
 	caffePrms['fine']['modelIter'] = sourceModelIter
 	caffePrms['fine']['lrAbove']   = lrAbove
@@ -263,7 +270,7 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 	caffePrms['fine']['numData']   = fineNumData
 	caffePrms['fine']['maxLayer']  = fineMaxLayer
 	caffePrms['fine']['dataset']   = fineDataSet
-
+	caffePrms['fine']['max_iter']  = fineMaxIter
 	expStr = []
 	expStr.append('con-%s' % concatLayer)
 	if isScratch:
@@ -282,12 +289,12 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 		expStr.append('run%d' % fineRunNum)
 		expStr.append('datN%.0e' % fineNumData)
 		if fineMaxLayer is not None:
-			expStr.append('mxl%d' % fineMaxLayer)
+			expStr.append('mxl-%s' % fineMaxLayer)
 	
 	expStr = ''.join(s + '_' for s in expStr)
 	expStr = expStr[0:-1]
 	caffePrms['expStr'] = expStr
-	caffePrms['solver'] = get_solver(caffePrms)
+	caffePrms['solver'] = get_solver(caffePrms, isFine=isFineTune)
 	return caffePrms
 
 def get_experiment_object(prms, cPrms):
@@ -299,36 +306,45 @@ def get_experiment_object(prms, cPrms):
 ##
 # Setups an experiment for finetuning. 
 def setup_experiment_finetune(prms, cPrms):
-	#Get the model name from the source experiment. 
-	caffeExp  = get_experiment_object(prms, cPrms)
-	caffeExp.init_from_external(solDef, protoDef)
-	modelFile = caffeExp.get_snapshot_name(cPrms['fine']['modelIter'])
-
 	#Get the def file.
 	defFile = os.path.join(baseFilePath,
 						 'kitti_finetune_fc6_deploy.prototxt')
-
 	#Setup the target experiment. 
-	tgCPrms = get_caffe_prms(isFineTune=True, **cPrms)
+	tgCPrms = get_caffe_prms(isFineTune=True,
+			fine_base_lr=cPrms['fine']['base_lr'],
+			fineRunNum = cPrms['fine']['runNum'],
+			sourceModelIter = cPrms['fine']['modelIter'],
+			lrAbove = cPrms['fine']['lrAbove'],
+			fineNumData = cPrms['fine']['numData'],	
+			fineMaxLayer = cPrms['fine']['maxLayer'],
+			fineDataSet  = cPrms['fine']['dataset'],
+			fineMaxIter  = cPrms['fine']['max_iter'])
 	tgPrms  = copy.deepcopy(prms)
 	tgPrms['expName'] = 'fine-FROM-%s' % prms['expName']
 	tgExp   = get_experiment_object(tgPrms, tgCPrms)
-
+	tgExp.init_from_external(tgCPrms['solver'], defFile)
+	
 	#Do things as needed. 
-	if tgCPrms['lrAbove'] is not None:
-		tgExp.finetune_above(tgCPrms['lrAbove']		
+	if not tgCPrms['fine']['lrAbove'] is None:
+		tgExp.finetune_above(tgCPrms['fine']['lrAbove'])		
 
-	if tgCPrms['maxLayer'] is not None:
-		tgExp.del_all_layers_above(tgCPrms['maxLayer'])
-		tgExp.set_layer_property('class_fc', ['bottom'],
-				 '"%s"' % tgCPrms['maxLayer']) 
+	if not tgCPrms['fine']['maxLayer'] is None:
+		fcLayer   = copy.copy(tgExp.expFile_.netDef_.layers_['TRAIN']['class_fc'])
+		lossLayer = copy.copy(tgExp.expFile_.netDef_.layers_['TRAIN']['loss'])
+		accLayer  = copy.copy(tgExp.expFile_.netDef_.layers_['TRAIN']['accuracy'])
+		tgExp.del_all_layers_above(tgCPrms['fine']['maxLayer'])
+		lastTop = tgExp.get_last_top_name()
+		fcLayer['bottom'] = lastTop
+		tgExp.add_layer('class_fc', fcLayer, phase='TRAIN') 
+		tgExp.add_layer('loss', lossLayer, phase='TRAIN') 
+		tgExp.add_layer('accuracy', accLayer, phase='TRAIN') 
 
 	#Put the right data files.
 	if tgCPrms['fine']['numData'] == 1 and tgCPrms['fine']['dataset']=='sun':
 		dbPath = '/data0/pulkitag/data_sets/sun/leveldb_store'
 		dbFile = os.path.join(dbPath, 'sun-leveldb-%s-%d')
 		trnFile = dbFile % ('train', tgCPrms['fine']['runNum'])
-		tstFile = dbFile % ('test', tgCprms['fine']['runNum'])
+		tstFile = dbFile % ('test', tgCPrms['fine']['runNum'])
 		tgExp.set_layer_property('data', ['data_param', 'source'],
 						'"%s"' % trnFile, phase='TRAIN')
 		tgExp.set_layer_property('data', ['data_param', 'source'],
@@ -408,9 +424,13 @@ def setup_experiment(prms, cPrms):
 def make_experiment(prms, cPrms, isFine=False):
 	if isFine:
 		caffeExp = setup_experiment_finetune(prms, cPrms)
+		#Get the model name from the source experiment. 
+		srcCaffeExp  = setup_experiment(prms, cPrms)
+		modelFile = srcCaffeExp.get_snapshot_name(cPrms['fine']['modelIter'])
 	else:
-		caffeExp = setup_experiment(prms, cPrms)
-	caffeExp.make()
+		caffeExp  = setup_experiment(prms, cPrms)
+		modelFile = None
+	caffeExp.make(modelFile=modelFile)
 	return caffeExp	
 
 ##
