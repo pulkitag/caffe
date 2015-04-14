@@ -45,6 +45,7 @@ def get_paths(isOld=False):
 	paths['expDir']  = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/mnist/exp/'
 	paths['snapDir'] = '/data1/pulkitag/mnist/snapshots/'
 	paths['resDir']  = '/data1/pulkitag/mnist/results/'
+	paths['visDir']  = '/data1/pulkitag/mnist/vis/'
 	return paths
 
 
@@ -530,32 +531,47 @@ def get_lmdb(setName='test', maxDeltaRot=5, maxDeltaTrans=2,
 	return db
 
 
-def vis_lmdb(db, fig=None, isClassLbl=False):
-	data, lb = db.read_next()
-	ch,h,w = data.shape
-	im1      = data[0,:,:]
-	im2      = data[1,:,:]
-	
-	if isinstance(lb, np.ndarray):
-		lb       = np.squeeze(lb)
-		if isClassLbl:
-			lbStr = 'Class: %f, delx: %f, dely: %f, delr: %f' % (lb[0], lb[1], lb[2], lb[3])
-		else:
-			lbStr = 'delx: %f, dely: %f, delr: %f' % (lb[0], lb[1], lb[2])
-	else:
-		lbStr = 'Label: %d' % lb		
-
+def vis_lmdb(prms, fig=None, isClassLbl=False, 
+						 setName='test', maxVis=100):
+	imDb    = prms['paths']['lmdb'][setName]['im']
+	lbDb    = prms['paths']['lmdb'][setName]['lb']
+	visFile = os.path.join(prms['paths']['visDir'], 'im%d_%d.png') 
+	db   = mpio.DoubleDbReader((imDb, lbDb))
 	#Plot
 	plt.ion()
+	plt.set_cmap('gray')
 	if fig is None:
 		fig = plt.figure()
 	else:
 		plt.figure(fig.number)
-	plt.subplot(2,1,1)
-	plt.imshow(im1)
-	plt.subplot(2,1,2)
-	plt.imshow(im2)
-	plt.suptitle(lbStr)
+
+	for i in range(maxVis):
+		data, lb = db.read_next()
+		ch,h,w = data.shape
+		im1      = data[0,:,:]
+		im2      = data[1,:,:]
+		
+		if isinstance(lb, np.ndarray):
+			lb       = np.squeeze(lb)
+			if isClassLbl:
+				lbStr = 'Class: %f, delx: %f, dely: %f, delr: %f' % (lb[0], lb[1], lb[2], lb[3])
+			else:
+				lbStr = 'delx: %f, dely: %f, delr: %f' % (lb[0], lb[1], lb[2])
+		else:
+			lbStr = 'Label: %d' % lb		
+		#Plot
+		plt.subplot(2,1,1)
+		plt.imshow(im1)
+		plt.subplot(2,1,2)
+		plt.imshow(im2)
+		plt.suptitle(lbStr)
+		#Input command
+		cmd = raw_input()
+		if cmd == 'save':
+			outFile1 = visFile % (i,1)
+			outFile2 = visFile % (i,2)
+			scm.imsave(outFile1, im1)
+			scm.imsave(outFile2, im2)  			
 	return fig	
 
 

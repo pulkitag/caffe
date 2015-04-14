@@ -8,10 +8,13 @@ import rot_utils as ru
 import pdb
 import os
 
-def get_paths():
+def get_paths(isNewExpDir=False):
 	dirName = '/data1/pulkitag/data_sets/kitti/'
 	svDir   = '/data0/pulkitag/kitti/'
-	expDir  = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/kitti/exp/'
+	if isNewExpDir:
+		expDir  = '/data1/pulkitag/data_sets/kitti/exp/'
+	else:
+		expDir  = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/kitti/exp/'
 	snapDir = '/data1/pulkitag/projRotate/snapshots/kitti/'
 	imDir   = '/data0/pulkitag/data_sets/kitti/odometry/'
 	prms    = {}
@@ -42,7 +45,7 @@ def get_prms(poseType='euler', nrmlzType='zScoreScaleSeperate',
 						 imSz=256, concatLayer='fc6', maxFrameDiff=1,
 						 numTrainSamples=1e+06, numTestSamples=1e+04, isOld=False,
 						 lossType='classify', classificationType='independent',
-						 randomCrop=True):
+						 randomCrop=True, isNewExpDir=False):
 	'''
 		poseType   : How pose is being used.
 		nrmlzType  : The way the pose data has been normalized.
@@ -55,7 +58,7 @@ def get_prms(poseType='euler', nrmlzType='zScoreScaleSeperate',
 	if randomCrop:
 		assert imSz is None, "With Random crop imSz should be set to None"
 
-	paths = get_paths()
+	paths = get_paths(isNewExpDir)
 	prms  = {}
 	prms['pose']         = poseType
 	prms['nrmlz']        = nrmlzType

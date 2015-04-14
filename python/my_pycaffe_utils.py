@@ -397,7 +397,7 @@ def get_siamese_layerdef_for_proto(layerType, layerName, bottom, numOutput=1, **
 		kwargs['param']['name'] = wName
 		kwargs[paramDupKey] = {}
 		kwargs[paramDupKey]['name'] = bName
-	elif layerType in ['ReLU', 'Pool']:
+	elif layerType in ['ReLU', 'Pooling']:
 		pass
 	else:
 		raise Exception('Siamese layer not supported for %s' % layerType)
@@ -918,6 +918,7 @@ class ProtoDef():
 			layerName: The last layer that shall have the non-zero learning rate
 		'''
 		allLayers = self.find_learning_layers()
+		foundFlag = False
 		for ph in ProtoDef.ProtoPhases:
 			doFlag = True
 			lNames = allLayers[ph]
@@ -927,12 +928,17 @@ class ProtoDef():
 			while doFlag:
 				if lNames[count] == layerName:
 					doFlag = False
+					foundFlag = True
 				else:
 					#print 'No-Learning: %s' % lNames[count]
 					self.set_no_learning(lNames[count], phase=ph)
 				count += 1
 				if count == len(lNames):
 					doFlag = False
+
+		if not foundFlag:
+			raise Exception('Layer Name %s is not learnable or not found'
+					% layerName)
 
 	##
 	def get_layer_property(self, layerName, propName, phase='TRAIN', propNum=0):
@@ -1039,6 +1045,12 @@ class ProtoDef():
 			if lType == layerType:
 				layerNames.append(lName)
 		return layerNames
+
+	##
+	#Get all the layernames
+	def get_all_layernames(self, phase='TRAIN'):
+		names = [l for l in self.layers_[phase].keys()]
+		return names
 
 ##
 # Class for making the solver_prototxt
@@ -1342,6 +1354,10 @@ class CaffeExperiment:
 	## Only finetune the layers that are above ( and including) layerName
 	def finetune_above(self, layerName):
 		self.expFile_.netDef_.set_no_learning_until(layerName)	
+
+	## All layernames
+	def get_all_layernames(self, phase='TRAIN'):
+		return self.expFile_.netDef_.get_all_layernames(phase=phase)
 
 	## Get the top name of the last layer
 	def get_last_top_name(self):

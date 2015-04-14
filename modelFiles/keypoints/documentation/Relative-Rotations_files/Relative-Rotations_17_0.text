@@ -1,0 +1,4 @@
+Ignoring line: # Autotmatically generated solver prototxt
+/data1/pulkitag/caltech101/snapshots/imSz128_ntr30_run0/caffenet_pre-rotObjs_kmedoids30_20_nodrop_iter120K_ft-last_mxl-1_inLr1e-03_iter_5001.caffemodel
+Ignoring line: # Autotmatically generated solver prototxt
+/data1/pulkitag/caltech101/snapshots/imSz128_ntr30_run0/caffenet_pre-rotObjs_kmedoids30_20_nodrop_iter120K_ft-all_mxl-1_inLr1e-06_inSd1e-03_iter_5001.caffemodel

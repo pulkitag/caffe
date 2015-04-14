@@ -203,7 +203,7 @@ def get_model_mean_file(netName='vgg'):
 	if netName  in ['alex', 'alex_deploy']:
 		modelFile  = modelDir + 'caffe_imagenet_train_iter_310000'
 		imMeanFile = modelDir + 'ilsvrc2012_mean.binaryproto'
-	elif netName == 'bvlcAlexNet':
+	if netName == 'bvlcAlexNet':
 		modelFile  = bvlcDir + 'bvlc_reference_caffenet.caffemodel'
 		imMeanFile = bvlcDir + 'imagenet_mean.binaryproto'  
 	elif netName == 'vgg':
@@ -231,10 +231,7 @@ def get_layer_def_files(netName='vgg', layerName='pool4'):
 	if netName=='vgg':
 		defFile = modelDir + 'layer_def_files/vgg_19_%s.prototxt' % layerName
 	elif netName == 'alex_deploy':
-		if layerName is not None:
-			defFile = bvlcDir + 'caffenet_deploy_%s.prototxt' % layerName
-		else:
-			defFile = bvlcDir + 'caffenet_deploy.prototxt'
+		defFile = bvlcDir + 'caffenet_deploy_%s.prototxt' % layerName
 	else:
 		print 'Cannont get files for networks other than VGG'
 	return defFile	

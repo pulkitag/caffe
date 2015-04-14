@@ -31,6 +31,7 @@ import myutils as mu
 import my_pycaffe_utils as mpu
 import other_utils as ou
 import rot_utils as ru
+import my_pycaffe as mp
 
 CLASS_NAMES = ['aeroplane', 'bicycle', 'boat', 'bottle', 'bus',
 							'car', 'chair', 'diningtable', 'motorbike', 'sofa',
@@ -825,8 +826,8 @@ def get_experiment_object(prms, caffePrms, deviceId=1):
 	return caffeExp
 
 ##
-# Make the experiment
-def make_experiment(prms, caffePrms, deviceId=1):
+# Set the experiment up. 
+def setup_experiment(prms, caffePrms, deviceId=1):
 	sourceExpDir   = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/pascal3d/base_files'
 	if caffePrms['isWindow']:
 		sourceNetDef   = os.path.join(sourceExpDir, 'caffenet_siamese_fc6_window.prototxt')
@@ -923,5 +924,20 @@ def make_experiment(prms, caffePrms, deviceId=1):
 			caffeExp.set_layer_property('label',['data_param','source'], '"%s"' % trainLbLmdb, phase='TRAIN')
 			caffeExp.set_layer_property('label',['data_param','batch_size'], 256, phase='TRAIN')
 			caffeExp.set_layer_property('label',['data_param','source'], '"%s"' % valLbLmdb,  phase='TEST')
+	return caffeExp	
+
+def make_experiment(prms, cPrms, deviceId=1):
+	caffeExp = setup_experiment(prms, cPrms, deviceId=deviceId)
 	caffeExp.make()
-		
+
+
+def vis_weights(prms, cPrms, modelIter, fig=None):
+	plt.ion()
+	if fig is None:
+		fig = plt.figure()
+	ax = plt.subplot(1,1,1)
+	caffeExp  = setup_experiment(prms, cPrms)
+	modelFile = caffeExp.get_snapshot_name(modelIter)
+	defFile   = caffeExp.files_['netdef']
+	net       = mp.MyNet(defFile, modelFile)
+	net.vis_weights('conv1', ax=ax)	 	

@@ -300,8 +300,10 @@ def get_modify_layers(maxLayer, preTrainStr):
  		
 
 def get_caffe_prms(isPreTrain=False, maxLayer=5, isFineLast=True,
-									 preTrainStr=None, initLr=0.01, initStd=0.01, maxIter=5000,
-									 testNum=None):
+									 preTrainStr=None, initLr=0.01, initStd=0.01,
+									 maxIter=5000,
+									 testNum=None, stepSize=1000,
+									 addDropLast=False):
 	'''
 		isPreTrain : Use a pretrained network for performing classification.  		
 		maxLayer   : How many layers to consider in the alexnet train.
@@ -318,6 +320,8 @@ def get_caffe_prms(isPreTrain=False, maxLayer=5, isFineLast=True,
 	cPrms['initStd']     = initStd
 	cPrms['maxIter']     = maxIter
 	cPrms['testNum']     = testNum
+	cPrms['stepSize']    = stepSize
+	cPrms['addDropLast'] = addDropLast
 	expStr = []
 	if isPreTrain:
 		assert preTrainStr is not None, 'preTrainStr cannot be none'
@@ -330,6 +334,9 @@ def get_caffe_prms(isPreTrain=False, maxLayer=5, isFineLast=True,
 	else:
 		expStr.append('ft-all')
 
+	if addDropLast:
+		expStr.append('drop-last')
+
 	#Max-Layer
 	expStr.append('mxl-%d' % maxLayer)
 
@@ -340,6 +347,9 @@ def get_caffe_prms(isPreTrain=False, maxLayer=5, isFineLast=True,
 	if initStd != 0.01:
 		#For backward compatilibility nothing is added if std=0.01
 		expStr.append('inSd%.0e' % initStd)
+
+	if stepSize != 1000:
+		expStr.append('step%.0e' % stepSize)
 
 	#Final str
 	expStr = ''.join(s + '_' for s in expStr)
@@ -360,8 +370,8 @@ def get_experiment_object(prms, cPrms, deviceId=1):
 
 def get_solver(cPrms):
 	solArgs = {'test_iter': 100,	'test_interval': 500, 'base_lr': cPrms['initLr'],
-						 'gamma': 0.5, 'stepsize': 1000, 'max_iter': cPrms['maxIter'],
-				    'snapshot': 2000, 'lr_policy': '"step"', 'debug_info': 'true'}
+						 'gamma': 0.5, 'stepsize': cPrms['stepSize'], 'max_iter': cPrms['maxIter'],
+				    'snapshot': 2000, 'lr_policy': '"step"', 'debug_info': 'false'}
 	sol = mpu.make_solver(**solArgs) 
 	return sol
 
@@ -381,6 +391,13 @@ def setup_experiment(prms, cPrms, deviceId=1):
 	#Get the name of the last top layer
 	lastTop = caffeExp.get_last_top_name()
 
+	#Add dropout to the last layer if needed. 
+	if cPrms['addDropLast']:
+		dropDef = mpu.get_layerdef_for_proto('Dropout', 
+							'drop-last', lastTop,
+						 **{'top': lastTop, 'dropout_ratio': 0.5});
+		caffeExp.add_layer('drop-last', dropDef, 'TRAIN');
+				
 	#Construct the fc layer for classification
 	opName     = 'class_fc'
 	classLayer = mpu.get_layerdef_for_proto('InnerProduct', opName,
@@ -559,33 +576,44 @@ def run_random_experiment(isFineLast=True):
 ##
 #
 def run_pretrain_experiment(preTrainStr='rotObjs_kmedoids30_20_nodrop_iter120K', isFineLast=True,
-								runType='run', testNum=None):	
+								runType='run', testNum=None, addDropLast=False):	
 	'''
 		runType: 'run' run the experiment
 							'test' perform test
 	'''
 	prms    = get_prms()
 	#For layers 5,6 I used initLr of 0.001 and std of 0.01
-	mxLayer = [1,2,3,4,5,6]
-	#mxLayer = [5,6]
+	#mxLayer = [1,2,3,4,5,6]
+	mxLayer = [2]
 	clsAcc  = []
 	for l in mxLayer:
 		if isFineLast:
 			initStd= 0.01
 			initLr = 0.001
+			stepSize = 1000
 		else:
-			if l <= 2:
+			if l <= 1:
 				initStd = 0.001
-				initLr  = 0.000001
+				initLr  = 0.00001
+				stepSize = 5000
+			elif l<=2:
+				initStd = 0.001
+				initLr  = 0.0001
+				stepSize = 5000
 			elif l<=4:
 				initStd = 0.001
 				initLr  = 0.0001
+				stepSize = 5000
 			else:
-				initStd = 0.01
-				initLr  = 0.001
+				initStd  = 0.01
+				initLr   = 0.001
+				stepSize = 1000
 		cPrms = get_caffe_prms(isPreTrain=True, maxLayer=l, 
-													 preTrainStr=preTrainStr, isFineLast=isFineLast,
-													 initLr=initLr, initStd=initStd, testNum=testNum)
+													 preTrainStr=preTrainStr, 
+													 isFineLast=isFineLast,
+													 initLr=initLr, initStd=initStd,
+													 testNum=testNum, stepSize=stepSize,
+													 addDropLast=addDropLast)
 		if runType=='run':
 			run_experiment(prms, cPrms, deviceId=1) #1 corresponds to first K40  
 		elif runType == 'test':

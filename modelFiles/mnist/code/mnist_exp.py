@@ -66,37 +66,53 @@ def make_def_proto(nw, isSiamese=True, baseFileStr='split_im.prototxt'):
 ##
 # Generates a string to represent the n/w name
 
-def nw2name(nw):
+def nw2name(nw, getLayerNames=False):
 	nameGen     = mpu.LayerNameGenerator()
-	nwName = []
+	nwName   = []
+	allNames = []
 	for l in nw:
 		lType, lParam = l
 		lName = nameGen.next_name(lType)
+		if lParam.has_key('nameDiff'):
+			allNames.append(lName + '-%s' % lParam['nameDiff'])
+		else:
+			allNames.append(lName)
 		if lType in ['InnerProduct', 'Convolution']:
 			lName = lName + '-%d' % lParam['num_output']
 			if lType == 'Convolution':
 				lName = lName + 'sz%d-st%d' % (lParam['kernel_size'], lParam['stride'])
 			nwName.append(lName)
+		elif lType in ['Pooling']:
+			lName = lName + '-sz%d-st%d' % (lParam['kernel_size'], 
+										lParam['stride'])
+			nwName.append(lName) 
 		elif lType in ['Concat', 'Dropout']:
 			nwName.append(lName)
 		else:
 			pass
 	nwName = ''.join(s + '_' for s in nwName)
 	nwName = nwName[:-1]
-	return nwName	
+	if getLayerNames:
+		return nwName, allNames
+	else:
+		return nwName	
 
 
 def get_caffe_prms(nw, isSiamese=True, batchSize=128, isTest=False,
 						isFineTune=False, fineExp=None, fineModelIter=None,
 						max_iter=40000, stepsize=10000, snapshot=5000, gamma=0.5, base_lr=0.01,
-						test_iter=100, test_interval=500, lr_policy='"step"'):
+						test_iter=100, test_interval=500, lr_policy='"step"',
+						lrAbove=None, debug_info='false'):
 	'''
 		isFineTune: If the weights of an auxiliary experiment are to be used to start finetuning
 		fineExp   : Instance of CaffeExperiment from which finetuning needs to begin. 	
-		fineModelIterations: Used for getting model needed for finetuning. 
+		fineModelIterations: Used for getting model needed for finetuning.
+		lrAbove  : (learn above)  if None - then do learning in all the layers
+						 otherwise an integer indicating above which layers should learning be performed.
+						 First layer is the 0.  
 	'''
 	cPrms  = {}
-	nwName = nw2name(nw)
+	nwName, layerNames = nw2name(nw, getLayerNames=True)
 	cPrms['nw']     = nw
 	cPrms['nwName'] = nwName
 	cPrms['isSiamese'] = isSiamese
@@ -105,8 +121,10 @@ def get_caffe_prms(nw, isSiamese=True, batchSize=128, isTest=False,
 	cPrms['isFineTune'] = isFineTune 
 	cPrms['fineExp']    = fineExp
 	cPrms['fineModelIter'] = fineModelIter
+	cPrms['lrAbove']       = lrAbove
 	#Solver prms
 	cPrms['max_iter'] = max_iter
+	cPrms['debug_info'] = debug_info
 
 	expStr = []
 	if isFineTune:
@@ -120,12 +138,22 @@ def get_caffe_prms(nw, isSiamese=True, batchSize=128, isTest=False,
 	expStr.append('bLr%.0e' % base_lr)
 	expStr.append('stp%.0e' % stepsize)
 	expStr.append('mIt%.0e'  % max_iter) 
+
+	if lrAbove is not None:
+		assert(isinstance(lrAbove, int))
+		cPrms['lrAboveName'] = layerNames[lrAbove]
+		expStr.append('labv-%s' % cPrms['lrAboveName'])
+		print 'FineTune above: %s' % cPrms['lrAboveName']
+	
 	expStr = ''.join(s + '_' for s in expStr)
 	cPrms['expName'] = expStr[0:-1]
 
 	#Setup the solver
-	solArgs = {'test_iter': test_iter, 'test_interval': test_interval, 'max_iter': max_iter,
-						 'stepsize': stepsize, 'gamma': gamma, 'base_lr': base_lr, 'lr_policy':lr_policy}
+	solArgs = {'test_iter': test_iter, 'test_interval': test_interval,
+						 'max_iter': max_iter,
+						 'stepsize': stepsize, 'gamma': gamma, 
+						 'base_lr': base_lr, 'lr_policy':lr_policy,
+							'debug_info': debug_info}
 	cPrms['solver'] = mpu.make_solver(**solArgs)  
 	return cPrms
 	
@@ -198,6 +226,11 @@ def setup_experiment(prms, cPrms, deviceId=1):
 		caffeExp.set_layer_property('data', ['data_param','source'], '"%s"' % testImDb,  phase='TEST')
 	else:
 		raise Exception('Not recognized')
+
+	#If learning in some layers needs to be set to 0
+	if cPrms['lrAbove'] is not None:
+		caffeExp.finetune_above(cPrms['lrAboveName'])	
+
 	return caffeExp
 
 ##
@@ -249,7 +282,7 @@ def run_networks():
 
 ##
 # Run Convolutional Filters
-def run_networks_conv():
+def run_networks_conv(debug_info='false'):
 	deviceId = 0
 	nw = []
 
@@ -313,17 +346,30 @@ def run_networks_conv():
 							('Concat',{'concat_dim':1}),
 						  ('InnerProduct',{'num_output': 1000}),('ReLU',{}), ('Dropout', {'dropout_ratio': 0.5})]) 
 	'''	
-	nw.append( [('Convolution', {'num_output': 50, 'kernel_size': 5, 'stride': 2})])			 
+	nw.append( [('Convolution',  {'num_output': 96,  'kernel_size': 3, 'stride': 1}), ('ReLU',{}),
+							('Pooling', {'kernel_size': 3, 'stride': 2}),
+							('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 1}), ('ReLU',{}),
+							('Pooling', {'kernel_size': 3, 'stride': 2}),
+							('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 1}), ('ReLU',{}),
+							('Pooling', {'kernel_size': 3, 'stride': 2}),
+							('Concat', {'concat_dim': 1}),
+						  ('InnerProduct', {'num_output': 1000}), ('ReLU',{}), 
+							('Dropout', {'dropout_ratio': 0.5}),
+							])			 
 
 	prms  = mr.get_prms(maxRot=10, maxDeltaRot=30, lossType='classify', numTrainEx=1e+07)
 
 	for nn in nw:
-		cPrms = get_caffe_prms(nn, isSiamese=True)
+		name = nw2name(nn)
+		print name
+		#return nn
+		cPrms = get_caffe_prms(nn, isSiamese=True, base_lr=0.01,
+														debug_info=debug_info)
 		run_experiment(prms, cPrms, deviceId=deviceId)
 
 
 	
-def run_finetune(max_iter=5000, stepsize=1000):
+def run_finetune(max_iter=5000, stepsize=1000, lrAbove=None):
 	deviceId = 2
 	sourceNw = []	
 	targetNw = []
@@ -342,6 +388,7 @@ def run_finetune(max_iter=5000, stepsize=1000):
 	srcPrms = mr.get_prms(maxRot=10, maxDeltaRot=30)
 	tgtPrms = mr.get_prms(transform='normal', numTrainEx=10000)
 	'''
+	'''
 	sourceNw.append( [('Convolution',{'num_output': 96, 'kernel_size': 7, 'stride': 3}), ('ReLU',{}),
               ('Convolution',{'num_output': 500, 'kernel_size': 5, 'stride': 2}), ('ReLU',{}),
               ('Concat',{'concat_dim':1}),
@@ -351,6 +398,23 @@ def run_finetune(max_iter=5000, stepsize=1000):
               ('Convolution',{'num_output': 500, 'kernel_size': 5, 'stride': 2}), ('ReLU',{}),
               ('InnerProduct',{'num_output': 200, 'nameDiff': 'ft'}),('ReLU',{}),
               ('InnerProduct',{'num_output': 10, 'nameDiff': 'ft'}),
+							('SoftmaxWithLoss', {'bottom2': 'label', 'shareBottomWithNext': True}),
+							('Accuracy', {'bottom2': 'label'})] )
+	'''
+
+	sourceNw.append( [('Convolution',  {'num_output': 96,  'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+							('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+							('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+							('Concat', {'concat_dim': 1}),
+						  ('InnerProduct', {'num_output': 1000}), ('ReLU',{}), 
+							('Dropout', {'dropout_ratio': 0.5}),
+							])	
+
+	targetNw.append( [('Convolution',  {'num_output': 96,  'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+							('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+							('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+						  ('InnerProduct', {'num_output': 500, 'nameDiff': 'ft'}), ('ReLU',{}), 
+						  ('InnerProduct', {'num_output': 10, 'nameDiff': 'ft'}),
 							('SoftmaxWithLoss', {'bottom2': 'label', 'shareBottomWithNext': True}),
 							('Accuracy', {'bottom2': 'label'})] )
 
@@ -364,7 +428,9 @@ def run_finetune(max_iter=5000, stepsize=1000):
 			#Target Experiment
 			tgtPrms = mr.get_prms(transform='normal', numTrainEx=numEx)
 			tgtCaffePrms = get_caffe_prms(tnn, isSiamese=False, isFineTune=True, fineExp=srcExp,
-													fineModelIter=40000, max_iter=max_iter, stepsize=stepsize)
+													fineModelIter=40000, max_iter=max_iter, stepsize=stepsize,
+													lrAbove=lrAbove)
+			#make_experiment(tgtPrms, tgtCaffePrms)
 			run_experiment(tgtPrms, tgtCaffePrms, deviceId=deviceId)
 
 

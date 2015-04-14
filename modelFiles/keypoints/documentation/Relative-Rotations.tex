@@ -206,7 +206,7 @@
 
     % Document level variables
     \title{Relative-Rotations}
-    \date{April 3, 2015}
+    \date{April 12, 2015}
     \release{}
     \author{Unknown Author}
     \renewcommand{\releasename}{}
@@ -248,7 +248,7 @@ weights while training from scratch. They are plotted below.
 
     
         \vspace{6pt}
-        \makebox[0.1\linewidth]{\smaller\hfill\tt\color{nbframe-in-prompt}In\hspace{4pt}{[}19{]}:\hspace{4pt}}\\*
+        \makebox[0.1\linewidth]{\smaller\hfill\tt\color{nbframe-in-prompt}In\hspace{4pt}{[}2{]}:\hspace{4pt}}\\*
         \vspace{-2.65\baselineskip}
         \begin{ColorVerbatim}
             \vspace{-0.7\baselineskip}
@@ -262,7 +262,11 @@ weights while training from scratch. They are plotted below.
 \PY{k+kn}{import} \PY{n+nn}{caffe}
 \PY{k+kn}{import} \PY{n+nn}{os}
 \PY{k+kn}{import} \PY{n+nn}{my\PYZus{}pycaffe} \PY{k+kn}{as} \PY{n+nn}{mp}
+\PY{k+kn}{import} \PY{n+nn}{my\PYZus{}pycaffe\PYZus{}io} \PY{k+kn}{as} \PY{n+nn}{mpio}
 \PY{k+kn}{import} \PY{n+nn}{matplotlib.pyplot} \PY{k+kn}{as} \PY{n+nn}{plt}
+\PY{k+kn}{import} \PY{n+nn}{h5py} \PY{k+kn}{as} \PY{n+nn}{h5}
+\PY{k+kn}{import} \PY{n+nn}{other\PYZus{}utils} \PY{k+kn}{as} \PY{n+nn}{ou}
+\PY{k+kn}{import} \PY{n+nn}{collections} \PY{k+kn}{as} \PY{n+nn}{co}
 \PY{c}{\PYZsh{}import plotly.plotly as ply}
 \PY{c}{\PYZsh{}plotly.tools.set\PYZus{}credentials\PYZus{}file(username=\PYZsq{}pulkit.audacious\PYZsq{}, api\PYZus{}key=\PYZsq{}9cqniif4ai\PYZsq{}, stream\PYZus{}ids=[\PYZsq{}gx56jz4arp\PYZsq{}, \PYZsq{}8fa9r8ogoo\PYZsq{}])}
 \PY{c}{\PYZsh{}Experiment and snapshot paths.}
@@ -270,6 +274,7 @@ weights while training from scratch. They are plotted below.
 \PY{n}{currDir} \PY{o}{=} \PY{n}{os}\PY{o}{.}\PY{n}{getcwd}\PY{p}{(}\PY{p}{)}
 \PY{n}{os}\PY{o}{.}\PY{n}{chdir}\PY{p}{(}\PY{n}{codeDir}\PY{p}{)}
 \PY{k+kn}{import} \PY{n+nn}{process3d} \PY{k+kn}{as} \PY{n+nn}{p3d}
+\PY{k+kn}{import} \PY{n+nn}{process\PYZus{}caltech} \PY{k+kn}{as} \PY{n+nn}{pc}
 \PY{n}{os}\PY{o}{.}\PY{n}{chdir}\PY{p}{(}\PY{n}{currDir}\PY{p}{)}
 \PY{n}{expStr} \PY{o}{=} \PY{l+s}{\PYZsq{}}\PY{l+s}{rotObjs\PYZus{}128\PYZus{}kmedoids30\PYZus{}20}\PY{l+s}{\PYZsq{}}
 \PY{n}{defFile} \PY{o}{=} \PY{n}{os}\PY{o}{.}\PY{n}{path}\PY{o}{.}\PY{n}{join}\PY{p}{(}\PY{n}{expDir}\PY{p}{,} \PY{n}{expStr}\PY{p}{,} \PY{l+s}{\PYZsq{}}\PY{l+s}{caffenet\PYZus{}siamese.prototxt}\PY{l+s}{\PYZsq{}}\PY{p}{)}
@@ -279,27 +284,6 @@ weights while training from scratch. They are plotted below.
                 \vspace{-0.2\baselineskip}
             
         \end{ColorVerbatim}
-    
-
-    
-
-        % If the first block is an image, minipage the image.  Else
-        % request a certain amount of space for the input text.
-        \needspace{4\baselineskip}
-        
-        
-
-            % Add document contents.
-            
-                \begin{InvisibleVerbatim}
-                \vspace{-0.5\baselineskip}
-\begin{alltt}The autoreload extension is already loaded. To reload it, use:
-  \%reload\_ext autoreload
-\end{alltt}
-
-            \end{InvisibleVerbatim}
-            
-        
     
 
 
@@ -485,7 +469,7 @@ tvmonitor    1570                 336
 
     
         \vspace{6pt}
-        \makebox[0.1\linewidth]{\smaller\hfill\tt\color{nbframe-in-prompt}In\hspace{4pt}{[}6{]}:\hspace{4pt}}\\*
+        \makebox[0.1\linewidth]{\smaller\hfill\tt\color{nbframe-in-prompt}In\hspace{4pt}{[}54{]}:\hspace{4pt}}\\*
         \vspace{-2.65\baselineskip}
         \begin{ColorVerbatim}
             \vspace{-0.7\baselineskip}
@@ -495,7 +479,7 @@ tvmonitor    1570                 336
 \PY{n}{numSamples} \PY{o}{=} \PY{l+m+mi}{20000}
 \PY{n}{imSz}       \PY{o}{=} \PY{l+m+mi}{128}
 \PY{n}{cropType}   \PY{o}{=} \PY{l+s}{\PYZsq{}}\PY{l+s}{contPad}\PY{l+s}{\PYZsq{}}
-\PY{n}{prms}       \PY{o}{=} \PY{n}{p3d}\PY{o}{.}\PY{n}{get\PYZus{}exp\PYZus{}prms}\PY{p}{(}\PY{n}{imSz}\PY{o}{=}\PY{n}{imSz}\PY{p}{,} \PY{n}{lblType}\PY{o}{=}\PY{n}{lblType}\PY{p}{,} \PY{n}{numSamples}\PY{o}{=}\PY{n}{numSamples}\PY{p}{,} \PY{n}{cropType}\PY{o}{=}\PY{n}{cropType}\PY{p}{)}
+\PY{n}{prms}       \PY{o}{=} \PY{n}{p3d}\PY{o}{.}\PY{n}{get\PYZus{}exp\PYZus{}prms}\PY{p}{(}\PY{n}{imSz}\PY{o}{=}\PY{n}{imSz}\PY{p}{,} \PY{n}{lblType}\PY{o}{=}\PY{n}{lblType}\PY{p}{,} \PY{n}{numSamplesTrain}\PY{o}{=}\PY{n}{numSamples}\PY{p}{,} \PY{n}{cropType}\PY{o}{=}\PY{n}{cropType}\PY{p}{)}
 \PY{n}{pairLabels} \PY{o}{=} \PY{n}{p3d}\PY{o}{.}\PY{n}{get\PYZus{}pair\PYZus{}label\PYZus{}stats}\PY{p}{(}\PY{n}{prms}\PY{p}{,} \PY{n}{setName}\PY{o}{=}\PY{l+s}{\PYZsq{}}\PY{l+s}{train}\PY{l+s}{\PYZsq{}}\PY{p}{)}
 \end{Verbatim}
 
@@ -511,12 +495,13 @@ tvmonitor    1570                 336
 
     
         \vspace{6pt}
-        \makebox[0.1\linewidth]{\smaller\hfill\tt\color{nbframe-in-prompt}In\hspace{4pt}{[}19{]}:\hspace{4pt}}\\*
+        \makebox[0.1\linewidth]{\smaller\hfill\tt\color{nbframe-in-prompt}In\hspace{4pt}{[}58{]}:\hspace{4pt}}\\*
         \vspace{-2.65\baselineskip}
         \begin{ColorVerbatim}
             \vspace{-0.7\baselineskip}
             \begin{Verbatim}[commandchars=\\\{\}]
 \PY{n}{count} \PY{o}{=} \PY{l+m+mi}{1}
+\PY{k}{print} \PY{l+s}{\PYZdq{}}\PY{l+s}{Distribution of azimuth}\PY{l+s}{\PYZdq{}}
 \PY{k}{for} \PY{p}{(}\PY{n}{key}\PY{p}{,} \PY{n}{val}\PY{p}{)} \PY{o+ow}{in} \PY{n+nb}{sorted}\PY{p}{(}\PY{n}{pairLabels}\PY{o}{.}\PY{n}{items}\PY{p}{(}\PY{p}{)}\PY{p}{)}\PY{p}{:}
     \PY{n}{ax}      \PY{o}{=} \PY{n}{plt}\PY{o}{.}\PY{n}{subplot}\PY{p}{(}\PY{l+m+mi}{4}\PY{p}{,}\PY{l+m+mi}{3}\PY{p}{,}\PY{n}{count}\PY{p}{)}
     \PY{n}{azimuth} \PY{o}{=} \PY{n}{val}\PY{p}{[}\PY{p}{:}\PY{p}{,}\PY{l+m+mi}{0}\PY{p}{]}
@@ -547,8 +532,15 @@ tvmonitor    1570                 336
             
                 \begin{InvisibleVerbatim}
                 \vspace{-0.5\baselineskip}
+\begin{alltt}Distribution of azimuth
+\end{alltt}
+
+            \end{InvisibleVerbatim}
+            
+                \begin{InvisibleVerbatim}
+                \vspace{-0.5\baselineskip}
     \begin{center}
-    \includegraphics[max size={\textwidth}{\textheight}]{Relative-Rotations_files/Relative-Rotations_8_0.png}
+    \includegraphics[max size={\textwidth}{\textheight}]{Relative-Rotations_files/Relative-Rotations_8_1.png}
     \par
     \end{center}
     
@@ -563,7 +555,7 @@ tvmonitor    1570                 336
 
     
         \vspace{6pt}
-        \makebox[0.1\linewidth]{\smaller\hfill\tt\color{nbframe-in-prompt}In\hspace{4pt}{[}30{]}:\hspace{4pt}}\\*
+        \makebox[0.1\linewidth]{\smaller\hfill\tt\color{nbframe-in-prompt}In\hspace{4pt}{[}59{]}:\hspace{4pt}}\\*
         \vspace{-2.65\baselineskip}
         \begin{ColorVerbatim}
             \vspace{-0.7\baselineskip}
@@ -571,10 +563,11 @@ tvmonitor    1570                 336
 \PY{c}{\PYZsh{}pairLabels = p3d.get\PYZus{}pair\PYZus{}label\PYZus{}stats(prms, setName=\PYZsq{}val\PYZsq{})}
 \PY{n}{count} \PY{o}{=} \PY{l+m+mi}{1}
 \PY{n}{fig} \PY{o}{=} \PY{n}{plt}\PY{o}{.}\PY{n}{figure}\PY{p}{(}\PY{p}{)}
+\PY{k}{print} \PY{l+s}{\PYZdq{}}\PY{l+s}{Distribtuion of Elevations}\PY{l+s}{\PYZdq{}}
 \PY{k}{for} \PY{p}{(}\PY{n}{key}\PY{p}{,} \PY{n}{val}\PY{p}{)} \PY{o+ow}{in} \PY{n+nb}{sorted}\PY{p}{(}\PY{n}{pairLabels}\PY{o}{.}\PY{n}{items}\PY{p}{(}\PY{p}{)}\PY{p}{)}\PY{p}{:}
     \PY{n}{ax}      \PY{o}{=} \PY{n}{plt}\PY{o}{.}\PY{n}{subplot}\PY{p}{(}\PY{l+m+mi}{4}\PY{p}{,}\PY{l+m+mi}{3}\PY{p}{,}\PY{n}{count}\PY{p}{)}
-    \PY{n}{azimuth} \PY{o}{=} \PY{n}{val}\PY{p}{[}\PY{p}{:}\PY{p}{,}\PY{l+m+mi}{1}\PY{p}{]}
-    \PY{n}{n}\PY{p}{,} \PY{n}{bins}\PY{p}{,} \PY{n}{patches} \PY{o}{=} \PY{n}{plt}\PY{o}{.}\PY{n}{hist}\PY{p}{(}\PY{n}{azimuth}\PY{p}{,} \PY{l+m+mi}{20}\PY{p}{,} \PY{n}{normed}\PY{o}{=}\PY{l+m+mi}{1}\PY{p}{,} \PY{n}{histtype}\PY{o}{=}\PY{l+s}{\PYZsq{}}\PY{l+s}{bar}\PY{l+s}{\PYZsq{}}\PY{p}{,} \PY{n}{rwidth}\PY{o}{=}\PY{l+m+mf}{0.8}\PY{p}{)}
+    \PY{n}{elevation} \PY{o}{=} \PY{n}{val}\PY{p}{[}\PY{p}{:}\PY{p}{,}\PY{l+m+mi}{1}\PY{p}{]}
+    \PY{n}{n}\PY{p}{,} \PY{n}{bins}\PY{p}{,} \PY{n}{patches} \PY{o}{=} \PY{n}{plt}\PY{o}{.}\PY{n}{hist}\PY{p}{(}\PY{n}{elevation}\PY{p}{,} \PY{l+m+mi}{20}\PY{p}{,} \PY{n}{normed}\PY{o}{=}\PY{l+m+mi}{1}\PY{p}{,} \PY{n}{histtype}\PY{o}{=}\PY{l+s}{\PYZsq{}}\PY{l+s}{bar}\PY{l+s}{\PYZsq{}}\PY{p}{,} \PY{n}{rwidth}\PY{o}{=}\PY{l+m+mf}{0.8}\PY{p}{)}
     \PY{n}{plt}\PY{o}{.}\PY{n}{title}\PY{p}{(}\PY{n}{key}\PY{p}{)}
     \PY{n}{ax}\PY{o}{.}\PY{n}{tick\PYZus{}params}\PY{p}{(}\PY{n}{axis}\PY{o}{=}\PY{l+s}{\PYZsq{}}\PY{l+s}{x}\PY{l+s}{\PYZsq{}}\PY{p}{,} \PY{n}{labelsize}\PY{o}{=}\PY{l+m+mi}{6}\PY{p}{)}
     \PY{n}{ax}\PY{o}{.}\PY{n}{tick\PYZus{}params}\PY{p}{(}\PY{n}{axis}\PY{o}{=}\PY{l+s}{\PYZsq{}}\PY{l+s}{y}\PY{l+s}{\PYZsq{}}\PY{p}{,} \PY{n}{labelsize}\PY{o}{=}\PY{l+m+mi}{6}\PY{p}{)}
@@ -600,8 +593,15 @@ tvmonitor    1570                 336
             
                 \begin{InvisibleVerbatim}
                 \vspace{-0.5\baselineskip}
+\begin{alltt}Distribtuion of Elevations
+\end{alltt}
+
+            \end{InvisibleVerbatim}
+            
+                \begin{InvisibleVerbatim}
+                \vspace{-0.5\baselineskip}
     \begin{center}
-    \includegraphics[max size={\textwidth}{\textheight}]{Relative-Rotations_files/Relative-Rotations_9_0.png}
+    \includegraphics[max size={\textwidth}{\textheight}]{Relative-Rotations_files/Relative-Rotations_9_1.png}
     \par
     \end{center}
     
@@ -762,6 +762,574 @@ critical differences between the two approaches is as following:
   the one used by the unsupervised method - which has a lot more
   training data available? Is that fine?
 \end{enumerate}
+
+    % Make sure that atleast 4 lines are below the HR
+    \needspace{4\baselineskip}
+
+    
+        \vspace{6pt}
+        \makebox[0.1\linewidth]{\smaller\hfill\tt\color{nbframe-in-prompt}In\hspace{4pt}{[}{]}:\hspace{4pt}}\\*
+        \vspace{-2.65\baselineskip}
+        \begin{ColorVerbatim}
+            \vspace{-0.7\baselineskip}
+            \begin{Verbatim}[commandchars=\\\{\}]
+\PY{c}{\PYZsh{}The visualizations for the picking data. }
+\PY{c}{\PYZsh{}I figured I havent trained a joint model for azimuth and polar angle which works \PYZhy{} so this needs to be done. }
+\end{Verbatim}
+
+            
+                \vspace{-0.2\baselineskip}
+            
+        \end{ColorVerbatim}
+    
+
+
+    % Make sure that atleast 4 lines are below the HR
+    \needspace{4\baselineskip}
+
+    
+        \vspace{6pt}
+        \makebox[0.1\linewidth]{\smaller\hfill\tt\color{nbframe-in-prompt}In\hspace{4pt}{[}36{]}:\hspace{4pt}}\\*
+        \vspace{-2.65\baselineskip}
+        \begin{ColorVerbatim}
+            \vspace{-0.7\baselineskip}
+            \begin{Verbatim}[commandchars=\\\{\}]
+\PY{c}{\PYZsh{}Performance on caltech}
+\PY{n}{ou} \PY{o}{=} \PY{n+nb}{reload}\PY{p}{(}\PY{n}{ou}\PY{p}{)}
+\PY{n}{maxLayer}    \PY{o}{=} \PY{p}{[}\PY{l+m+mi}{1}\PY{p}{,}\PY{l+m+mi}{2}\PY{p}{,}\PY{l+m+mi}{3}\PY{p}{,}\PY{l+m+mi}{4}\PY{p}{,}\PY{l+m+mi}{5}\PY{p}{,}\PY{l+m+mi}{6}\PY{p}{]}
+\PY{n}{prms} \PY{o}{=} \PY{n}{pc}\PY{o}{.}\PY{n}{get\PYZus{}prms}\PY{p}{(}\PY{p}{)}
+\PY{n}{accScratch}\PY{p}{,} \PY{n}{accClassScratch} \PY{o}{=} \PY{n}{pc}\PY{o}{.}\PY{n}{read\PYZus{}accuracy}\PY{p}{(}\PY{n}{prms}\PY{p}{,} \PY{n}{isPreTrain}\PY{o}{=}\PY{n+nb+bp}{False}\PY{p}{,} \PY{n}{preTrainStr}\PY{o}{=}\PY{n+nb+bp}{None}\PY{p}{,}
+                                            \PY{n}{isFineLast}\PY{o}{=}\PY{n+nb+bp}{True}\PY{p}{,} \PY{n}{initLr}\PY{o}{=}\PY{l+m+mf}{0.01}\PY{p}{)}
+
+\PY{n}{accPre60K}\PY{p}{,} \PY{n}{accClassPre60K} \PY{o}{=} \PY{n}{pc}\PY{o}{.}\PY{n}{read\PYZus{}accuracy}\PY{p}{(}\PY{n}{prms}\PY{p}{,} \PY{n}{isPreTrain}\PY{o}{=}\PY{n+nb+bp}{True}\PY{p}{,} \PY{n}{preTrainStr}\PY{o}{=}\PY{l+s}{\PYZsq{}}\PY{l+s}{rotObjs\PYZus{}kmedoids30\PYZus{}20\PYZus{}iter60K}\PY{l+s}{\PYZsq{}}\PY{p}{,}
+                                            \PY{n}{isFineLast}\PY{o}{=}\PY{n+nb+bp}{True}\PY{p}{,} \PY{n}{initLr}\PY{o}{=}\PY{l+m+mf}{0.001}\PY{p}{)}
+
+\PY{n}{accPre120K}\PY{p}{,} \PY{n}{accClassPre120K} \PY{o}{=} \PY{n}{pc}\PY{o}{.}\PY{n}{read\PYZus{}accuracy}\PY{p}{(}\PY{n}{prms}\PY{p}{,} \PY{n}{isPreTrain}\PY{o}{=}\PY{n+nb+bp}{True}\PY{p}{,} \PY{n}{preTrainStr}\PY{o}{=}\PY{l+s}{\PYZsq{}}\PY{l+s}{rotObjs\PYZus{}kmedoids30\PYZus{}20\PYZus{}nodrop\PYZus{}iter120K}\PY{l+s}{\PYZsq{}}\PY{p}{,}
+                                            \PY{n}{isFineLast}\PY{o}{=}\PY{n+nb+bp}{True}\PY{p}{,} \PY{n}{initLr}\PY{o}{=}\PY{l+m+mf}{0.001}\PY{p}{)}
+
+\PY{n}{alexPrms} \PY{o}{=} \PY{n}{pc}\PY{o}{.}\PY{n}{get\PYZus{}prms}\PY{p}{(}\PY{n}{imSz}\PY{o}{=}\PY{l+m+mi}{256}\PY{p}{)}
+\PY{n}{accAlex}\PY{p}{,} \PY{n}{accClassAlex} \PY{o}{=} \PY{n}{pc}\PY{o}{.}\PY{n}{read\PYZus{}accuracy}\PY{p}{(}\PY{n}{alexPrms}\PY{p}{,} \PY{n}{isPreTrain}\PY{o}{=}\PY{n+nb+bp}{True}\PY{p}{,} \PY{n}{preTrainStr}\PY{o}{=}\PY{l+s}{\PYZsq{}}\PY{l+s}{alex}\PY{l+s}{\PYZsq{}}\PY{p}{,} \PY{n}{isFineLast}\PY{o}{=}\PY{n+nb+bp}{True}\PY{p}{,} \PY{n}{initLr}\PY{o}{=}\PY{l+m+mf}{0.01}\PY{p}{)}
+    
+\PY{n}{tableArgs} \PY{o}{=} \PY{n}{co}\PY{o}{.}\PY{n}{OrderedDict}\PY{p}{(}\PY{p}{[}\PY{p}{(}\PY{l+s}{\PYZsq{}}\PY{l+s}{Layers}\PY{l+s}{\PYZsq{}}\PY{p}{,}\PY{n+nb}{range}\PY{p}{(}\PY{l+m+mi}{1}\PY{p}{,}\PY{l+m+mi}{7}\PY{p}{)}\PY{p}{)}\PY{p}{,} \PY{p}{(}\PY{l+s}{\PYZsq{}}\PY{l+s}{Scratch}\PY{l+s}{\PYZsq{}}\PY{p}{,} \PY{n}{accClassScratch}\PY{p}{)}\PY{p}{,}
+            \PY{p}{(}\PY{l+s}{\PYZsq{}}\PY{l+s}{Pre60K}\PY{l+s}{\PYZsq{}}\PY{p}{,} \PY{n}{accClassPre60K}\PY{p}{)}\PY{p}{,} \PY{p}{(}\PY{l+s}{\PYZsq{}}\PY{l+s}{Pre120K}\PY{l+s}{\PYZsq{}}\PY{p}{,} \PY{n}{accClassPre120K}\PY{p}{)}\PY{p}{,} \PY{p}{(}\PY{l+s}{\PYZsq{}}\PY{l+s}{Alex}\PY{l+s}{\PYZsq{}}\PY{p}{,} \PY{n}{accClassAlex}\PY{p}{)}\PY{p}{]}\PY{p}{)}
+\PY{k}{print} \PY{l+s}{\PYZdq{}}\PY{l+s}{Mean Accuracy of classes \PYZhy{} Finetune only the last layer.}\PY{l+s}{\PYZdq{}}
+\PY{k}{print} \PY{l+s}{\PYZsq{}}\PY{l+s}{\PYZhy{}}\PY{l+s}{\PYZsq{}} \PY{o}{*} \PY{l+m+mi}{50}
+\PY{n}{ou}\PY{o}{.}\PY{n}{make\PYZus{}table}\PY{p}{(}\PY{o}{*}\PY{o}{*}\PY{n}{tableArgs}\PY{p}{)}
+\end{Verbatim}
+
+            
+                \vspace{-0.2\baselineskip}
+            
+        \end{ColorVerbatim}
+    
+
+    
+
+        % If the first block is an image, minipage the image.  Else
+        % request a certain amount of space for the input text.
+        \needspace{4\baselineskip}
+        
+        
+
+            % Add document contents.
+            
+                \begin{InvisibleVerbatim}
+                \vspace{-0.5\baselineskip}
+\begin{alltt}Mean Accuracy of classes - Finetune only the last layer.
+--------------------------------------------------
+Layers          Scratch         Pre60K          Alex
+Pre120K
+
+----------------------------------------------------------------------
+-----
+
+1               0.395           0.447           0.529           0.429
+
+2               0.452           0.552           0.699           0.554
+
+3               0.443           0.538           0.745           0.545
+
+4               0.438           0.498           0.789           0.560
+
+5               0.252           0.507           0.860           0.531
+
+6               0.173           0.397           0.882           0.480
+
+\end{alltt}
+
+            \end{InvisibleVerbatim}
+            
+        
+    
+
+
+    % Make sure that atleast 4 lines are below the HR
+    \needspace{4\baselineskip}
+
+    
+        \vspace{6pt}
+        \makebox[0.1\linewidth]{\smaller\hfill\tt\color{nbframe-in-prompt}In\hspace{4pt}{[}17{]}:\hspace{4pt}}\\*
+        \vspace{-2.65\baselineskip}
+        \begin{ColorVerbatim}
+            \vspace{-0.7\baselineskip}
+            \begin{Verbatim}[commandchars=\\\{\}]
+\PY{n}{maxLayer}    \PY{o}{=} \PY{p}{[}\PY{l+m+mi}{1}\PY{p}{,}\PY{l+m+mi}{2}\PY{p}{,}\PY{l+m+mi}{3}\PY{p}{,}\PY{l+m+mi}{4}\PY{p}{]}
+\PY{n}{prms} \PY{o}{=} \PY{n}{pc}\PY{o}{.}\PY{n}{get\PYZus{}prms}\PY{p}{(}\PY{p}{)}
+\PY{n}{accScratch}\PY{p}{,} \PY{n}{accClassScratch} \PY{o}{=} \PY{n}{pc}\PY{o}{.}\PY{n}{read\PYZus{}accuracy}\PY{p}{(}\PY{n}{prms}\PY{p}{,} \PY{n}{isPreTrain}\PY{o}{=}\PY{n+nb+bp}{False}\PY{p}{,} \PY{n}{preTrainStr}\PY{o}{=}\PY{n+nb+bp}{None}\PY{p}{,}
+                                            \PY{n}{isFineLast}\PY{o}{=}\PY{n+nb+bp}{False}\PY{p}{,} \PY{n}{initLr}\PY{o}{=}\PY{l+m+mf}{0.0001}\PY{p}{,} \PY{n}{maxLayer}\PY{o}{=}\PY{n}{maxLayer}\PY{p}{)}
+
+\PY{n}{accPre60K}\PY{p}{,} \PY{n}{accClassPre60K} \PY{o}{=} \PY{n}{pc}\PY{o}{.}\PY{n}{read\PYZus{}accuracy}\PY{p}{(}\PY{n}{prms}\PY{p}{,} \PY{n}{isPreTrain}\PY{o}{=}\PY{n+nb+bp}{True}\PY{p}{,} \PY{n}{preTrainStr}\PY{o}{=}\PY{l+s}{\PYZsq{}}\PY{l+s}{rotObjs\PYZus{}kmedoids30\PYZus{}20\PYZus{}iter60K}\PY{l+s}{\PYZsq{}}\PY{p}{,}
+                                            \PY{n}{isFineLast}\PY{o}{=}\PY{n+nb+bp}{False}\PY{p}{,} \PY{n}{initLr}\PY{o}{=}\PY{l+m+mf}{0.01}\PY{p}{,} \PY{n}{maxLayer}\PY{o}{=}\PY{n}{maxLayer}\PY{p}{)}
+
+\PY{n}{tableArgs} \PY{o}{=} \PY{n}{co}\PY{o}{.}\PY{n}{OrderedDict}\PY{p}{(}\PY{p}{[}\PY{p}{(}\PY{l+s}{\PYZsq{}}\PY{l+s}{Layers}\PY{l+s}{\PYZsq{}}\PY{p}{,}\PY{n}{maxLayer}\PY{p}{)}\PY{p}{,} \PY{p}{(}\PY{l+s}{\PYZsq{}}\PY{l+s}{Scratch}\PY{l+s}{\PYZsq{}}\PY{p}{,} \PY{n}{accClassScratch}\PY{p}{)}\PY{p}{,}
+            \PY{p}{(}\PY{l+s}{\PYZsq{}}\PY{l+s}{Pre60K}\PY{l+s}{\PYZsq{}}\PY{p}{,} \PY{n}{accClassPre60K}\PY{p}{)}\PY{p}{]}\PY{p}{)}
+\PY{k}{print} \PY{l+s}{\PYZdq{}}\PY{l+s}{Mean Accuracy of classes \PYZhy{} Finetune ALL the layers.}\PY{l+s}{\PYZdq{}}
+\PY{k}{print} \PY{l+s}{\PYZsq{}}\PY{l+s}{\PYZhy{}}\PY{l+s}{\PYZsq{}} \PY{o}{*} \PY{l+m+mi}{50}
+\PY{n}{ou}\PY{o}{.}\PY{n}{make\PYZus{}table}\PY{p}{(}\PY{o}{*}\PY{o}{*}\PY{n}{tableArgs}\PY{p}{)}
+\end{Verbatim}
+
+            
+                \vspace{-0.2\baselineskip}
+            
+        \end{ColorVerbatim}
+    
+
+    
+
+        % If the first block is an image, minipage the image.  Else
+        % request a certain amount of space for the input text.
+        \needspace{4\baselineskip}
+        
+        
+
+            % Add document contents.
+            
+                
+            \begin{alltt}
+
+        --------------------------------------------------------------
+-------------
+    IOError                                   Traceback (most recent
+call last)
+
+
+
+        <ipython-input-17-129ccbe9890b> in <module>()
+          2 prms = pc.get\_prms()
+          3 accScratch, accClassScratch = pc.read\_accuracy(prms,
+isPreTrain=False, preTrainStr=None,
+    ----> 4
+isFineLast=False, initLr=0.0001, maxLayer=maxLayer)
+          5
+          6 accPre60K, accClassPre60K = pc.read\_accuracy(prms,
+isPreTrain=True, preTrainStr='rotObjs\_kmedoids30\_20\_iter60K',
+
+
+
+
+        /work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/keypoints/docu
+mentation/process\_caltech.pyc in read\_accuracy(prms, isPreTrain,
+preTrainStr, isFineLast, maxLayer, initLr, initStd)
+
+
+
+
+        /usr/lib/python2.7/dist-packages/h5py/\_hl/files.pyc in
+\_\_init\_\_(self, name, mode, driver, libver, userblock\_size, **kwds)
+        205
+        206             fapl = make\_fapl(driver, libver, **kwds)
+    --> 207             fid = make\_fid(name, mode, userblock\_size,
+fapl)
+        208
+        209         Group.\_\_init\_\_(self, fid)
+
+
+
+
+        /usr/lib/python2.7/dist-packages/h5py/\_hl/files.pyc in
+make\_fid(name, mode, userblock\_size, fapl, fcpl)
+         77
+         78     if mode == 'r':
+    ---> 79         fid = h5f.open(name, h5f.ACC\_RDONLY, fapl=fapl)
+         80     elif mode == 'r+':
+         81         fid = h5f.open(name, h5f.ACC\_RDWR, fapl=fapl)
+
+
+
+
+        /usr/lib/python2.7/dist-packages/h5py/h5f.so in h5py.h5f.open
+(h5py/h5f.c:1806)()
+
+
+
+
+        IOError: unable to open file (File accessibilty: Unable to
+open file)
+
+\end{alltt}
+        
+            
+                \begin{InvisibleVerbatim}
+                \vspace{-0.5\baselineskip}
+\begin{alltt}imSz128\_ntr30\_run0 pre-random\_ft-all\_mxl-1\_inLr1e-04
+\end{alltt}
+
+            \end{InvisibleVerbatim}
+            
+        
+    
+
+
+    % Make sure that atleast 4 lines are below the HR
+    \needspace{4\baselineskip}
+
+    
+        \vspace{6pt}
+        \makebox[0.1\linewidth]{\smaller\hfill\tt\color{nbframe-in-prompt}In\hspace{4pt}{[}39{]}:\hspace{4pt}}\\*
+        \vspace{-2.65\baselineskip}
+        \begin{ColorVerbatim}
+            \vspace{-0.7\baselineskip}
+            \begin{Verbatim}[commandchars=\\\{\}]
+\PY{n}{accClassScratch}
+\end{Verbatim}
+
+            
+                \vspace{-0.2\baselineskip}
+            
+        \end{ColorVerbatim}
+    
+
+    
+
+        % If the first block is an image, minipage the image.  Else
+        % request a certain amount of space for the input text.
+        \needspace{4\baselineskip}
+        
+        
+
+            % Add document contents.
+            
+                \makebox[0.1\linewidth]{\smaller\hfill\tt\color{nbframe-out-prompt}Out\hspace{4pt}{[}39{]}:\hspace{4pt}}\\*
+                \vspace{-2.55\baselineskip}\begin{InvisibleVerbatim}
+                \vspace{-0.5\baselineskip}
+\begin{alltt}array([ 0.49164349,  0.5151068 ], dtype=float32)\end{alltt}
+
+            \end{InvisibleVerbatim}
+            
+        
+    
+
+
+    % Make sure that atleast 4 lines are below the HR
+    \needspace{4\baselineskip}
+
+    
+        \vspace{6pt}
+        \makebox[0.1\linewidth]{\smaller\hfill\tt\color{nbframe-in-prompt}In\hspace{4pt}{[}8{]}:\hspace{4pt}}\\*
+        \vspace{-2.65\baselineskip}
+        \begin{ColorVerbatim}
+            \vspace{-0.7\baselineskip}
+            \begin{Verbatim}[commandchars=\\\{\}]
+\PY{c}{\PYZsh{}Visualize weights after finetuning.}
+\PY{n}{prms}  \PY{o}{=} \PY{n}{pc}\PY{o}{.}\PY{n}{get\PYZus{}prms}\PY{p}{(}\PY{p}{)} 
+\PY{n}{preTrainStr} \PY{o}{=} \PY{l+s}{\PYZsq{}}\PY{l+s}{rotObjs\PYZus{}kmedoids30\PYZus{}20\PYZus{}nodrop\PYZus{}iter120K}\PY{l+s}{\PYZsq{}}
+\PY{n}{isFineLast}  \PY{o}{=} \PY{p}{[}\PY{n+nb+bp}{True}\PY{p}{,} \PY{n+nb+bp}{False}\PY{p}{]}
+\PY{n}{initLr} \PY{o}{=} \PY{p}{[}\PY{l+m+mf}{0.001}\PY{p}{,} \PY{l+m+mf}{0.000001}\PY{p}{]}
+\PY{n}{initStd} \PY{o}{=} \PY{p}{[}\PY{l+m+mf}{0.01}\PY{p}{,} \PY{l+m+mf}{0.001}\PY{p}{]}
+
+\PY{k}{for} \PY{p}{(}\PY{n}{i}\PY{p}{,}\PY{n}{ff}\PY{p}{)} \PY{o+ow}{in} \PY{n+nb}{enumerate}\PY{p}{(}\PY{n}{isFineLast}\PY{p}{)}\PY{p}{:}
+    \PY{n}{cPrms} \PY{o}{=} \PY{n}{pc}\PY{o}{.}\PY{n}{get\PYZus{}caffe\PYZus{}prms}\PY{p}{(}\PY{n}{isPreTrain}\PY{o}{=}\PY{n+nb+bp}{True}\PY{p}{,} \PY{n}{maxLayer}\PY{o}{=}\PY{l+m+mi}{1}\PY{p}{,}
+                          \PY{n}{preTrainStr}\PY{o}{=}\PY{n}{preTrainStr}\PY{p}{,} \PY{n}{isFineLast}\PY{o}{=}\PY{n}{ff}\PY{p}{,}
+                           \PY{n}{initLr}\PY{o}{=}\PY{n}{initLr}\PY{p}{[}\PY{n}{i}\PY{p}{]}\PY{p}{,} \PY{n}{initStd}\PY{o}{=}\PY{n}{initStd}\PY{p}{[}\PY{n}{i}\PY{p}{]}\PY{p}{,} \PY{n}{testNum}\PY{o}{=}\PY{n+nb+bp}{None}\PY{p}{)}
+    \PY{n}{ax} \PY{o}{=} \PY{n}{plt}\PY{o}{.}\PY{n}{subplot}\PY{p}{(}\PY{l+m+mi}{1}\PY{p}{,}\PY{n+nb}{len}\PY{p}{(}\PY{n}{isFineLast}\PY{p}{)}\PY{p}{,}\PY{n}{i}\PY{o}{+}\PY{l+m+mi}{1}\PY{p}{)}
+    \PY{n}{exp} \PY{o}{=} \PY{n}{pc}\PY{o}{.}\PY{n}{get\PYZus{}experiment\PYZus{}object}\PY{p}{(}\PY{n}{prms}\PY{p}{,} \PY{n}{cPrms}\PY{p}{)}
+    \PY{n}{exp}\PY{o}{.}\PY{n}{init\PYZus{}from\PYZus{}self}\PY{p}{(}\PY{p}{)}
+    \PY{n}{modelFile} \PY{o}{=} \PY{n}{exp}\PY{o}{.}\PY{n}{get\PYZus{}snapshot\PYZus{}name}\PY{p}{(}\PY{n}{numIter}\PY{o}{=}\PY{l+m+mi}{5001}\PY{p}{)}
+    \PY{n}{defFile}   \PY{o}{=} \PY{n}{exp}\PY{o}{.}\PY{n}{files\PYZus{}}\PY{p}{[}\PY{l+s}{\PYZsq{}}\PY{l+s}{netdef}\PY{l+s}{\PYZsq{}}\PY{p}{]}
+    \PY{n}{netUnsup}    \PY{o}{=} \PY{n}{mp}\PY{o}{.}\PY{n}{MyNet}\PY{p}{(}\PY{n}{defFile}\PY{p}{,} \PY{n}{modelFile}\PY{p}{)}
+    \PY{k}{print} \PY{n}{modelFile}
+    \PY{n}{netUnsup}\PY{o}{.}\PY{n}{vis\PYZus{}weights}\PY{p}{(}\PY{l+s}{\PYZsq{}}\PY{l+s}{conv1}\PY{l+s}{\PYZsq{}}\PY{p}{,}\PY{n}{ax}\PY{o}{=}\PY{n}{ax}\PY{p}{,} \PY{n}{titleName}\PY{o}{=}\PY{l+s}{\PYZsq{}}\PY{l+s}{Fine\PYZhy{}Last: }\PY{l+s+si}{\PYZpc{}d}\PY{l+s}{\PYZsq{}} \PY{o}{\PYZpc{}} \PY{n}{ff}\PY{p}{)}
+    \PY{n}{ax}\PY{o}{.}\PY{n}{axis}\PY{p}{(}\PY{l+s}{\PYZsq{}}\PY{l+s}{off}\PY{l+s}{\PYZsq{}}\PY{p}{)}
+\PY{n}{plt}\PY{o}{.}\PY{n}{tight\PYZus{}layout}\PY{p}{(}\PY{p}{)}
+\end{Verbatim}
+
+            
+                \vspace{-0.2\baselineskip}
+            
+        \end{ColorVerbatim}
+    
+
+    
+
+        % If the first block is an image, minipage the image.  Else
+        % request a certain amount of space for the input text.
+        \needspace{4\baselineskip}
+        
+        
+
+            % Add document contents.
+            
+                \begin{InvisibleVerbatim}
+                \vspace{-0.5\baselineskip}
+\begin{alltt}Ignoring line: \# Autotmatically generated solver prototxt
+/data1/pulkitag/caltech101/snapshots/imSz128\_ntr30\_run0/caffenet\_pre-
+rotObjs\_kmedoids30\_20\_nodrop\_iter120K\_ft-last\_mxl-1\_inLr1e-
+03\_iter\_5001.caffemodel
+Ignoring line: \# Autotmatically generated solver prototxt
+/data1/pulkitag/caltech101/snapshots/imSz128\_ntr30\_run0/caffenet\_pre-
+rotObjs\_kmedoids30\_20\_nodrop\_iter120K\_ft-all\_mxl-1\_inLr1e-06\_inSd1e-
+03\_iter\_5001.caffemodel
+\end{alltt}
+
+            \end{InvisibleVerbatim}
+            
+                \begin{InvisibleVerbatim}
+                \vspace{-0.5\baselineskip}
+    \begin{center}
+    \includegraphics[max size={\textwidth}{\textheight}]{Relative-Rotations_files/Relative-Rotations_17_1.png}
+    \par
+    \end{center}
+    
+            \end{InvisibleVerbatim}
+            
+        
+    
+\subsection{Current Thoughts}\label{current-thoughts}
+
+One thing which is still unclear is what is the best way of supervision
+to train the networks. Should it be regression, classification, within
+classification should it be predicting uniformaly across all bins, or
+limit the amount of transformation or something else? I have experiments
+with:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\itemsep1pt\parskip0pt\parsep0pt
+\item
+  Regression - seems to be hard to train.
+\item
+  Classifying euler angles uniformly -- seems to produce a lot of dead
+  filters.
+\item
+  K-Medoid clustering only on objects within 30 degrees seems to produce
+  the best filters at the moment.
+\item
+  Now, I am going to try to predict the euler angles seperately but
+  within 30 degrees only.
+\end{enumerate}
+
+    % Make sure that atleast 4 lines are below the HR
+    \needspace{4\baselineskip}
+
+    
+        \vspace{6pt}
+        \makebox[0.1\linewidth]{\smaller\hfill\tt\color{nbframe-in-prompt}In\hspace{4pt}{[}16{]}:\hspace{4pt}}\\*
+        \vspace{-2.65\baselineskip}
+        \begin{ColorVerbatim}
+            \vspace{-0.7\baselineskip}
+            \begin{Verbatim}[commandchars=\\\{\}]
+\PY{n}{prms}  \PY{o}{=} \PY{n}{p3d}\PY{o}{.}\PY{n}{get\PYZus{}exp\PYZus{}prms}\PY{p}{(}\PY{n}{imSz}\PY{o}{=}\PY{l+m+mi}{256}\PY{p}{,} \PY{n}{lblType}\PY{o}{=}\PY{l+s}{\PYZsq{}}\PY{l+s}{rotLim}\PY{l+s}{\PYZsq{}}\PY{p}{,} \PY{n}{numSamplesTrain}\PY{o}{=}\PY{l+m+mf}{1e+05}\PY{p}{,} \PY{n}{azBin}\PY{o}{=}\PY{l+m+mi}{6}\PY{p}{,} \PY{n}{elBin}\PY{o}{=}\PY{l+m+mi}{6}\PY{p}{)}
+\PY{n}{names} \PY{o}{=} \PY{p}{[}\PY{l+s}{\PYZsq{}}\PY{l+s}{azimuth}\PY{l+s}{\PYZsq{}}\PY{p}{,} \PY{l+s}{\PYZsq{}}\PY{l+s}{elevation}\PY{l+s}{\PYZsq{}}\PY{p}{]} 
+\PY{c}{\PYZsh{}Distribution in the val set}
+\PY{n}{gen}    \PY{o}{=} \PY{n}{mpio}\PY{o}{.}\PY{n}{GenericWindowReader}\PY{p}{(}\PY{n}{prms}\PY{p}{[}\PY{l+s}{\PYZsq{}}\PY{l+s}{paths}\PY{l+s}{\PYZsq{}}\PY{p}{]}\PY{p}{[}\PY{l+s}{\PYZsq{}}\PY{l+s}{windowFile}\PY{l+s}{\PYZsq{}}\PY{p}{]}\PY{p}{[}\PY{l+s}{\PYZsq{}}\PY{l+s}{val}\PY{l+s}{\PYZsq{}}\PY{p}{]}\PY{p}{)}
+\PY{n}{lbls}   \PY{o}{=} \PY{n}{gen}\PY{o}{.}\PY{n}{get\PYZus{}all\PYZus{}labels}\PY{p}{(}\PY{p}{)}
+\PY{n}{fig} \PY{o}{=} \PY{n}{plt}\PY{o}{.}\PY{n}{figure}\PY{p}{(}\PY{p}{)}
+\PY{k}{for} \PY{n}{i} \PY{o+ow}{in} \PY{n+nb}{range}\PY{p}{(}\PY{l+m+mi}{2}\PY{p}{)}\PY{p}{:}
+    \PY{n}{ax} \PY{o}{=} \PY{n}{plt}\PY{o}{.}\PY{n}{subplot}\PY{p}{(}\PY{l+m+mi}{1}\PY{p}{,}\PY{n}{lbls}\PY{o}{.}\PY{n}{shape}\PY{p}{[}\PY{l+m+mi}{1}\PY{p}{]}\PY{p}{,} \PY{n}{i}\PY{o}{+}\PY{l+m+mi}{1}\PY{p}{)}
+    \PY{n}{plt}\PY{o}{.}\PY{n}{hist}\PY{p}{(}\PY{n}{lbls}\PY{p}{[}\PY{p}{:}\PY{p}{,}\PY{n}{i}\PY{p}{]}\PY{p}{,} \PY{n+nb}{len}\PY{p}{(}\PY{n}{prms}\PY{p}{[}\PY{l+s}{\PYZsq{}}\PY{l+s}{azBinRange}\PY{l+s}{\PYZsq{}}\PY{p}{]}\PY{p}{)} \PY{o}{+} \PY{l+m+mi}{2}\PY{p}{)}
+    \PY{n}{plt}\PY{o}{.}\PY{n}{title}\PY{p}{(}\PY{n}{names}\PY{p}{[}\PY{n}{i}\PY{p}{]}\PY{p}{)}
+\PY{n}{plt}\PY{o}{.}\PY{n}{tight\PYZus{}layout}\PY{p}{(}\PY{p}{)}
+\PY{n}{count} \PY{o}{=} \PY{n}{ou}\PY{o}{.}\PY{n}{count\PYZus{}unique}\PY{p}{(}\PY{n}{lbls}\PY{p}{,} \PY{l+m+mi}{12}\PY{p}{)}
+\PY{k}{print} \PY{n}{count}\PY{o}{/}\PY{n+nb}{sum}\PY{p}{(}\PY{n}{count}\PY{p}{)}
+\end{Verbatim}
+
+            
+                \vspace{-0.2\baselineskip}
+            
+        \end{ColorVerbatim}
+    
+
+    
+
+        % If the first block is an image, minipage the image.  Else
+        % request a certain amount of space for the input text.
+        \needspace{4\baselineskip}
+        
+        
+
+            % Add document contents.
+            
+                \begin{InvisibleVerbatim}
+                \vspace{-0.5\baselineskip}
+\begin{alltt}All lines already read
+[ 0.15122222  0.04547222  0.05127778  0.06038889  0.07338889
+0.12858333
+  0.1125      0.07088889  0.05988889  0.05086111  0.04402778
+0.02777778
+  0.12372222]
+\end{alltt}
+
+            \end{InvisibleVerbatim}
+            
+                \begin{InvisibleVerbatim}
+                \vspace{-0.5\baselineskip}
+    \begin{center}
+    \includegraphics[max size={\textwidth}{\textheight}]{Relative-Rotations_files/Relative-Rotations_19_1.png}
+    \par
+    \end{center}
+    
+            \end{InvisibleVerbatim}
+            
+        
+    
+
+
+    % Make sure that atleast 4 lines are below the HR
+    \needspace{4\baselineskip}
+
+    
+        \vspace{6pt}
+        \makebox[0.1\linewidth]{\smaller\hfill\tt\color{nbframe-in-prompt}In\hspace{4pt}{[}12{]}:\hspace{4pt}}\\*
+        \vspace{-2.65\baselineskip}
+        \begin{ColorVerbatim}
+            \vspace{-0.7\baselineskip}
+            \begin{Verbatim}[commandchars=\\\{\}]
+\PY{c}{\PYZsh{}Distribution in the val set}
+\PY{n}{gen}    \PY{o}{=} \PY{n}{mpio}\PY{o}{.}\PY{n}{GenericWindowReader}\PY{p}{(}\PY{n}{prms}\PY{p}{[}\PY{l+s}{\PYZsq{}}\PY{l+s}{paths}\PY{l+s}{\PYZsq{}}\PY{p}{]}\PY{p}{[}\PY{l+s}{\PYZsq{}}\PY{l+s}{windowFile}\PY{l+s}{\PYZsq{}}\PY{p}{]}\PY{p}{[}\PY{l+s}{\PYZsq{}}\PY{l+s}{train}\PY{l+s}{\PYZsq{}}\PY{p}{]}\PY{p}{)}
+\PY{n}{lbls}   \PY{o}{=} \PY{n}{gen}\PY{o}{.}\PY{n}{get\PYZus{}all\PYZus{}labels}\PY{p}{(}\PY{p}{)}
+\PY{n}{fig} \PY{o}{=} \PY{n}{plt}\PY{o}{.}\PY{n}{figure}\PY{p}{(}\PY{p}{)}
+\PY{k}{for} \PY{n}{i} \PY{o+ow}{in} \PY{n+nb}{range}\PY{p}{(}\PY{l+m+mi}{2}\PY{p}{)}\PY{p}{:}
+    \PY{n}{ax} \PY{o}{=} \PY{n}{plt}\PY{o}{.}\PY{n}{subplot}\PY{p}{(}\PY{l+m+mi}{1}\PY{p}{,}\PY{n}{lbls}\PY{o}{.}\PY{n}{shape}\PY{p}{[}\PY{l+m+mi}{1}\PY{p}{]}\PY{p}{,} \PY{n}{i}\PY{o}{+}\PY{l+m+mi}{1}\PY{p}{)}
+    \PY{n}{plt}\PY{o}{.}\PY{n}{hist}\PY{p}{(}\PY{n}{lbls}\PY{p}{[}\PY{p}{:}\PY{p}{,}\PY{n}{i}\PY{p}{]}\PY{p}{,} \PY{n+nb}{len}\PY{p}{(}\PY{n}{prms}\PY{p}{[}\PY{l+s}{\PYZsq{}}\PY{l+s}{azBinRange}\PY{l+s}{\PYZsq{}}\PY{p}{]}\PY{p}{)} \PY{o}{+} \PY{l+m+mi}{2}\PY{p}{)}
+    \PY{n}{plt}\PY{o}{.}\PY{n}{title}\PY{p}{(}\PY{n}{names}\PY{p}{[}\PY{n}{i}\PY{p}{]}\PY{p}{)}
+\PY{n}{plt}\PY{o}{.}\PY{n}{tight\PYZus{}layout}\PY{p}{(}\PY{p}{)}
+\end{Verbatim}
+
+            
+                \vspace{-0.2\baselineskip}
+            
+        \end{ColorVerbatim}
+    
+
+    
+
+        % If the first block is an image, minipage the image.  Else
+        % request a certain amount of space for the input text.
+        \needspace{4\baselineskip}
+        
+        
+
+            % Add document contents.
+            
+                \begin{InvisibleVerbatim}
+                \vspace{-0.5\baselineskip}
+\begin{alltt}All lines already read
+\end{alltt}
+
+            \end{InvisibleVerbatim}
+            
+                \begin{InvisibleVerbatim}
+                \vspace{-0.5\baselineskip}
+    \begin{center}
+    \includegraphics[max size={\textwidth}{\textheight}]{Relative-Rotations_files/Relative-Rotations_20_1.png}
+    \par
+    \end{center}
+    
+            \end{InvisibleVerbatim}
+            
+        
+    
+
+
+    % Make sure that atleast 4 lines are below the HR
+    \needspace{4\baselineskip}
+
+    
+        \vspace{6pt}
+        \makebox[0.1\linewidth]{\smaller\hfill\tt\color{nbframe-in-prompt}In\hspace{4pt}{[}10{]}:\hspace{4pt}}\\*
+        \vspace{-2.65\baselineskip}
+        \begin{ColorVerbatim}
+            \vspace{-0.7\baselineskip}
+            \begin{Verbatim}[commandchars=\\\{\}]
+\PY{n}{prms}  \PY{o}{=} \PY{n}{p3d}\PY{o}{.}\PY{n}{get\PYZus{}exp\PYZus{}prms}\PY{p}{(}\PY{n}{cropType}\PY{o}{=}\PY{l+s}{\PYZsq{}}\PY{l+s}{contPad}\PY{l+s}{\PYZsq{}}\PY{p}{,} \PY{n}{numSamplesTrain}\PY{o}{=}\PY{l+m+mi}{100000}\PY{p}{,} \PY{n}{lblType}\PY{o}{=}\PY{l+s}{\PYZsq{}}\PY{l+s}{rotLim}\PY{l+s}{\PYZsq{}}\PY{p}{)}
+\PY{n}{numIter} \PY{o}{=} \PY{l+m+mi}{50000}
+\PY{n}{fig} \PY{o}{=} \PY{n}{plt}\PY{o}{.}\PY{n}{figure}\PY{p}{(}\PY{p}{)}
+\PY{n}{ax} \PY{o}{=} \PY{n}{plt}\PY{o}{.}\PY{n}{subplot}\PY{p}{(}\PY{l+m+mi}{2}\PY{p}{,}\PY{l+m+mi}{2}\PY{p}{,}\PY{l+m+mi}{1}\PY{p}{)}
+\PY{n}{ax2} \PY{o}{=} \PY{n}{plt}\PY{o}{.}\PY{n}{subplot}\PY{p}{(}\PY{l+m+mi}{2}\PY{p}{,}\PY{l+m+mi}{2}\PY{p}{,}\PY{l+m+mi}{2}\PY{p}{)}
+\PY{n}{ax3} \PY{o}{=} \PY{n}{plt}\PY{o}{.}\PY{n}{subplot}\PY{p}{(}\PY{l+m+mi}{2}\PY{p}{,}\PY{l+m+mi}{2}\PY{p}{,}\PY{l+m+mi}{3}\PY{p}{)}
+\PY{n}{ax4} \PY{o}{=} \PY{n}{plt}\PY{o}{.}\PY{n}{subplot}\PY{p}{(}\PY{l+m+mi}{2}\PY{p}{,}\PY{l+m+mi}{2}\PY{p}{,}\PY{l+m+mi}{4}\PY{p}{)}
+\PY{n}{cPrms} \PY{o}{=} \PY{n}{p3d}\PY{o}{.}\PY{n}{get\PYZus{}caffe\PYZus{}prms}\PY{p}{(}\PY{p}{)}
+\PY{n}{exp} \PY{o}{=} \PY{n}{pc}\PY{o}{.}\PY{n}{get\PYZus{}experiment\PYZus{}object}\PY{p}{(}\PY{n}{prms}\PY{p}{,} \PY{n}{cPrms}\PY{p}{,}\PY{l+m+mi}{0}\PY{p}{)}
+\PY{n}{exp}\PY{o}{.}\PY{n}{init\PYZus{}from\PYZus{}self}\PY{p}{(}\PY{p}{)}
+\PY{n}{modelFile} \PY{o}{=} \PY{n}{exp}\PY{o}{.}\PY{n}{get\PYZus{}snapshot\PYZus{}name}\PY{p}{(}\PY{n}{numIter}\PY{o}{=}\PY{l+m+mi}{10000}\PY{p}{)}
+\PY{n}{defFile}   \PY{o}{=} \PY{n}{exp}\PY{o}{.}\PY{n}{files\PYZus{}}\PY{p}{[}\PY{l+s}{\PYZsq{}}\PY{l+s}{netdef}\PY{l+s}{\PYZsq{}}\PY{p}{]}
+\PY{n}{netUnsup}    \PY{o}{=} \PY{n}{mp}\PY{o}{.}\PY{n}{MyNet}\PY{p}{(}\PY{n}{defFile}\PY{p}{,} \PY{n}{modelFile}\PY{p}{)}
+\PY{k}{print} \PY{n}{modelFile}
+\PY{n}{netUnsup}\PY{o}{.}\PY{n}{vis\PYZus{}weights}\PY{p}{(}\PY{l+s}{\PYZsq{}}\PY{l+s}{conv1}\PY{l+s}{\PYZsq{}}\PY{p}{,}\PY{n}{ax}\PY{o}{=}\PY{n}{ax}\PY{p}{,} \PY{n}{titleName}\PY{o}{=}\PY{l+s}{\PYZsq{}}\PY{l+s}{Fine\PYZhy{}Last: }\PY{l+s+si}{\PYZpc{}d}\PY{l+s}{\PYZsq{}} \PY{o}{\PYZpc{}} \PY{n}{ff}\PY{p}{)}
+\PY{n}{ax}\PY{o}{.}\PY{n}{axis}\PY{p}{(}\PY{l+s}{\PYZsq{}}\PY{l+s}{off}\PY{l+s}{\PYZsq{}}\PY{p}{)}
+\PY{n}{plt}\PY{o}{.}\PY{n}{tight\PYZus{}layout}\PY{p}{(}\PY{p}{)}
+\end{Verbatim}
+
+            
+                \vspace{-0.2\baselineskip}
+            
+        \end{ColorVerbatim}
+    
+
+    
+
+        % If the first block is an image, minipage the image.  Else
+        % request a certain amount of space for the input text.
+        \needspace{4\baselineskip}
+        
+        
+
+            % Add document contents.
+            
+                
+            \begin{alltt}
+
+        --------------------------------------------------------------
+-------------
+    KeyError                                  Traceback (most recent
+call last)
+
+
+
+        <ipython-input-10-fd456c77a7c4> in <module>()
+          7 ax4 = plt.subplot(2,2,4)
+          8 cPrms = p3d.get\_caffe\_prms()
+    ----> 9 exp = pc.get\_experiment\_object(prms, cPrms,0)
+         10 exp.init\_from\_self()
+         11 modelFile = exp.get\_snapshot\_name(numIter=10000)
+
+
+
+
+        /work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/keypoints/docu
+mentation/process\_caltech.pyc in get\_experiment\_object(prms, cPrms,
+deviceId)
+
+
+
+
+        KeyError: 'expDir'
+
+\end{alltt}
+        
+            
+                \begin{InvisibleVerbatim}
+                \vspace{-0.5\baselineskip}
+    \begin{center}
+    \includegraphics[max size={\textwidth}{\textheight}]{Relative-Rotations_files/Relative-Rotations_21_1.png}
+    \par
+    \end{center}
+    
+            \end{InvisibleVerbatim}
+            
+        
+    
+
 
     % Make sure that atleast 4 lines are below the HR
     \needspace{4\baselineskip}

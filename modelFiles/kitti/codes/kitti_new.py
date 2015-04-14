@@ -10,7 +10,7 @@ import myutils as myu
 import copy
 
 SET_NAMES = ['train', 'test']
-
+baseFilePath = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/kitti/base_files'
 ##
 # Resize and convert images to 256 by 256 for saving them.
 def resize_images(prms):
@@ -235,12 +235,34 @@ def get_solver(cPrms):
 
 
 def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId=1, 
-									 contextPad=24, imSz=227): 
+									 contextPad=24, imSz=227, 
+									isFineTune=False, sourceModelIter=100000,
+									 lrAbove=None,
+									fine_base_lr=0.001, fineRunNum=1, fineNumData=1, 
+									fineMaxLayer=None, fineDataSet='sun'):
+	'''
+		sourceModelIter: The number of model iterations of the source model to consider
+		fine_max_iter  : The maximum iterations to which the target model should be trained.
+		lrAbove        : If learning is to be performed some layer. 
+		fine_base_lr   : The base learning rate for finetuning. 
+ 		fineRunNum     : The run num for the finetuning.
+		fineNumData    : The amount of data to be used for the finetuning. 
+		fineMaxLayer   : The maximum layer of the source n/w that should be considered.  
+	''' 
 	caffePrms = {}
 	caffePrms['concatLayer'] = concatLayer
 	caffePrms['deviceId']    = deviceId
 	caffePrms['contextPad']  = contextPad
 	caffePrms['imSz']        = imSz
+	caffePrms['isFineTune']  = isFineTune
+	caffePrms['fine']        = {}
+	caffePrms['fine']['modelIter'] = sourceModelIter
+	caffePrms['fine']['lrAbove']   = lrAbove
+	caffePrms['fine']['base_lr']   = fine_base_lr
+	caffePrms['fine']['runNum']    = fineRunNum
+	caffePrms['fine']['numData']   = fineNumData
+	caffePrms['fine']['maxLayer']  = fineMaxLayer
+	caffePrms['fine']['dataset']   = fineDataSet
 
 	expStr = []
 	expStr.append('con-%s' % concatLayer)
@@ -251,6 +273,17 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 	expStr.append('pad%d' % contextPad)
 	expStr.append('imS%d' % imSz)	
 
+	if isFineTune:
+		expStr.append(fineDataSet)
+		expStr.append('mItr%dK' % int(sourceModelIter/1000))
+		if lrAbove is not None:
+			expStr.append('lrAbv-%s' % lrAbove)
+		expStr.append('bLr%.0e' % fine_base_lr)
+		expStr.append('run%d' % fineRunNum)
+		expStr.append('datN%.0e' % fineNumData)
+		if fineMaxLayer is not None:
+			expStr.append('mxl%d' % fineMaxLayer)
+	
 	expStr = ''.join(s + '_' for s in expStr)
 	expStr = expStr[0:-1]
 	caffePrms['expStr'] = expStr
@@ -263,7 +296,50 @@ def get_experiment_object(prms, cPrms):
 						  deviceId=cPrms['deviceId'])
 	return caffeExp
 
+##
+# Setups an experiment for finetuning. 
+def setup_experiment_finetune(prms, cPrms):
+	#Get the model name from the source experiment. 
+	caffeExp  = get_experiment_object(prms, cPrms)
+	caffeExp.init_from_external(solDef, protoDef)
+	modelFile = caffeExp.get_snapshot_name(cPrms['fine']['modelIter'])
 
+	#Get the def file.
+	defFile = os.path.join(baseFilePath,
+						 'kitti_finetune_fc6_deploy.prototxt')
+
+	#Setup the target experiment. 
+	tgCPrms = get_caffe_prms(isFineTune=True, **cPrms)
+	tgPrms  = copy.deepcopy(prms)
+	tgPrms['expName'] = 'fine-FROM-%s' % prms['expName']
+	tgExp   = get_experiment_object(tgPrms, tgCPrms)
+
+	#Do things as needed. 
+	if tgCPrms['lrAbove'] is not None:
+		tgExp.finetune_above(tgCPrms['lrAbove']		
+
+	if tgCPrms['maxLayer'] is not None:
+		tgExp.del_all_layers_above(tgCPrms['maxLayer'])
+		tgExp.set_layer_property('class_fc', ['bottom'],
+				 '"%s"' % tgCPrms['maxLayer']) 
+
+	#Put the right data files.
+	if tgCPrms['fine']['numData'] == 1 and tgCPrms['fine']['dataset']=='sun':
+		dbPath = '/data0/pulkitag/data_sets/sun/leveldb_store'
+		dbFile = os.path.join(dbPath, 'sun-leveldb-%s-%d')
+		trnFile = dbFile % ('train', tgCPrms['fine']['runNum'])
+		tstFile = dbFile % ('test', tgCprms['fine']['runNum'])
+		tgExp.set_layer_property('data', ['data_param', 'source'],
+						'"%s"' % trnFile, phase='TRAIN')
+		tgExp.set_layer_property('data', ['data_param', 'source'],
+						'"%s"' % tstFile, phase='TEST')
+		tgExp.set_layer_property('data', ['data_param', 'backend'],
+						'LEVELDB', phase='TRAIN')
+		tgExp.set_layer_property('data', ['data_param', 'backend'],
+						'LEVELDB', phase='TEST')
+	return tgExp	
+	
+	
 def setup_experiment(prms, cPrms):
 	#The size of the labels
 	if prms['pose'] == 'euler':
@@ -276,7 +352,6 @@ def setup_experiment(prms, cPrms):
 		raise Exception('Unrecognized %s pose type' % prms['pose'])
 
 	#The base file to start with
-	baseFilePath = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/kitti/base_files'
 	baseFileStr  = 'kitti_siamese_window_%s' % cPrms['concatLayer']
 	if prms['lossType'] == 'classify':
 		baseStr = '_cls-trn%d-rot%d' % (trnSz, rotSz)
@@ -330,14 +405,17 @@ def setup_experiment(prms, cPrms):
 	return caffeExp
 
 ##
-def make_experiment(prms, cPrms):
-	caffeExp = setup_experiment(prms, cPrms)
+def make_experiment(prms, cPrms, isFine=False):
+	if isFine:
+		caffeExp = setup_experiment_finetune(prms, cPrms)
+	else:
+		caffeExp = setup_experiment(prms, cPrms)
 	caffeExp.make()
 	return caffeExp	
 
 ##
-def run_experiment(prms, cPrms):
-	caffeExp = make_experiment(prms, cPrms)
+def run_experiment(prms, cPrms, isFine=False):
+	caffeExp = make_experiment(prms, cPrms, isFine=isFine)
 	caffeExp.run()
 
 	
