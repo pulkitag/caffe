@@ -8,7 +8,7 @@ layer {
     phase: TRAIN
   }
   transform_param {
-    mirror: false
+    mirror: true
     crop_size: 227
     mean_file: "/data0/pulkitag/kitti/lmdb-store/kitti_mean_deploy.binaryproto"
   }

@@ -439,13 +439,16 @@ def run_experiment(prms, cPrms, isFine=False):
 	caffeExp.run()
 
 
-def run_sun_layerwise():
-	maxLayers = ['fc6', 'pool5', 'relu4', 'relu3', 'pool2', 'pool1']
-	lrAbove   = ['fc6', 'conv5', 'conv4', 'conv3', 'conv2', 'conv1']
+def run_sun_layerwise(deviceId=2, runNum=2):
+	#maxLayers = ['fc6', 'pool5', 'relu4', 'relu3', 'pool2', 'pool1']
+	#lrAbove   = ['fc6', 'conv5', 'conv4', 'conv3', 'conv2', 'conv2']
+	maxLayers = ['relu3']
+	lrAbove   = ['conv1']
 	prms      = ku.get_prms(poseType='sigMotion', maxFrameDiff=7,
 							 imSz=None, isNewExpDir=True)
-	for mxl, abv in zip(maxLayers, lrAbove):
+	for mxl, abv in zip(reversed(maxLayers), reversed(lrAbove)):
 		cPrms = get_caffe_prms(concatLayer='fc6', fineMaxLayer=mxl,
-					lrAbove=abv, fineMaxIter=15000)
+					lrAbove=abv, fineMaxIter=15000, deviceId=deviceId,
+					fineRunNum=runNum)
 		run_experiment(prms, cPrms, True)
 	
