@@ -282,8 +282,11 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 
 	if isFineTune:
 		expStr.append(fineDataSet)
-		expStr.append('mItr%dK' % int(sourceModelIter/1000))
-		if lrAbove is not None:
+		if sourceModelIter is not None:
+			expStr.append('mItr%dK' % int(sourceModelIter/1000))
+		else:
+			expStr.append('scratch')	
+	if lrAbove is not None:
 			expStr.append('lrAbv-%s' % lrAbove)
 		expStr.append('bLr%.0e' % fine_base_lr)
 		expStr.append('run%d' % fineRunNum)
@@ -426,7 +429,10 @@ def make_experiment(prms, cPrms, isFine=False):
 		caffeExp = setup_experiment_finetune(prms, cPrms)
 		#Get the model name from the source experiment. 
 		srcCaffeExp  = setup_experiment(prms, cPrms)
-		modelFile = srcCaffeExp.get_snapshot_name(cPrms['fine']['modelIter'])
+		if cPrms['sourceModelIter'] is not None:
+			modelFile = srcCaffeExp.get_snapshot_name(cPrms['fine']['modelIter'])
+		else:
+			modelFile = None
 	else:
 		caffeExp  = setup_experiment(prms, cPrms)
 		modelFile = None
@@ -448,4 +454,12 @@ def run_sun_layerwise():
 		cPrms = get_caffe_prms(concatLayer='fc6', fineMaxLayer=mxl,
 					lrAbove=abv, fineMaxIter=15000)
 		run_experiment(prms, cPrms, True)
-	
+
+
+def run_sun_scratch():
+	prms      = ku.get_prms(poseType='sigMotion', maxFrameDiff=7,
+						 imSz=None, isNewExpDir=True)
+	cPrms = get_caffe_prms(concatLayer='fc6', sourceModelIter=None, 
+						fineMaxIter=40000)
+	run_experiment(prms, cPrms, True)
+
