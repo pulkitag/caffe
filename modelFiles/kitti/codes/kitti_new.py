@@ -334,7 +334,7 @@ def setup_experiment_finetune(prms, cPrms):
 		accLayer  = copy.copy(tgExp.expFile_.netDef_.layers_['TRAIN']['accuracy'])
 		tgExp.del_all_layers_above(tgCPrms['fine']['maxLayer'])
 		lastTop = tgExp.get_last_top_name()
-		fcLayer['bottom'] = lastTop
+		fcLayer['bottom'] = '"%s"' % lastTop
 		tgExp.add_layer('class_fc', fcLayer, phase='TRAIN') 
 		tgExp.add_layer('loss', lossLayer, phase='TRAIN') 
 		tgExp.add_layer('accuracy', accLayer, phase='TRAIN') 
