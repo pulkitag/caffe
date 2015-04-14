@@ -429,7 +429,7 @@ def make_experiment(prms, cPrms, isFine=False):
 		caffeExp = setup_experiment_finetune(prms, cPrms)
 		#Get the model name from the source experiment. 
 		srcCaffeExp  = setup_experiment(prms, cPrms)
-		if cPrms['sourceModelIter'] is not None:
+		if cPrms['fine']['modelIter'] is not None:
 			modelFile = srcCaffeExp.get_snapshot_name(cPrms['fine']['modelIter'])
 		else:
 			modelFile = None
