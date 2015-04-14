@@ -48,8 +48,8 @@ def get_paths(sqMask, imSz=256, noBg=False):
 	prms['imH5'] = os.path.join(h5Dir, '%s_images_exp%s_tp%.2f_imSz%d.h5')
 	prms['lbH5'] = os.path.join(h5Dir, '%s_labels_exp%s_tp%.2f_imSz%d.h5')
 	#LevelDB File
-	prms['imldb'] = os.path.join(ldbDir, '%s_images_exp%s_tp%.2f_imSz%d-lmdb')
-	prms['lbldb'] = os.path.join(ldbDir, '%s_labels_exp%s_tp%.2f_imSz%d-lmdb')
+	prms['imldb'] = os.path.join(ldbDir, '%s_images_exp%s_tp%.2f_imSz%d_new-lmdb')
+	prms['lbldb'] = os.path.join(ldbDir, '%s_labels_exp%s_tp%.2f_imSz%d_new-lmdb')
 	return prms	
 
 
@@ -123,16 +123,74 @@ def get_polar_data(isTrain=True):
 	db.close()
 
 
-def get_polar_azimuth_data(isTrain=True, azimuthStep=12):
+def get_polar_label(cam1, cam2):
+	camLbl  = cm2 - cm1 + 4
+	assert camLbl >=0 and camLbl<=8, "cam:%d" % camLbl
+	return camLbl
+
+
+def get_azimuth_label(azimuthStep, mnRot=-48, mxRot=48, sampleType='rangeSample'):
 	'''
-		Get the examples for polar and azimuth data.
-		polar data can be from any of the -4,4 since we have 5 camera. 
-		rotation data can be from -45, 45 angles. 
+		azimuthStep: The azimuth step/quantization of azimuth. 
+		mnRot: Minimum angle of rotation
+		mxRot: Maximum angle of rotation
+		sampleType:
+			uniform: Uniformly sample all angles within and outside the range
+			rangeSample: Sample all angles within the range uniformly, and sample
+					all angles outside the range with probability equal to any of the
+					bins within the range. 	
+	'''
+	rotRange = np.arange(-180/3, 180/3)
+	numRots  = len(rotRange)
+	mnRot    = mnRot/3
+	mxRot    = mxRot/3
+	mnIdx, mxIdx = np.where(rotRange==mnRot)[0][0], np.where(rotRange==mxRot)[0][0]
+	if sampleType == 'rangeSample':
+		#I want to sample in a manner that number of rotations chosen out of rotation range are equal
+		#to any single elemnt in the rotation range. 
+		probSample = np.zeros((numRots,))
+		probSample[mnIdx:mxIdx+1] = 1.
+		probSum    = np.sum(probSample)
+		numOthers  = numRots - (mxIdx - mnIdx + 1)
+		probOthers = 1.0/numOthers
+		probSample[0:mnIdx]  = probOthers
+		probSample[mxIdx+1:] = probOthers
+		probSample   = probSample/sum(probSample)
+	elif sampleType == 'uniform':
+		probSample = np.ones((numRots,))
+		probSample   = probSample/sum(probSample)
+	else:
+		raise Exception('Sample Type: %s not recognized' % sampleType) 
+
+	#The Azimuth
+	rot1    = np.floor(numRots * min(0.9999, np.random.random()))
+	rotDiff = np.random.choice(rotRange, p=probSample)
+	rot2    = np.mod(rot1 + rotDiff, 120) 
+	#This makes rotLbl positive.
+	rotLbl   = rotDiff + 60
+	maxLbl   = int((mxRot - mnRot) * (3.0/azimuthStep))
+	mnRotIdx = rotLbl + mnRot 
+	if (rotLbl < (60 + mnRot)):
+		#This means rotation is out of the range on the LHS
+		rotLbl = maxLbl
+	elif(rotLbl >= (60 + mxRot)):
+		#This means rotation is out of the range on the RHS
+		rotLbl = maxLbl + 1
+	else:
+		rotLbl = int((rotLbl -  (mnRot + 60)) * (3.0/azimuthStep))
+		assert rotLbl >=0 and rotLbl < maxLbl, "RotLbl: %d, maxLbl: %d" % (rotLbl, maxLbl)
+	assert rotLbl >=0, "rot:%d" % rotLbl
+	return rot1, rot2, rotLbl
+
+
+def get_azimuth_data(isTrain=True, mxAzimuthDiff=30, azimuthStep=3):
+	'''
+		Store the difference in azimuths for a randomly chosen polar angle. 
 	'''
 	clNames         = rep.get_classNames()
 	tp              = 0.7
 	trainCl, testCl = get_train_test_class(trainPercent=tp)
-	expName         = 'picking_polar_azimuth%d' % azimuthStep
+	expName         = 'picking_azimuth_amx%d_astep%d' % (mxAzimuthDiff, azimuthStep) 
 	if isTrain:
 		clNames = [clNames[i] for i in trainCl]
 		setStr  = 'train'
@@ -147,25 +205,90 @@ def get_polar_azimuth_data(isTrain=True, azimuthStep=12):
 	prms       = get_paths(sqMask=True, imSz=h)	
 	imFile     = prms['maskFile'] 
 
-	rotRange = np.arange(-180/3, 180/3)
-	numRots  = len(rotRange)
-	mnRot    = -48/3
-	mxRot    = 48/3
-	mnIdx, mxIdx = np.where(rotRange==mnRot)[0][0], np.where(rotRange==mxRot)[0][0]
+	#Permutation for saving the images
+	perm    = np.random.permutation(nSPerClass * len(clNames))
+
+	#The db in which to store
+	imDbName = prms['imldb'] % (setStr, expName, tp, h)
+	lbDbName = prms['lbldb'] % (setStr, expName, tp, h)
+	print imDbName, lbDbName
+	db = mpio.DoubleDbSaver(imDbName, lbDbName)
 	
+	count   = 0
+	batchSz = 300
+	for cl in clNames:
+		print cl
+		print 'Reading all images'
+		szCount = 0
+		imBatch = np.zeros((batchSz, 2*ch, h, w), np.uint8)
+		lbBatch = np.zeros((batchSz, 1, 1, 1), np.int)
+		idxBatch = []
+		#Read all the images
+		clIms = np.zeros((5,120,h,w,ch),np.uint8)
+		for c in range(1,6):
+			for r in range(0,120):
+				clIms[c-1,r] = plt.imread(imFile % (cl, c, r*3))
+		#Start Saving the images
+		for i in range(nSPerClass):
+			if np.mod(i,100)==1:
+				print '%d examples processed' % i
+			
+			#The Azimuth Angle
+			rot1, rot2, rotLbl  = get_azimuth_label(azimuthStep, mnRot=-mxAzimuthDiff,
+					 mxRot=mxAzimuthDiff,	sampleType='rangeSample') 
+
+			#The Polar Angle
+			cm   = np.floor(5 * min(0.99,np.random.random())) + 1
+			im1  = clIms[cm-1, rot1]
+			im2  = clIms[cm-1, rot2]
+			idx  = perm[count]
+			im1  = im1[:,:,[2,1,0]].transpose((2,0,1))	
+			im2  = im2[:,:,[2,1,0]].transpose((2,0,1))
+			imBatch[szCount]  = (np.concatenate((im1, im2))).reshape(1, 2*ch, h, w)
+			lbBatch[szCount]  = np.array([rotLbl]).reshape(1,1,1,1)			
+			idxBatch.append(idx)
+			szCount += 1
+			if szCount==batchSz or i == nSPerClass-1:
+				print "Saving Data"
+				imBatch = imBatch[0:szCount]
+				lbBatch = lbBatch[0:szCount]
+				db.add_batch((imBatch,lbBatch), svIdx=(idxBatch,idxBatch))	
+				szCount = 0	
+				idxBatch = []
+				imBatch = np.zeros((batchSz, 2*ch, h, w), np.uint8)
+				lbBatch = np.zeros((batchSz, 1, 1, 1), np.int)
+			count = count + 1
+	db.close()
+
+
+
+def get_polar_azimuth_data(isTrain=True, mxAzimuthDiff=48, 
+							azimuthStep=12, mxPolarDiff=4):
+	'''
+		Get the examples for polar and azimuth data.
+		mxAzimuthDiff: Max rotation angle in degrees that +- that that the objects
+							 are rotated. For mxAzimuth=30, rotations would be -30 to +30
+		azimuthStep: The quantization size of azimuth. 
+		polar data can be from any of the -4,4 since we have 5 camera. 
+	'''
+	assert maxPolarDiff <= 4, 'maxPolarDiff needs to be less than 4'
+	clNames         = rep.get_classNames()
+	tp              = 0.7
+	trainCl, testCl = get_train_test_class(trainPercent=tp)
+	expName         = 'picking_polar_pmx%d_azimuth_amx%d_astep%d' % (maxPolarDiff, mxAzimuthDiff, azimuthStep) 
 	if isTrain:
-		#I want to sample in a manner that number of rotations chosen out of rotation range are equal
-		#to any single elemnt in the rotation range. 
-		probSample = np.zeros((numRots,))
-		probSample[mnIdx:mxIdx+1] = 1.
-		probSum    = np.sum(probSample)
-		numOthers  = numRots - (mxIdx - mnIdx + 1)
-		probOthers = 1.0/numOthers
-		probSample[0:mnIdx]  = probOthers
-		probSample[mxIdx+1:] = probOthers
+		clNames = [clNames[i] for i in trainCl]
+		setStr  = 'train'
+		nSPerClass = 10000
 	else:
-		probSample = np.ones((numRots,))
-	probSample   = probSample/sum(probSample)
+		clNames = [clNames[i] for i in testCl]  
+		setStr  = 'test'
+		nSPerClass = 1000
+
+	h, w, ch   = 256, 256, 3 
+	N          = h * w * ch
+	prms       = get_paths(sqMask=True, imSz=h)	
+	imFile     = prms['maskFile'] 
 
 	#Permutation for saving the images
 	perm    = np.random.permutation(nSPerClass * len(clNames))
@@ -176,32 +299,53 @@ def get_polar_azimuth_data(isTrain=True, azimuthStep=12):
 	print imDbName, lbDbName
 	db = mpio.DoubleDbSaver(imDbName, lbDbName)
 	
-	count = 0
+	count   = 0
+	batchSz = 300
 	for cl in clNames:
 		print cl
-		for i in range(nSPerClass):	
+		print 'Reading all images'
+		szCount = 0
+		imBatch = np.zeros((batchSz, 2*ch, h, w), np.uint8)
+		lbBatch = np.zeros((batchSz, 2, 1, 1), np.int)
+		idxBatch = []
+		#Read all the images
+		clIms = np.zeros((5,120,h,w,ch),np.uint8)
+		for c in range(1,6):
+			for r in range(0,120):
+				clIms[c-1,r] = plt.imread(imFile % (cl, c, r*3))
+		#Start Saving the images
+		for i in range(nSPerClass):
+			if np.mod(i,100)==1:
+				print '%d examples processed' % i
 			#The Polar Angle
-			cm1     = np.floor(5 * min(0.99,np.random.random())) + 1 
-			cm2     = np.floor(5 * min(0.99,np.random.random())) + 1 
-			camLbl  = cm2 - cm1 + 4
-			#The Azimuth
-			rot1    = np.floor(numRots * min(0.9999, np.random.random()))
-			rotDiff = np.random.choice(rotRange, p=probSample)
-			rot2    = np.mod(rot1 + rotDiff, 120) 
-			rotLbl  = int((rotDiff + 60) * (3.0/azimuthStep))  
-			assert rotLbl >=0 and camLbl >=0, "rot:%d, cam:%d" % (rotLbl, camLbl) 
+			cm1     = np.floor(5 * min(0.99,np.random.random()))
+			cm2     = np.mod(cm1 + min(0.99,np.random.random()) * (mxPolarDiff+1),5) 
+			cm1     = cm1 + 1
+			cm2     = cm2 + 1
+			camLbl  = get_polar_label(cm1, cm2)
 
-			#Get the image files and save to dbs
-			imF1 = imFile % (cl, cm1, rot1*3)
-			imF2 = imFile % (cl, cm2, rot2*3)
-			im1  = plt.imread(imF1)
-			im2  = plt.imread(imF2)
+			#The Azimuth Angle
+			rot1, rot2, rotLbl  = get_azimuth_label(azimuthStep, mnRot=-mxAzimuthDiff,
+					 mxRot=mxAzimuthDiff,	sampleType='rangeSample') 
+
+			im1  = clIms[cm1-1, rot1]
+			im2  = clIms[cm2-1, rot2]
 			idx  = perm[count]
 			im1  = im1[:,:,[2,1,0]].transpose((2,0,1))	
 			im2  = im2[:,:,[2,1,0]].transpose((2,0,1))
-			imC  = (np.concatenate((im1, im2))).reshape(1, 2*ch, h, w)
-			lb   = np.array([camLbl, rotLbl]).reshape(1,2,1,1)				
-			db.add_batch((imC,lb), svIdx=([idx],[idx]))	
+			imBatch[szCount]  = (np.concatenate((im1, im2))).reshape(1, 2*ch, h, w)
+			lbBatch[szCount]  = np.array([camLbl, rotLbl]).reshape(1,2,1,1)			
+			idxBatch.append(idx)
+			szCount += 1
+			if szCount==batchSz or i == nSPerClass-1:
+				print "Saving Data"
+				imBatch = imBatch[0:szCount]
+				lbBatch = lbBatch[0:szCount]
+				db.add_batch((imBatch,lbBatch), svIdx=(idxBatch,idxBatch))	
+				szCount = 0	
+				idxBatch = []
+				imBatch = np.zeros((batchSz, 2*ch, h, w), np.uint8)
+				lbBatch = np.zeros((batchSz, 2, 1, 1), np.int)
 			count = count + 1
 	db.close()
 
@@ -358,3 +502,68 @@ def compute_features(netName='vgg', layerName='pool4', sqMask=True, camNum=5):
 				compFlag = False
 			count += batchSz
 		featFid.close() 
+
+
+def plot_siamese_db(db, fig=None, dbType='ap', subFactor=4):
+	'''
+		dbType: 'ap': Azimuth Polar, 'a': For Azimuth Only
+	'''
+
+	data, lb = db.read_next()
+	ch,h,w = data.shape
+	im1      = data[0:3,:,:].transpose((1,2,0))
+	im2      = data[3:,:,:].transpose((1,2,0))
+	im1      = im1[:,:,(2,1,0)]
+	im2      = im2[:,:,(2,1,0)]
+	lb       = np.squeeze(lb)
+
+	if lb.ndim==0:
+		lb = lb.reshape(1,)
+	lbStr = ''
+	for (i,l) in enumerate(lb):
+		if dbType =='ap':
+			if i ==0:
+				lbStr = lbStr + 'Polar: ' + str(l - subFactor) + ','
+			else:
+				lbStr = lbStr + ' Azimuth: ' + str(l - subFactor) + ','
+		elif dbType == 'a':
+			lbStr = 'Azimuth: ' + str(l - subFactor)
+
+	#Plot
+	plt.ion()
+	if fig is None:
+		fig = plt.figure()
+	else:
+		plt.figure(fig.number)
+	plt.subplot(2,1,1)
+	plt.imshow(im1)
+	plt.subplot(2,1,2)
+	plt.imshow(im2)
+	plt.suptitle(lbStr)
+	return fig	
+
+
+def test_azimuth_db(setStr='test'):
+	azimuthStep   =  3
+	mxAzimuthDiff = 30 
+	h        = 256
+	tp       = 0.7
+	expName  = 'picking_azimuth_amx%d_astep%d' % (mxAzimuthDiff, azimuthStep) 
+	prms     = get_paths(sqMask=True, imSz=h)	
+	imDbName = prms['imldb'] % (setStr, expName, tp, h)
+	lbDbName = prms['lbldb'] % (setStr, expName, tp, h)
+	db = mpio.DoubleDbReader((imDbName,lbDbName))
+	return db	
+
+
+def test_polar_azimuth_db():
+	azimuthStep = 12
+	expName  = 'picking_polar_azimuth%d' % azimuthStep
+	setStr   = 'test'
+	h        = 256
+	tp       = 0.7
+	prms     = get_paths(sqMask=True, imSz=h)	
+	imDbName = prms['imldb'] % (setStr, expName, tp, h)
+	lbDbName = prms['lbldb'] % (setStr, expName, tp, h)
+	db = mpio.DoubleDbReader((imDbName,lbDbName))
+	return db	

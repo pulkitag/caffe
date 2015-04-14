@@ -1,9 +1,60 @@
+## @package my_pycaffe_io 
+#  IO operations. 
+#
+
 import h5py as h5
 import numpy as np
+import my_pycaffe as mp
 import caffe
 import pdb
 import os
 import lmdb
+import shutil
+import scipy.misc as scm
+
+## 
+# Write array as a proto
+def  write_proto(arr, outFile):
+	'''
+		Writes the array as a protofile
+	'''
+	blobProto = caffe.io.array_to_blobproto(arr)
+	ss        = blobProto.SerializeToString()
+	fid       = open(outFile,'w')
+	fid.write(ss)
+	fid.close()
+
+
+##
+# Convert the mean to be useful for siamese network. 
+def mean2siamese_mean(inFile, outFile):
+	mn = mp.read_mean(inFile)
+	mn = np.concatenate((mn, mn))
+	mn = mn.reshape((1, mn.shape[0], mn.shape[1], mn.shape[2]))
+	write_proto(mn, outFile)
+
+##
+# Convert the siamese mean to be the mean
+def siamese_mean2mean(inFile, outFile):
+	assert not os.path.exists(outFile), '%s already exists' % outFile
+	mn = mp.read_mean(inFile)
+	ch = mn.shape[0]
+	assert np.mod(ch,2)==0
+	ch = ch / 2
+	print "New number of channels: %d" % ch
+	newMn = mn[0:ch].reshape(1,ch,mn.shape[1],mn.shape[2])
+	write_proto(newMn.astype(mn.dtype), outFile)
+		
+##
+# Resize the mean to a different size
+def resize_mean(inFile, outFile, imSz):
+	mn = mp.read_mean(inFile)
+	dType = mn.dtype
+	ch, rows, cols = mn.shape
+	mn = mn.transpose((1,2,0))
+	mn = scm.imresize(mn, (imSz, imSz)).transpose((2,0,1)).reshape((1,ch,imSz,imSz))
+	write_proto(mn.astype(dType), outFile)
+
 
 def ims2hdf5(im, labels, batchSz, batchPath, isColor=True, batchStNum=1, isUInt8=True, scale=None, newLabels=False):
 	'''
@@ -56,8 +107,11 @@ def ims2hdf5(im, labels, batchSz, batchPath, isColor=True, batchStNum=1, isUInt8
 	strFid.close()
 
 
-class dbSaver:
+class DbSaver:
 	def __init__(self, dbName, isLMDB=True):
+		if os.path.exists(dbName):
+			print "%s already existed, but not anymore ..removing.." % dbName
+			shutil.rmtree(dbName)
 		self.db    = lmdb.open(dbName, map_size=int(1e12))
 		self.count = 0
 
@@ -79,8 +133,9 @@ class dbSaver:
 		if svIdx is not None:
 			itrtr = zip(svIdx, ims, labels)
 		else:
-			itrtr = zip(range(count, count + ims.shape[0]), ims, labels)
+			itrtr = zip(range(self.count, self.count + ims.shape[0]), ims, labels)
 
+		#print svIdx.shape, ims.shape, labels.shape
 		for idx, im, lb in itrtr:
 			if not imAsFloat:
 				im    = im.astype(np.uint8)
@@ -101,8 +156,8 @@ class DoubleDbSaver:
 	'''
 	def __init__(self, dbName1, dbName2, isLMDB=True):
 		self.dbs_ = []
-		self.dbs_.append(dbSaver(dbName1, isLMDB=isLMDB))
-		self.dbs_.append(dbSaver(dbName2, isLMDB=isLMDB))
+		self.dbs_.append(DbSaver(dbName1, isLMDB=isLMDB))
+		self.dbs_.append(DbSaver(dbName2, isLMDB=isLMDB))
 
 	def __del__(self):
 		for db in self.dbs_:
@@ -124,37 +179,44 @@ class DbReader:
 		self.db_     = lmdb.open(dbName, readonly=True, readahead=readahead)
 		self.txn_    = self.db_.begin(write=False) 
 		self.cursor_ = self.txn_.cursor()		
-		self.itr_    = self.cursor_.iternext()
+		self.nextValid_ = True
+		self.cursor_.first()
 
 	def __del__(self):
 		self.txn_.commit()
 		self.db_.close()
 		
 	def read_next(self):
-		if self.cursor_.next():
-			key, dat = self.itr_.next()
-		else:
+		if not self.nextValid_:
 			return None, None
-		datum  = caffe.io.caffe_pb2.Datum()
-		datStr = datum.FromString(dat)
-		data   = caffe.io.datum_to_array(datStr)
-		label  = datStr.label
+		else:
+			key, dat = self.cursor_.item()
+			datum  = caffe.io.caffe_pb2.Datum()
+			datStr = datum.FromString(dat)
+			data   = caffe.io.datum_to_array(datStr)
+			label  = datStr.label
+		self.nextValid_ = self.cursor_.next()
 		return data, label
 
 	def read_batch(self, batchSz):
 		data, label = [], []
+		count = 0
 		for b in range(batchSz):
 			dat, lb = self.read_next()
 			if dat is None:
 				break
 			else:
+				count += 1
 				ch, h, w = dat.shape
 				dat = np.reshape(dat,(1,ch,h,w))
 				data.append(dat)
 				label.append(lb)
-		data  = np.concatenate(data[:])
-		label = np.array(label)
-		label = label.reshape((len(label),1))
+		if count > 0:
+			data  = np.concatenate(data[:])
+			label = np.array(label)
+			label = label.reshape((len(label),1))
+		else:
+			data, label = None, None
 		return data, label 
 		 
 	def get_label_stats(self, maxLabels):
@@ -168,6 +230,9 @@ class DbReader:
 				countFlag = False
 		return countArr				
 
+	def get_count(self):
+		return self.db_.stat()['entries']
+	
 	def close(self):
 		self.txn_.commit()
 		self.db_.close()
@@ -187,7 +252,8 @@ class SiameseDbReader(DbReader):
 			im2 = im2[:,:,[2,1,0]]
 		return im1, im2, label
 			 
-
+##
+# Read two LMDBs simultaneosuly
 class DoubleDbReader:
 	def __init__(self, dbNames, isLMDB=True, readahead=True):
 		#For large LMDB set readahead to be False
@@ -212,10 +278,125 @@ class DoubleDbReader:
 			dat,_ = db.read_batch(batchSz)
 			data.append(dat)
 		return data[0], data[1]
-	
+
+	def read_batch_data_label(self, batchSz):
+		data, label = [], []
+		for db in self.dbs_:
+			dat,lb = db.read_batch(batchSz)
+			data.append(dat)
+			label.append(lb)
+		return data[0], data[1], label[0], label[1]
+
 	def close(self):
 		for db in self.dbs_:
 			db.close()
+
+##
+# For reading generic window reader. 
+class GenericWindowReader:
+	def __init__(self, fileName):
+		self.fid_ = open(fileName,'r')
+		line      = self.fid_.readline()
+		assert(line.split()[1] == 'GenericDataLayer')
+		self.num_   = int(self.fid_.readline())
+		self.numIm_ = int(self.fid_.readline())
+		self.lblSz_ = int(self.fid_.readline()) 
+		self.count_ = 0
+
+	def read_next(self):
+		if self.count_ == self.num_:
+			print "All lines already read"
+			return None, None
+		count = int(self.fid_.readline().split()[1])
+		assert count == self.count_
+		self.count_ += 1
+		imDat = []
+		for n in range(self.numIm_): 
+			imDat.append(self.fid_.readline())
+		lbls = self.fid_.readline().split()
+		lbls = np.array([float(l) for l in lbls]).reshape(1,self.lblSz_)
+		return imDat, lbls
+				
+	def get_all_labels(self):
+		readFlag = True
+		lbls     = []
+		while readFlag:
+			_, lbl = self.read_next()
+			if lbl is None:
+				readFlag = False
+				continue
+			else:
+				lbls.append(lbl)
+		lbls = np.concatenate(lbls)
+		return lbls
+		
+	def close(self):
+		self.fid_.close()
+
+
+##
+# For writing generic window file layers. 
+class GenericWindowWriter:
+	def __init__(self, fileName, numEx, numImgPerEx, lblSz):
+		'''
+			fileName   : the file to write to.
+			numEx      : the number of examples
+			numImgPerEx: the number of images per example
+			lblSz      : the size of the labels 
+		'''
+		self.file_  = fileName
+		self.num_   = numEx
+		self.numIm_ = numImgPerEx
+		self.lblSz_ = lblSz 
+		self.count_ = 0 #The number of examples written. 
+
+		dirName = os.path.dirname(fileName)
+		if not os.path.exists(dirName):
+			os.makedirs(dirName)
+
+		self.fid_ = open(self.file_, 'w')	
+		self.fid_.write('# GenericDataLayer\n')
+		self.fid_.write('%d\n' % self.num_) #Num Examples. 
+		self.fid_.write('%d\n' % self.numIm_) #Num Images per Example. 
+		self.fid_.write('%d\n' % self.lblSz_) #Num	Labels
+
+	##
+	# Private Helper function for writing the images for the WindowFile
+	def write_image_line_(self, imgName, imgSz, bbox):
+		'''
+			imgSz: channels * height * width
+			bbox : x1, y1, x2, y2
+		'''
+		ch, h, w = imgSz
+		x1,y1,x2,y2 = bbox
+		x1  = max(0, x1)
+		y1  = max(0, y1)
+		x2  = min(x2, w-1)
+		y2  = min(y2, h-1)
+		self.fid_.write('%s %d %d %d %d %d %d %d\n' % (imgName, 
+							ch, h, w, x1, y1, x2, y2))
+
+	##
+	def write(self, lbl, *args):
+		assert len(args)==self.numIm_, 'Wrong input arguments: (%d v/s %d)' % (len(args),self.numIm_)
+		self.fid_.write('# %d\n' % self.count_)
+		#Write the images
+		for arg in args:
+			imName, imSz, bbox = arg
+			self.write_image_line_(imName, imSz, bbox)	
+		
+		#Write the label
+		lbStr = ['%f '] * self.lblSz_
+		lbStr = ''.join(lbS % lb for (lb, lbS) in zip(lbl, lbStr))
+		lbStr = lbStr[:-1] + '\n'
+		self.fid_.write(lbStr)
+		self.count_ += 1
+
+		if self.count_ == self.num_:
+			self.close()	
+	##
+	def close(self):
+		self.fid_.close()
 
 	
 def save_lmdb_images(ims, dbFileName, labels=None, asFloat=False):

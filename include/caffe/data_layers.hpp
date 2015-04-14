@@ -287,6 +287,101 @@ class MemoryDataLayer : public BaseDataLayer<Dtype> {
   bool has_new_data_;
 };
 
+
+template <typename Dtype>
+class CropDataLayer;
+
+/**
+ * @brief Helper for the Generic Window Data Layer
+ *
+ * TODO(dox): thorough documentation for Forward and proto params.
+ */
+template <typename Dtype>
+class GenericWindowDataLayer : public BasePrefetchingDataLayer<Dtype> {
+ public:
+  explicit GenericWindowDataLayer(const LayerParameter& param)
+      : BasePrefetchingDataLayer<Dtype>(param) {}
+  virtual ~GenericWindowDataLayer();
+  virtual void DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
+
+  virtual inline const char* type() const { return "GenericWindowData"; }
+  virtual inline int ExactNumBottomBlobs() const { return 0; }
+  virtual inline int MinTopBlobs() const { return 2; }
+
+ protected:
+  virtual unsigned int PrefetchRand();
+  virtual void InternalThreadEntry();
+
+  shared_ptr<Caffe::RNG> prefetch_rng_;
+	vector<vector<Blob<Dtype>* > > crop_tops_vec_;
+	//The crop_data_layers_ used to fetch the data.
+  vector<shared_ptr<CropDataLayer<Dtype> > > crop_data_layers_;
+  shared_ptr<Blob<Dtype> > labels_;
+	//Statistics of the data to be used. 
+	int num_examples_, img_group_size_, label_size_; 
+	//The size of the batch. 
+	int batch_size_;
+	//How many elements have been read.
+	int read_count_;
+  //Cache images or not. 
+	bool cache_images_;
+	int channels_;
+	int crop_size_;
+};
+
+
+/**
+ * @brief Helper for Crop Data Layer
+ *
+ * TODO(dox): thorough documentation for Forward and proto params.
+ */
+template <typename Dtype>
+class CropDataLayer : public BasePrefetchingDataLayer<Dtype> {
+	friend class GenericWindowDataLayer<Dtype>;
+ public:
+  explicit CropDataLayer(const LayerParameter& param)
+      : BasePrefetchingDataLayer<Dtype>(param) {}
+  virtual ~CropDataLayer();
+  virtual void DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
+
+  virtual inline const char* type() const { return "CropData"; }
+  virtual inline int ExactNumBottomBlobs() const { return 0; }
+  virtual inline int ExactNumTopBlobs() const { return 1; }
+
+	virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
+  virtual void Forward_gpu(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
+ 
+	protected:
+  virtual unsigned int PrefetchRand();
+  virtual void InternalThreadEntry();
+
+  shared_ptr<Caffe::RNG> prefetch_rng_;
+	//Contains a list of images and the size of the image in channels * h * w. 
+  vector<std::pair<std::string, vector<int> > > image_database_;
+  enum WindowField {IMAGE_INDEX, X1, Y1, X2, Y2, NUM};
+  vector<vector<float> > windows_;
+  Blob<Dtype> data_mean_;
+  vector<Dtype> mean_values_;
+  bool has_mean_file_;
+  bool has_mean_values_;
+  bool cache_images_;
+	//If the images are cached then store them here. 
+  vector<Datum> image_database_cache_;
+	//The number of images that have been read. 
+	int read_count_;
+	int num_examples_;
+	bool is_ready_;
+	bool is_random_crop_;
+	unsigned int rand_seed_;
+	//Useful for debugging the layer as it tells what is the layer number. 
+	int layer_num_;
+};
+
+
 /**
  * @brief Provides data to the Net from windows of images files, specified
  *        by a window data file.

@@ -1,3 +1,8 @@
+## @package my_pycaffe
+#  Major Wrappers.
+#
+
+
 import numpy as np
 import h5py
 import caffe
@@ -5,6 +10,7 @@ import pdb
 import matplotlib.pyplot as plt
 import os
 from six import string_types
+import copy
 
 class layerSz:
 	def __init__(self, stride, filterSz):
@@ -29,10 +35,10 @@ class layerSz:
 		self.stridePix = self.stride * self.stridePixPrev
 
 
+## 
+# Calculate the receptive field size and the stride of the Alex-Net
+# Something
 def calculate_size():
-	'''
-		Calculate the receptive field size and the stride of the Alex-Net
-	'''
 	conv1 = layerSz(4,11)
 	conv1.set_prev_prms(1,1)
 	conv1.compute()
@@ -68,7 +74,8 @@ def calculate_size():
 	print 'Conv4: Receptive: %d, Stride: %d ' % (conv4.pixelSz, conv4.stridePix)	
 	print 'Pool5: Receptive: %d, Stride: %d ' % (pool5.pixelSz, pool5.stridePix)	
 	
-
+##
+# Find the Layer Type
 def find_layer(lines):
 	layerName = []
 	for l in lines:
@@ -76,7 +83,37 @@ def find_layer(lines):
 			_,layerName = l.split()
 			return layerName
 
+##
+# Find the Layer Name
+def find_layer_name(lines):
+	layerName = None
+	topName   = None
+	flagCount = 0
+	firstL    = lines[0]
+	assert firstL.split()[1] is '{', 'Something is wrong'
+	brackCount = 1
+	for l in lines[1:]:
+		if '{' in l:
+			brackCount  += 1
+		if '}' in l:
+			brackCount -= 1
+		if brackCount ==0:
+			break
+		if 'name' in l and brackCount==1:
+			flagCount += 1
+			_,layerName = l.split()
+			layerName   = layerName[1:-1]
+		if 'top' in l and brackCount==1:
+			flagCount += 1
+			_,topName  = l.split()
+			topName    = topName[1:-1]
+	
+	assert layerName is not None, 'no name of a layer found'		
+	return layerName, topName
 
+
+##
+# Converts definition file of a network into siamese network. 
 def netdef2siamese(defFile, outFile):
 	outFid = open(outFile,'w')
 	stream1, stream2 = [],[]
@@ -155,18 +192,18 @@ def netdef2siamese(defFile, outFile):
 	outFid.close()
 
 
+##
+# Get Model and Mean file for a mdoel.  
+#
+#		the model file - the .caffemodel with the weights
+#		the mean file of the imagenet data
 def get_model_mean_file(netName='vgg'):
-	'''
-		Returns 
-			the model file - the .caffemodel with the weights
-			the mean file of the imagenet data
-	'''
 	modelDir = '/data1/pulkitag/caffe_models/'
 	bvlcDir  = modelDir + 'bvlc_reference/'
-	if netName   == 'alex':
+	if netName  in ['alex', 'alex_deploy']:
 		modelFile  = modelDir + 'caffe_imagenet_train_iter_310000'
 		imMeanFile = modelDir + 'ilsvrc2012_mean.binaryproto'
-	if netName == 'bvlcAlexNet':
+	elif netName == 'bvlcAlexNet':
 		modelFile  = bvlcDir + 'bvlc_reference_caffenet.caffemodel'
 		imMeanFile = bvlcDir + 'imagenet_mean.binaryproto'  
 	elif netName == 'vgg':
@@ -182,6 +219,8 @@ def get_model_mean_file(netName='vgg'):
 	return modelFile, imMeanFile
 	
 
+##
+# Get the architecture definition file. 
 def get_layer_def_files(netName='vgg', layerName='pool4'):
 	'''
 		Returns
@@ -191,17 +230,19 @@ def get_layer_def_files(netName='vgg', layerName='pool4'):
 	bvlcDir  = modelDir + 'bvlc_reference/'
 	if netName=='vgg':
 		defFile = modelDir + 'layer_def_files/vgg_19_%s.prototxt' % layerName
-	elif netName == 'bvlcAlexNet':
-		defFile = bvlcDir + 'caffenet_deploy_%s.prototxt' % layerName
+	elif netName == 'alex_deploy':
+		if layerName is not None:
+			defFile = bvlcDir + 'caffenet_deploy_%s.prototxt' % layerName
+		else:
+			defFile = bvlcDir + 'caffenet_deploy.prototxt'
 	else:
 		print 'Cannont get files for networks other than VGG'
 	return defFile	
 
 
+##
+# Get the shape of input blob from the defFile
 def get_input_blob_shape(defFile):
-	'''
-		Get the shape of input blob from the defFile
-	'''
 	blobShape = []
 	with open(defFile,'r') as f:
 		lines  = f.readlines()
@@ -229,7 +270,7 @@ def read_mean(protoFileName):
 
 
 class MyNet:
-	def __init__(self, defFile, modelFile, isGPU=True, testMode=True, deviceId=None):
+	def __init__(self, defFile, modelFile=None, isGPU=True, testMode=True, deviceId=None):
 		self.defFile_   = defFile
 		self.modelFile_ = modelFile
 		self.testMode_  = testMode
@@ -240,10 +281,17 @@ class MyNet:
 
 	def setup_network(self):
 		if self.testMode_:
-			self.net = caffe.Net(self.defFile_, self.modelFile_, caffe.TEST)
+			if not self.modelFile_ is None:
+				self.net = caffe.Net(self.defFile_, self.modelFile_, caffe.TEST)
+			else:
+				self.net = caffe.Net(self.defFile_, caffe.TEST)
 		else:
-			self.net = caffe.Net(self.defFile_, self.modelFile_, caffe.TRAIN)
+			if not self.modelFile_ is None:
+				self.net = caffe.Net(self.defFile_, self.modelFile_, caffe.TRAIN)
+			else:
+				self.net = caffe.Net(self.defFile_, caffe.TRAIN)
 		self.batchSz   = self.get_batchsz()
+
 
 	def set_mode(self, isGPU=True, deviceId=None):
 		if isGPU:
@@ -252,10 +300,13 @@ class MyNet:
 			caffe.set_mode_cpu()
 		if deviceId is not None:
 			caffe.set_device(deviceId)
+
 	
 	def get_batchsz(self):
-		return self.net.blobs[self.net.inputs[0]].num
-
+		if len(self.net.inputs) > 0:
+			return self.net.blobs[self.net.inputs[0]].num
+		else:
+			return None
 
 	def get_blob_shape(self, blobName):
 		assert blobName in self.net.blobs.keys(), 'Blob Name is not present in the net'
@@ -263,17 +314,24 @@ class MyNet:
 		return blob.num, blob.channels, blob.height, blob.width
 
 	
-	def set_preprocess(self, ipName='data',chSwap=(2,1,0), meanDat=None, imageDims=None, isBlobFormat=False, rawScale=None):
+	def set_preprocess(self, ipName='data',chSwap=(2,1,0), meanDat=None,
+										 imageDims=None, isBlobFormat=False, rawScale=None, cropDims=None):
 		'''
 			isBlobFormat: if the images are already coming in blobFormat or not. 
 			ipName    : the blob for which the pre-processing parameters need to be set. 
 			meanDat   : the mean which needs to subtracted
 			imageDims : the size of the images as H * W * K where K is the number of channels
+			cropDims  : the size to which the image needs to be cropped. 
+									if None - then it is automatically determined
+									this behavior is undesirable for some deploy prototxts 
 		'''
 		self.transformer[ipName] = caffe.io.Transformer({ipName: self.net.blobs[ipName].data.shape})
 		#Note blobFormat will be so used that finally the image will need to be flipped. 
 		self.transformer[ipName].set_transpose(ipName, (2,0,1))	
-	
+
+		if isBlobFormat:
+			assert chSwap is None, 'With Blob format chSwap should be none' 
+
 		if chSwap is not None:
 			#Required for eg RGB to BGR conversion.
 			self.transformer[ipName].set_channel_swap(ipName, chSwap)
@@ -283,7 +341,11 @@ class MyNet:
 	
 		#Crop Dimensions
 		ipDims            = np.array(self.net.blobs[ipName].data.shape)
-		self.cropDims     = ipDims[2:]
+		if cropDims is not None:
+			assert len(cropDims)==2, 'Length of cropDims needs to be corrected'
+			self.cropDims   = np.array(cropDims)
+		else:
+			self.cropDims     = ipDims[2:]
 		self.isBlobFormat = isBlobFormat 
 		if imageDims is None:
 			imageDims = np.array([ipDims[2], ipDims[3], ipDims[1]])
@@ -292,7 +354,7 @@ class MyNet:
 			imageDims = np.array([imageDims[0], imageDims[1], imageDims[2]])
 		self.imageDims = imageDims
 		self.get_crop_dims()		
-		
+	
 		#Mean Subtraction
 		if not meanDat is None:
 			if isinstance(meanDat, string_types):
@@ -339,17 +401,20 @@ class MyNet:
 		im_ = np.zeros((len(ims), 
             self.imageDims[0], self.imageDims[1], self.imageDims[2]),
             dtype=np.float32)
+		#Convert to normal image format if required. 
+		if self.isBlobFormat:
+			ims = np.transpose(ims, (0,2,3,1))
+	
 		#Resize the images
+		h, w = ims.shape[1], ims.shape[2]
 		for ix, in_ in enumerate(ims):
-			if self.isBlobFormat:
-				im_[ix] = caffe.io.resize_image(in_.transpose((1,2,0)), self.imageDims[0:2])
+			if h==self.imageDims[0] and w==self.imageDims[1]:
+				im_[ix] = np.copy(in_)
 			else:
-				print in_.shape
 				im_[ix] = caffe.io.resize_image(in_, self.imageDims[0:2])
 
 		#Required cropping
 		im_ = im_[:,self.crop[0]:self.crop[2], self.crop[1]:self.crop[3],:]	
-		
 		#Applying the preprocessing
 		caffe_in = np.zeros(np.array(im_.shape)[[0,3,1,2]], dtype=np.float32)
 		for ix, in_ in enumerate(im_):
@@ -377,6 +442,100 @@ class MyNet:
 			ims[ix] = caffe.io.resize_image(in_, self.imageDims)
 
 		return ims
+
+	
+	def forward_all(self, blobs=None, noInputs=False, **kwargs):
+		'''
+			blobs: The blobs to extract in the forward_all pass
+			noInputs: Set to true when there are no input blobs. 
+			kwargs: A dictionary where each input blob has associated data
+		'''
+		if not noInputs:
+			if kwargs:
+				if (set(kwargs.keys()) != set(self.transformer.keys())):
+					raise Exception('Data Transformer has not been set for all input blobs')
+				#Just pass all the inputs
+				procData = {}
+				N        = self.batchSz
+				for in_, data in kwargs.iteritems():
+					N             = data.shape[0] #The first dimension must be equivalent of batchSz
+					procData[in_] = self.preprocess_batch(data, ipName=in_)
+
+				ops = self.net.forward_all(blobs=blobs, **procData)
+				#Resize data in the right size
+				for op_, data in ops.iteritems():
+					ops[op_] = data[0:N]
+			else:
+				raise Exception('No Input data specified.')
+		else:
+			ops = self.net.forward(blobs=blobs)
+
+		return copy.deepcopy(ops) 
+
+
+	def vis_weights(self, blobName, blobNum=0, ax=None, titleName=None, isFc=False): 
+		assert blobName in self.net.blobs, 'BlobName not found'
+		dat  = copy.deepcopy(self.net.params[blobName][blobNum].data)
+		if isFc:
+			dat = dat.transpose((2,3,0,1))
+			print dat.shape
+			assert dat.shape[2]==1 and dat.shape[3]==1
+			ch = dat.shape[1]
+			assert np.sqrt(ch)*np.sqrt(ch)==ch, 'Cannot transform to filter'
+			h,w = int(np.sqrt(ch)), int(np.sqrt(ch))
+			dat = np.reshape(dat,(dat.shape[0],h,w,1))
+			print dat.shape
+			vis_square(dat, ax=ax, titleName=titleName)	
+		else:
+			vis_square(dat.transpose(0,2,3,1), ax=ax, titleName=titleName)	
+
+
+class MySolver:
+	def __init__(self):
+		self.solver_ = None
+
+	@classmethod
+	def from_file(cls, solFile):
+		self = cls()
+		self.solver_     = caffe.SGDSolver(solFile)
+		self.net_        = self.solver_.net
+		self.layerNames_ = [l for l in self.net_._layer_names]
+		return self	
+
+	##
+	# Return pointer to layer
+	def get_layer_pointer(self, layerName):
+		assert layerName in self.layerNames_, 'layer not found'
+		index = self.layerNames_.index(layerName)
+		return self.net_.layers[index]
+
+
+def vis_square(data, padsize=1, padval=0, ax=None, titleName=None):
+	'''
+		data is numFitlers * height * width or numFilters * height * width * channels
+	'''
+	data -= data.min()
+	data /= data.max()
+
+	# force the number of filters to be square
+	n = int(np.ceil(np.sqrt(data.shape[0])))
+	padding = ((0, n ** 2 - data.shape[0]), (0, padsize), (0, padsize)) + ((0, 0),) * (data.ndim - 3)
+	data = np.pad(data, padding, mode='constant', constant_values=(padval, padval))
+
+	# tile the filters into an image
+	data = data.reshape((n, n) + data.shape[1:]).transpose((0, 2, 1, 3) + tuple(range(4, data.ndim + 1)))
+	data = data.reshape((n * data.shape[1], n * data.shape[3]) + data.shape[4:])
+
+	if titleName is None:
+		titleName = ''
+
+	data = data.squeeze()
+	if ax is not None:
+		ax.imshow(data)
+		ax.set_title(titleName)
+	else:
+		plt.imshow(data)
+		plt.title(titleName)
 
 
 def setup_prototypical_network(netName='vgg', layerName='pool4'):

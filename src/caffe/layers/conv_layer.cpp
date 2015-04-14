@@ -68,7 +68,7 @@ void ConvolutionLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*>& top,
         if (propagate_down[i]) {
           this->backward_cpu_gemm(top_diff + top[i]->offset(n), weight,
               bottom_diff + bottom[i]->offset(n));
-        }
+				}
       }
     }
   }

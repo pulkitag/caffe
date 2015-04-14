@@ -1,9 +1,16 @@
+## @package my_pycaffe_tests
+#  Unit Testing functions. 
+#
+
 import my_pycaffe as mp
 import my_pycaffe_utils as mpu
 import h5py
 import numpy as np
 import pdb
+import os
 
+##
+# Test code for Zeiler-Fergus Saliency. 
 def test_zf_saliency(dataSet='mnist', stride=2, patchSz=5):
 
 	if dataSet=='mnist':
@@ -20,6 +27,7 @@ def test_zf_saliency(dataSet='mnist', stride=2, patchSz=5):
 
 		#Do the saliency
 		imSal, score  = mpu.zf_saliency(net, data, 10, 'ip2', patchSz=patchSz, stride=stride)	
+		gtLabels      = fid['label']
 	else:
 		netName = 'bvlcAlexNet'
 		opLayer = 'fc8'
@@ -29,6 +37,7 @@ def test_zf_saliency(dataSet='mnist', stride=2, patchSz=5):
 		net.set_preprocess(imageDims=(256,256,3), meanDat=meanFile, rawScale=255, isBlobFormat=True)
 
 		ilDat = mpu.ILSVRC12Reader()
+		ilDat.set_count(2)
 		data,gtLabels,syn,words = ilDat.read()
 		data = data.reshape((1,data.shape[0],data.shape[1],data.shape[2]))
 		data = data.transpose((0,3,1,2))
@@ -36,5 +45,16 @@ def test_zf_saliency(dataSet='mnist', stride=2, patchSz=5):
 		imSal, score = mpu.zf_saliency(net, data, 1000, 'fc8', patchSz=patchSz, stride=stride) 
 
 	pdLabels      = np.argmax(score.squeeze(), axis=1)
-	gtLabels      = fid['label']
-	return data, imSal, pdLabels, gtLabels		
+	return data, imSal, pdLabels, gtLabels
+
+
+##
+# Test Reading the protoFile
+def test_get_proto_param():
+	paths    = mpu.get_caffe_paths()
+	testFile = os.path.join(paths['pythonTest'], 'test_conv_param.txt')
+	fid = open(testFile, 'r')
+	lines = fid.readlines()
+	fid.close()
+	params = mpu.get_proto_param(lines)
+	return params  		

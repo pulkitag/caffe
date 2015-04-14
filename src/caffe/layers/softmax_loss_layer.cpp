@@ -71,7 +71,9 @@ void SoftmaxWithLossLayer<Dtype>::Forward_cpu(
   } else {
     top[0]->mutable_cpu_data()[0] = loss / num;
   }
-  if (top.size() == 2) {
+	LOG(INFO) << "Count: " << count;
+  std::cout << "Count: " << count << " \n";
+	if (top.size() == 2) {
     top[1]->ShareData(prob_);
   }
 }
