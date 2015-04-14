@@ -288,12 +288,12 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 			expStr.append('scratch')	
 	if lrAbove is not None:
 			expStr.append('lrAbv-%s' % lrAbove)
-		expStr.append('bLr%.0e' % fine_base_lr)
-		expStr.append('run%d' % fineRunNum)
-		expStr.append('datN%.0e' % fineNumData)
-		if fineMaxLayer is not None:
-			expStr.append('mxl-%s' % fineMaxLayer)
-	
+	expStr.append('bLr%.0e' % fine_base_lr)
+	expStr.append('run%d' % fineRunNum)
+	expStr.append('datN%.0e' % fineNumData)
+	if fineMaxLayer is not None:
+		expStr.append('mxl-%s' % fineMaxLayer)
+
 	expStr = ''.join(s + '_' for s in expStr)
 	expStr = expStr[0:-1]
 	caffePrms['expStr'] = expStr
@@ -459,10 +459,10 @@ def run_sun_layerwise(deviceId=2, runNum=2):
 		run_experiment(prms, cPrms, True)
 
 
-def run_sun_scratch():
+def run_sun_scratch(deviceId=0):
 	prms      = ku.get_prms(poseType='sigMotion', maxFrameDiff=7,
 						 imSz=None, isNewExpDir=True)
 	cPrms = get_caffe_prms(concatLayer='fc6', sourceModelIter=None, 
-						fineMaxIter=40000)
+						fineMaxIter=40000, deviceId=deviceId)
 	run_experiment(prms, cPrms, True)
 
