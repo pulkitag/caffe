@@ -82,6 +82,7 @@ def get_experiment_details(expName, imSz=256):
 	#Load the raw data
 	for cl in classNames:
 		fileName = rawDir + cl + '.mat'
+		print fileName
 		data     = h5py.File(fileName)
 		ims.append(np.transpose(data['ims'], axes=(3,2,1,0)))
 		view.append(np.transpose(data['view'], axes=(2,1,0)))

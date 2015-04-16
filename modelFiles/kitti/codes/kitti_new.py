@@ -232,7 +232,7 @@ def get_solver(cPrms, isFine=False):
 		base_lr  = 0.001
 		max_iter = 250000 
 	solArgs = {'test_iter': 100,	'test_interval': 1000,
-						 'base_lr': base_lr, 'gamma': 0.5, 'stepsize': 20000,
+						 'base_lr': base_lr, 'gamma': 0.5, 'stepsize': cPrms['stepsize'],
 						 'max_iter': max_iter, 'snapshot': 10000, 
 						 'lr_policy': '"step"', 'debug_info': 'true',
 						 'weight_decay': 0.0005}
@@ -242,12 +242,14 @@ def get_solver(cPrms, isFine=False):
 
 
 def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId=1, 
-									 contextPad=24, imSz=227, convConcat=False, 
-									isFineTune=False, sourceModelIter=100000,
-									 lrAbove=None,
+									contextPad=24, imSz=227, convConcat=False,
+									imgntMean=False, 
+									isFineTune=False, sourceModelIter=150000,
+								  lrAbove=None,
 									fine_base_lr=0.001, fineRunNum=1, fineNumData=1, 
 									fineMaxLayer=None, fineDataSet='sun',
-									fineMaxIter = 40000):
+									fineMaxIter = 40000, addDrop=False, extraFc=False,
+									stepsize=20000):
 	'''
 		convConcat     : Concatenate using the convolution layers
 		sourceModelIter: The number of model iterations of the source model to consider
@@ -262,6 +264,8 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 	caffePrms['concatLayer'] = concatLayer
 	caffePrms['deviceId']    = deviceId
 	caffePrms['contextPad']  = contextPad
+	caffePrms['imgntMean']   = imgntMean
+	caffePrms['stepsize']    = stepsize
 	caffePrms['imSz']        = imSz
 	caffePrms['convConcat']  = convConcat
 	caffePrms['fine']        = {}
@@ -273,6 +277,8 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 	caffePrms['fine']['maxLayer']  = fineMaxLayer
 	caffePrms['fine']['dataset']   = fineDataSet
 	caffePrms['fine']['max_iter']  = fineMaxIter
+	caffePrms['fine']['addDrop']   = addDrop
+	caffePrms['fine']['extraFc']   = extraFc
 	expStr = []
 	expStr.append('con-%s' % concatLayer)
 	if isScratch:
@@ -298,12 +304,19 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 		expStr.append('datN%.0e' % fineNumData)
 		if fineMaxLayer is not None:
 			expStr.append('mxl-%s' % fineMaxLayer)
+		if addDrop:
+			expStr.append('drop')
+		if extraFc:
+			expStr.append('exFC')
+		if imgntMean:
+			expStr.append('muImgnt')
 
 	expStr = ''.join(s + '_' for s in expStr)
 	expStr = expStr[0:-1]
 	caffePrms['expStr'] = expStr
 	caffePrms['solver'] = get_solver(caffePrms, isFine=isFineTune)
 	return caffePrms
+
 
 def get_experiment_object(prms, cPrms):
 	caffeExp = mpu.CaffeExperiment(prms['expName'], cPrms['expStr'], 
@@ -315,10 +328,15 @@ def get_experiment_object(prms, cPrms):
 # Setups an experiment for finetuning. 
 def setup_experiment_finetune(prms, cPrms):
 	#Get the def file.
-	defFile = os.path.join(baseFilePath,
-						 'kitti_finetune_fc6_deploy.prototxt')
+	if cPrms['fine']['extraFc'] and cPrms['fine']['addDrop']:
+		defFile = os.path.join(baseFilePath,
+							 'kitti_finetune_fc6_drop_extraFc_deploy.prototxt')
+	else:
+		defFile = os.path.join(baseFilePath,
+							 'kitti_finetune_fc6_deploy.prototxt')
 	#Setup the target experiment. 
 	tgCPrms = get_caffe_prms(isFineTune=True,
+			convConcat = cPrms['convConcat'],
 			fine_base_lr=cPrms['fine']['base_lr'],
 			fineRunNum = cPrms['fine']['runNum'],
 			sourceModelIter = cPrms['fine']['modelIter'],
@@ -326,7 +344,10 @@ def setup_experiment_finetune(prms, cPrms):
 			fineNumData = cPrms['fine']['numData'],	
 			fineMaxLayer = cPrms['fine']['maxLayer'],
 			fineDataSet  = cPrms['fine']['dataset'],
-			fineMaxIter  = cPrms['fine']['max_iter'])
+			fineMaxIter  = cPrms['fine']['max_iter'],
+			deviceId     = cPrms['deviceId'],
+			addDrop = cPrms['fine']['addDrop'], extraFc = cPrms['fine']['extraFc'],
+			imgntMean=cPrms['imgntMean'], stepsize=cPrms['stepsize'])
 	tgPrms  = copy.deepcopy(prms)
 	tgPrms['expName'] = 'fine-FROM-%s' % prms['expName']
 	tgExp   = get_experiment_object(tgPrms, tgCPrms)
@@ -361,6 +382,11 @@ def setup_experiment_finetune(prms, cPrms):
 						'LEVELDB', phase='TRAIN')
 		tgExp.set_layer_property('data', ['data_param', 'backend'],
 						'LEVELDB', phase='TEST')
+		if cPrms['imgntMean']:
+			muFile = '"%s"' % '/data1/pulkitag/caffe_models/ilsvrc2012_mean.binaryproto'
+			tgExp.set_layer_property('data', ['transform_param', 'mean_file'], muFile, phase='TRAIN')
+			tgExp.set_layer_property('data', ['transform_param', 'mean_file'], muFile, phase='TEST')
+			 
 	return tgExp	
 	
 	
@@ -431,42 +457,57 @@ def setup_experiment(prms, cPrms):
 	return caffeExp
 
 ##
-def make_experiment(prms, cPrms, isFine=False):
+def make_experiment(prms, cPrms, isFine=False, resumeIter=None):
 	if isFine:
 		caffeExp = setup_experiment_finetune(prms, cPrms)
 		#Get the model name from the source experiment. 
 		srcCaffeExp  = setup_experiment(prms, cPrms)
 		if cPrms['fine']['modelIter'] is not None:
 			modelFile = srcCaffeExp.get_snapshot_name(cPrms['fine']['modelIter'])
+			#pdb.set_trace()
 		else:
 			modelFile = None
 	else:
 		caffeExp  = setup_experiment(prms, cPrms)
 		modelFile = None
-	caffeExp.make(modelFile=modelFile)
+
+	if resumeIter is not None:
+		modelFile = None
+	caffeExp.make(modelFile=modelFile, resumeIter=resumeIter)
 	return caffeExp	
 
 ##
-def run_experiment(prms, cPrms, isFine=False):
-	caffeExp = make_experiment(prms, cPrms, isFine=isFine)
+def run_experiment(prms, cPrms, isFine=False, resumeIter=None):
+	caffeExp = make_experiment(prms, cPrms, isFine=isFine, resumeIter=resumeIter)
 	caffeExp.run()
 
 
-def run_sun_layerwise():
-	maxLayers = ['fc6', 'pool5', 'relu4', 'relu3', 'pool2', 'pool1']
-	lrAbove   = ['fc6', 'conv5', 'conv4', 'conv3', 'conv2', 'conv1']
+def run_sun_layerwise(deviceId=1, runNum=2, addFc=True, addDrop=True,
+											fine_base_lr=0.001, imgntMean=False, stepsize=20000,
+											resumeIter=None):
+	#maxLayers = ['fc6', 'pool5', 'relu4', 'relu3', 'pool2', 'pool1']
+	#lrAbove   = ['fc6', 'conv5', 'conv4', 'conv3', 'conv2', 'conv2']
+	maxLayers = ['fc6']
+	lrAbove   = ['conv1']
 	prms      = ku.get_prms(poseType='sigMotion', maxFrameDiff=7,
 							 imSz=None, isNewExpDir=True)
-	for mxl, abv in zip(maxLayers, lrAbove):
+	for mxl, abv in zip(reversed(maxLayers), reversed(lrAbove)):
 		cPrms = get_caffe_prms(concatLayer='fc6', fineMaxLayer=mxl,
-					lrAbove=abv, fineMaxIter=15000)
-		run_experiment(prms, cPrms, True)
+					lrAbove=abv, fineMaxIter=40000, deviceId=deviceId,
+					fineRunNum=runNum, fine_base_lr = fine_base_lr,
+					extraFc = addFc, addDrop = addDrop,
+					imgntMean = imgntMean)
+		exp = make_experiment(prms, cPrms, True, resumeIter=resumeIter)
+		return exp
+		run_experiment(prms, cPrms, True, resumeIter=resumeIter)
 
 
-def run_sun_scratch():
+def run_sun_scratch(deviceId=1, runNum=1, addDrop=True, addFc=True,
+									 fine_base_lr=0.001, imgntMean=False):
 	prms      = ku.get_prms(poseType='sigMotion', maxFrameDiff=7,
 						 imSz=None, isNewExpDir=True)
 	cPrms = get_caffe_prms(concatLayer='fc6', sourceModelIter=None, 
-						fineMaxIter=40000)
+						fineMaxIter=40000, deviceId=deviceId, fineRunNum=runNum, addDrop=addDrop,
+						extraFc=addFc, fine_base_lr=fine_base_lr, imgntMean=imgntMean)
 	run_experiment(prms, cPrms, True)
 
