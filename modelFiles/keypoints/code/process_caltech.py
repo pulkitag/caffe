@@ -255,6 +255,11 @@ def get_pretrain_info(preTrainStr):
 			raise Exception('Unrecognized preTrainStr')
 		netFile = os.path.join(snapshotDir, 'exprotObjs_lblkmedoids30_20_imSz%d'% imSz, modelName) 
 		defFile = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/caltech101/exp/keynet_full.prototxt' 
+	elif preTrainStr == 'kitti_fc6':
+		snapshotDir = '/data1/pulkitag/projRotate/snapshots/kitti/los-cls-ind-bn22_mxDiff-7_pose-sigMotion_nrmlz-zScoreScaleSeperate_randcrp_concat-fc6_nTr-1000000/'
+		modelName = 'caffenet_con-fc6_scratch_pad24_imS227_iter_150000.caffemodel'
+		netFile = os.path.join(snapshotDir, modelName)
+		defFile = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/kitti/base_files/kitti_finetune_fc6_deploy.prototxt'
 	else:
 		raise Exception('Unrecognized preTrainStr: %s' % preTrainStr)
 	return netFile, defFile
@@ -576,16 +581,24 @@ def run_random_experiment(isFineLast=True):
 ##
 #
 def run_pretrain_experiment(preTrainStr='rotObjs_kmedoids30_20_nodrop_iter120K', isFineLast=True,
-								runType='run', testNum=None, addDropLast=False):	
+								runType='run', testNum=None, addDropLast=False, imSz=128):	
 	'''
 		runType: 'run' run the experiment
 							'test' perform test
 	'''
-	prms    = get_prms()
+	prms    = get_prms(imSz=imSz)
 	#For layers 5,6 I used initLr of 0.001 and std of 0.01
 	#mxLayer = [1,2,3,4,5,6]
-	mxLayer = [2]
+	mxLayer = [6,5,4,3,2]
 	clsAcc  = []
+
+	if imSz==256:
+		imH, imW     = 256, 256
+		cropH, cropW = 227, 227
+	else:
+		imH, imW = 128, 128
+		cropH, cropW = 112, 112 
+
 	for l in mxLayer:
 		if isFineLast:
 			initStd= 0.01
@@ -617,7 +630,7 @@ def run_pretrain_experiment(preTrainStr='rotObjs_kmedoids30_20_nodrop_iter120K',
 		if runType=='run':
 			run_experiment(prms, cPrms, deviceId=1) #1 corresponds to first K40  
 		elif runType == 'test':
-			run_test(prms, cPrms)
+			run_test(prms, cPrms, imH=imH, imW=imW, cropW=cropW, cropH=cropH)
 		elif runType == 'acc':
 			_,accL = resfile2acc(prms,cPrms)
 			clsAcc.append(accL)

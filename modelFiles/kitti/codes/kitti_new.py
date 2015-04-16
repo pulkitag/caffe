@@ -242,13 +242,14 @@ def get_solver(cPrms, isFine=False):
 
 
 def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId=1, 
-									 contextPad=24, imSz=227, 
+									 contextPad=24, imSz=227, convConcat=False, 
 									isFineTune=False, sourceModelIter=100000,
 									 lrAbove=None,
 									fine_base_lr=0.001, fineRunNum=1, fineNumData=1, 
 									fineMaxLayer=None, fineDataSet='sun',
 									fineMaxIter = 40000):
 	'''
+		convConcat     : Concatenate using the convolution layers
 		sourceModelIter: The number of model iterations of the source model to consider
 		fine_max_iter  : The maximum iterations to which the target model should be trained.
 		lrAbove        : If learning is to be performed some layer. 
@@ -262,6 +263,7 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 	caffePrms['deviceId']    = deviceId
 	caffePrms['contextPad']  = contextPad
 	caffePrms['imSz']        = imSz
+	caffePrms['convConcat']  = convConcat
 	caffePrms['fine']        = {}
 	caffePrms['fine']['modelIter'] = sourceModelIter
 	caffePrms['fine']['lrAbove']   = lrAbove
@@ -280,19 +282,22 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 	expStr.append('pad%d' % contextPad)
 	expStr.append('imS%d' % imSz)	
 
+	if convConcat:
+		expStr.append('con-conv')
+
 	if isFineTune:
 		expStr.append(fineDataSet)
 		if sourceModelIter is not None:
 			expStr.append('mItr%dK' % int(sourceModelIter/1000))
 		else:
 			expStr.append('scratch')	
-	if lrAbove is not None:
-			expStr.append('lrAbv-%s' % lrAbove)
-	expStr.append('bLr%.0e' % fine_base_lr)
-	expStr.append('run%d' % fineRunNum)
-	expStr.append('datN%.0e' % fineNumData)
-	if fineMaxLayer is not None:
-		expStr.append('mxl-%s' % fineMaxLayer)
+		if lrAbove is not None:
+				expStr.append('lrAbv-%s' % lrAbove)
+		expStr.append('bLr%.0e' % fine_base_lr)
+		expStr.append('run%d' % fineRunNum)
+		expStr.append('datN%.0e' % fineNumData)
+		if fineMaxLayer is not None:
+			expStr.append('mxl-%s' % fineMaxLayer)
 
 	expStr = ''.join(s + '_' for s in expStr)
 	expStr = expStr[0:-1]
@@ -374,6 +379,8 @@ def setup_experiment(prms, cPrms):
 	baseFileStr  = 'kitti_siamese_window_%s' % cPrms['concatLayer']
 	if prms['lossType'] == 'classify':
 		baseStr = '_cls-trn%d-rot%d' % (trnSz, rotSz)
+		if cPrms['convConcat']:
+			baseStr = baseStr + '_concat_conv'
 	else:
 		baseStr = ''
 	baseFile = os.path.join(baseFilePath, baseFileStr + baseStr + '.prototxt')

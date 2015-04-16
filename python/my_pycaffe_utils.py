@@ -153,6 +153,11 @@ class ILSVRC12Reader:
 	def word_label(self, lb):
 		return self.words_[self.synsets_[lb]]	
 
+def modelname_2_solvername(modelName):
+	#Remove .caffemodel
+	solverName = modelName[0:-11] + '.solverstate'
+	return solverName
+
 
 def read_layerdefs_from_proto(fName):
 	'''
@@ -1167,12 +1172,16 @@ class ExperimentFiles:
 
 	##
 	# Write script for training.  
-	def write_run_train(self, modelFile=None):
+	def write_run_train(self, modelFile=None, snapFile=None):
 		with open(self.runTrain_,'w') as f:
 			f.write('#!/usr/bin/env sh \n \n')
 			f.write('TOOLS=%s \n \n' % self.paths_['tools'])
 			f.write('GLOG_logtostderr=1 $TOOLS/caffe train')
-			f.write('\t --solver=%s' % self.solver_)
+			if snapFile is None:
+				f.write('\t --solver=%s' % self.solver_)
+			else:
+				#THings need to be resumed
+				f.write('\t --snapshot=%s' % snapFile)
 			if modelFile is not None:
 				f.write('\t --weights=%s' % modelFile)
 			f.write('\t -gpu %d' % self.deviceId_)
@@ -1368,13 +1377,15 @@ class CaffeExperiment:
 		self.expFile_.netDef_.set_std_all(stdVal)
 
 	# Make the experiment. 
-	def make(self, modelFile=None, writeTest=False, testIter=None, modelIter=None):
+	def make(self, modelFile=None, writeTest=False, testIter=None, modelIter=None,
+								 solverSnapFile=None):
 		'''
 			modelFile - file to finetune from if needed.
 			writeTest - if the test file needs to be written. 
 			if writeTest is True:
 				testIter :  For number of iterations the test needs to be run.
 				modelIter:  Used for estimating the model used for running the tests. 
+			solverSnapFile: If the experiment needs to be resumed. 
 		'''
 		if not os.path.exists(self.dirs_['exp']):
 			os.makedirs(self.dirs_['exp'])
@@ -1384,7 +1395,7 @@ class CaffeExperiment:
 		self.expFile_.write_netdef()
 		self.expFile_.write_solver()
 		print "MODEL: %s" % modelFile
-		self.expFile_.write_run_train(modelFile)
+		self.expFile_.write_run_train(modelFile, solverSnapFile)
 		if writeTest:
 			assert testIter is not None and modelIter is not None, 'Missing variables'
 			self.expFile_.write_run_test(modelIter, testIter)		
