@@ -1406,7 +1406,7 @@ class CaffeExperiment:
 			os.makedirs(self.dirs_['snap'])
 		
 		if resumeIter is not None:
-			self.expFile_.setup_resume()	
+			self.expFile_.setup_resume(resumeIter)	
  
 		self.expFile_.write_netdef()
 		self.expFile_.write_solver()
