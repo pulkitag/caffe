@@ -368,6 +368,14 @@ def run_networks_conv(debug_info='false'):
 		run_experiment(prms, cPrms, deviceId=deviceId)
 
 
+def read_accuracy(prms, cPrms):
+	caffeExp = get_experiment_object(prms, cPrms)
+	resFile  = prms['paths']['resFile'] % (caffeExp.dataExpName_ + '_' + cPrms['expName'])
+	res     = h5.File(resFile, 'r')
+	acc     = res['acc'][:][0]
+	res.close()
+	return acc
+
 	
 def run_finetune(max_iter=5000, stepsize=1000, lrAbove=None):
 	deviceId = 2
@@ -420,7 +428,17 @@ def run_finetune(max_iter=5000, stepsize=1000, lrAbove=None):
 
 	srcPrms = mr.get_prms(maxRot=10, maxDeltaRot=30,
 					 lossType='classify', numTrainEx=1e+7)
-	for numEx in  [100, 1000, 10000]:
+	exNum = [100, 300, 1000, 10000]
+	#exNum = [10000]
+	#exNum = [300]
+
+	acc = {}
+	acc['numExamples'] = exNum
+	for nn in nw:
+		name = nw2name(nn)
+		acc[name] = []
+
+	for numEx in  exNum:
 		for snn,tnn in zip(sourceNw, targetNw):	
 			#Source Experiment
 			srcCaffePrms = get_caffe_prms(snn, isSiamese=True)
@@ -430,23 +448,45 @@ def run_finetune(max_iter=5000, stepsize=1000, lrAbove=None):
 			tgtCaffePrms = get_caffe_prms(tnn, isSiamese=False, isFineTune=True, fineExp=srcExp,
 													fineModelIter=40000, max_iter=max_iter, stepsize=stepsize,
 													lrAbove=lrAbove)
-			#make_experiment(tgtPrms, tgtCaffePrms)
-			run_experiment(tgtPrms, tgtCaffePrms, deviceId=deviceId)
+			if runType == 'run':
+				run_experiment(tgtPrms, tgtCaffePrms, deviceId=deviceId)
+			elif runType == 'test':
+				run_test(prms, cPrms)
+			elif runType == 'accuracy':
+				name = nw2name(nn)
+				acc[name] = read_accuracy(tgtPrms, tgtCaffePrms)
+			else:
+				raise Exception('Unrecognized run type %s' % runType)
 
+	if runType == 'accuracy':
+		return acc	
 
-def run_scratch():
+		
+def run_scratch(lrAbove=None, max_iter=5000, stepsize=5000):
 	deviceId = 2
 	nw = []
+	'''
 	nw.append( [('InnerProduct',{'num_output':200}), ('ReLU',{}),
 							('InnerProduct', {'num_output': 100, 'nameDiff': 'ft'}), ('ReLU',{}),
 						  ('InnerProduct', {'num_output': 10, 'nameDiff': 'ft'}), 
 							('SoftmaxWithLoss', {'bottom2': 'label', 'shareBottomWithNext': True}),
 							('Accuracy', {'bottom2': 'label'})] )
+	'''
+	nw.append( [('Convolution',  {'num_output': 96,  'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+							('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+							('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+						  ('InnerProduct', {'num_output': 500, 'nameDiff': 'ft'}), ('ReLU',{}), 
+						  ('InnerProduct', {'num_output': 10, 'nameDiff': 'ft'}),
+							('SoftmaxWithLoss', {'bottom2': 'label', 'shareBottomWithNext': True}),
+							('Accuracy', {'bottom2': 'label'})] )
 
-	prms = mr.get_prms(transform='normal', numTrainEx=10000)
-	for nn in nw:	
-		cPrms = get_caffe_prms(nn, isSiamese=False)
-		run_experiment(prms, cPrms, deviceId=deviceId)
+
+	trainEx = [100, 1000, 10000]
+	for tt in trainEx:
+		for nn in nw:	
+			prms = mr.get_prms(transform='normal', numTrainEx=tt)
+			cPrms = get_caffe_prms(nn, isSiamese=False, lrAbove=lrAbove, max_iter=max_iter, stepsize=stepsize)
+			run_experiment(prms, cPrms, deviceId=deviceId)
 
 ##
 # Find the adversary network starting from scratch. 

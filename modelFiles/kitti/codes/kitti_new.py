@@ -242,7 +242,8 @@ def get_solver(cPrms, isFine=False):
 
 
 def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId=1, 
-									 contextPad=24, imSz=227, imgntMean=False, 
+									contextPad=24, imSz=227, convConcat=False,
+									imgntMean=False, 
 									isFineTune=False, sourceModelIter=150000,
 								  lrAbove=None,
 									fine_base_lr=0.001, fineRunNum=1, fineNumData=1, 
@@ -250,6 +251,7 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 									fineMaxIter = 40000, addDrop=False, extraFc=False,
 									stepsize=20000, isResume=False, resumeIter=None):
 	'''
+		convConcat     : Concatenate using the convolution layers
 		sourceModelIter: The number of model iterations of the source model to consider
 		fine_max_iter  : The maximum iterations to which the target model should be trained.
 		lrAbove        : If learning is to be performed some layer. 
@@ -265,6 +267,7 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 	caffePrms['imgntMean']   = imgntMean
 	caffePrms['stepsize']    = stepsize
 	caffePrms['imSz']        = imSz
+	caffePrms['convConcat']  = convConcat
 	caffePrms['fine']        = {}
 	caffePrms['fine']['modelIter'] = sourceModelIter
 	caffePrms['fine']['lrAbove']   = lrAbove
@@ -288,6 +291,8 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 	if isResume:
 		assert resumeIter is not None
 		expStr.append('resume%dK' % int(resumeIter/1000))
+	if convConcat:
+		expStr.append('con-conv')
 
 	if isFineTune:
 		expStr.append(fineDataSet)
@@ -402,6 +407,8 @@ def setup_experiment(prms, cPrms):
 	baseFileStr  = 'kitti_siamese_window_%s' % cPrms['concatLayer']
 	if prms['lossType'] == 'classify':
 		baseStr = '_cls-trn%d-rot%d' % (trnSz, rotSz)
+		if cPrms['convConcat']:
+			baseStr = baseStr + '_concat_conv'
 	else:
 		baseStr = ''
 	baseFile = os.path.join(baseFilePath, baseFileStr + baseStr + '.prototxt')
