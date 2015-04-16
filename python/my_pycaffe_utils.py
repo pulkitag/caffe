@@ -1182,11 +1182,10 @@ class ExperimentFiles:
 			if self.isResume_:
 				assert modelFile == None
 				f.write('\t --snapshot=%s' % self.resumeSolver_)
-				f.write('\t --weights=%s' % self.resumeModel_)
 			else:
-				f.write('\t --solver=%s' % self.solver_)
 				if modelFile is not None:
 					f.write('\t --weights=%s' % modelFile)
+			f.write('\t --solver=%s' % self.solver_)
 			f.write('\t -gpu %d' % self.deviceId_)
 			f.write('\t 2>&1 | tee %s \n' % self.logTrain_)
 		give_run_permissions_(self.runTrain_)

@@ -497,8 +497,7 @@ def run_sun_layerwise(deviceId=1, runNum=2, addFc=True, addDrop=True,
 					fineRunNum=runNum, fine_base_lr = fine_base_lr,
 					extraFc = addFc, addDrop = addDrop,
 					imgntMean = imgntMean)
-		exp = make_experiment(prms, cPrms, True, resumeIter=resumeIter)
-		return exp
+		#exp = make_experiment(prms, cPrms, True, resumeIter=resumeIter)
 		run_experiment(prms, cPrms, True, resumeIter=resumeIter)
 
 
