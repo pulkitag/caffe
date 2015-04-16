@@ -1,42 +1,9 @@
 name: "KittiNet"
-layer {
-  name: "data"
-  type: "Data"
-  top: "data"
-	top: "label"
-  include {
-    phase: TRAIN
-  }
-  transform_param {
-    mirror: true
-    crop_size: 227
-    mean_file: "/data0/pulkitag/kitti/lmdb-store/kitti_mean_deploy.binaryproto"
-  }
-  data_param {
-    source: "/data0/pulkitag/kitti/lmdb-store/images_train_consequent_pose-euler_nrmlz-zScoreScaleSeperate_imSz256-lmdb"
-    batch_size: 128
-		backend: LMDB
-  }
-}
-layer {
-  name: "data"
-  type: "Data"
-  top: "data"
-	top: "label"
-  include {
-    phase: TEST
-  }
-  transform_param {
-    mirror: false
-    crop_size: 227
-    mean_file: "/data0/pulkitag/kitti/lmdb-store/kitti_mean_deploy.binaryproto"
-  }
-  data_param {
-    source: "/data0/pulkitag/kitti/lmdb-store/images_train_consequent_pose-euler_nrmlz-zScoreScaleSeperate_imSz256-lmdb"
-    batch_size: 128
-		backend: LMDB
-  }
-}
+input: "data"
+input_dim: 128
+input_dim: 3
+input_dim: 227
+input_dim: 227
 layer {
   name: "conv1"
   type: "Convolution"
@@ -327,19 +294,5 @@ layer {
       value: 1
     }
   }
-}
-layer {
-  name: "loss"
-  type: "SoftmaxWithLoss"
-  bottom: "class_fc"
-  bottom: "label"
-  top: "loss"
-}
-layer {
-	name: "accuracy"
-	type: "Accuracy"
-	bottom: "class_fc"
-	bottom: "label"
-	top: "accuracy"
 }
 

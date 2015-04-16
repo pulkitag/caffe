@@ -11,6 +11,8 @@ import os
 import lmdb
 import shutil
 import scipy.misc as scm
+import scipy.io as sio
+import copy
 
 ## 
 # Write array as a proto
@@ -418,4 +420,31 @@ def save_lmdb_images(ims, dbFileName, labels=None, asFloat=False):
 			txn.put('{:0>10d}'.format(idx), imDat.SerializeToString())
 	db.close()
 
-
+##
+# Save the weights in a form that will be used by matlab function
+# swap_weights to generate files useful for matconvnet. 
+def save_weights_for_matconvnet(net, outName):
+	'''
+		net    : Instance of my_pycaffe.MyNet
+		outName: The matlab file which needs to store parameters. 
+	'''
+	params = {}
+	for (count,key) in enumerate(net.net.params.keys()):
+		blob = net.net.params[key]
+		wKey = key + '_w'
+		bKey = key + '_b'
+		params[wKey] = copy.deepcopy(blob[0].data)
+		params[bKey]    = copy.deepcopy(blob[1].data)
+		N,ch,h,w     = params[wKey].shape
+		print params[wKey].shape, params[bKey].shape, N
+		num = N * ch * h * w
+		if count==0:
+			print 'Converting BGR filters to RGB filters'
+			assert ch==3, 'The code is hacked as MatConvNet works with RGB format instead of BGR'
+			params[wKey] = params[wKey][:,[2,1,0],:,:]
+		params[wKey]  	= params[wKey].transpose((2,3,1,0)).reshape(1,num,order='F')
+		if N==1 and ch==1:
+			#Hacky way of finding a FC layer
+			N = h
+		params[bKey]    = params[bKey].reshape((1,N))
+	sio.savemat(outName, params)

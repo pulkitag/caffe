@@ -8,6 +8,7 @@ import my_pycaffe_utils as mpu
 import scipy.misc as scm
 import myutils as myu
 import copy
+import my_pycaffe as mp
 
 SET_NAMES = ['train', 'test']
 baseFilePath = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/kitti/base_files'
@@ -501,8 +502,26 @@ def run_sun_layerwise(deviceId=1, runNum=2, addFc=True, addDrop=True,
 		run_experiment(prms, cPrms, True, resumeIter=resumeIter)
 
 
+def run_sun_finetune(deviceId=1, runNum=2, addFc=True, addDrop=True,
+								fine_base_lr=0.001, imgntMean=True, stepsize=20000,
+								resumeIter=None, fineMaxIter=100000, concatLayer='fc6',
+								sourceModelIter=150000):
+	#Set the prms
+	prms      = ku.get_prms(poseType='sigMotion', maxFrameDiff=7,
+						 imSz=None, isNewExpDir=True)
+	#Get CaffePrms
+	cPrms = get_caffe_prms(concatLayer=concatLayer, sourceModelIter=sourceModelIter,
+						fineMaxIter=fineMaxIter, fine_base_lr=fine_base_lr,
+						extraFc=addFc, addDrop=addDrop, 
+						fineRunNum=runNum, 
+						deviceId=deviceId, imgntMean=imgntMean)
+	run_experiment(prms, cPrms, True, resumeIter)
+							
+
+
 def run_sun_scratch(deviceId=1, runNum=1, addDrop=True, addFc=True,
 									 fine_base_lr=0.001, imgntMean=False):
+	#I shouldnt be using prms here, but I am. 
 	prms      = ku.get_prms(poseType='sigMotion', maxFrameDiff=7,
 						 imSz=None, isNewExpDir=True)
 	cPrms = get_caffe_prms(concatLayer='fc6', sourceModelIter=None, 
@@ -510,3 +529,16 @@ def run_sun_scratch(deviceId=1, runNum=1, addDrop=True, addFc=True,
 						extraFc=addFc, fine_base_lr=fine_base_lr, imgntMean=imgntMean)
 	run_experiment(prms, cPrms, True)
 
+
+def save_for_matconvnet():
+	modelIter = 150000
+	prms      = ku.get_prms(poseType='sigMotion', maxFrameDiff=7,
+						 imSz=None, isNewExpDir=True)
+	cPrms    = get_caffe_prms(concatLayer='fc6')
+	exp      = setup_experiment(prms, cPrms)
+	snapFile = exp.get_snapshot_name(modelIter)
+	defFile  = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/kitti/base_files/kitti_finetune_fc6_deploy_input.prototxt'
+	print snapFile
+	net      = mp.MyNet(defFile, snapFile)
+	outName  = os.path.join('/data1/pulkitag/others/joao/','kitti-%d.mat' % modelIter)
+	mpio.save_weights_for_matconvnet(net, outName) 

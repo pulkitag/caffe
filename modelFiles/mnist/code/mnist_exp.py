@@ -377,8 +377,9 @@ def read_accuracy(prms, cPrms):
 	return acc
 
 	
-def run_finetune(max_iter=5000, stepsize=1000, lrAbove=None):
-	deviceId = 2
+def run_finetune(max_iter=5000, stepsize=1000, lrAbove=None, 
+								runType='run',deviceId=2):
+	#deviceId = 2
 	sourceNw = []	
 	targetNw = []
 
@@ -421,7 +422,8 @@ def run_finetune(max_iter=5000, stepsize=1000, lrAbove=None):
 	targetNw.append( [('Convolution',  {'num_output': 96,  'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
 							('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
 							('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
-						  ('InnerProduct', {'num_output': 500, 'nameDiff': 'ft'}), ('ReLU',{}), 
+						  ('InnerProduct', {'num_output': 500, 'nameDiff': 'ft'}), ('ReLU',{}),
+							('Dropout', {'dropout_ratio': 0.5}), 
 						  ('InnerProduct', {'num_output': 10, 'nameDiff': 'ft'}),
 							('SoftmaxWithLoss', {'bottom2': 'label', 'shareBottomWithNext': True}),
 							('Accuracy', {'bottom2': 'label'})] )
@@ -434,7 +436,7 @@ def run_finetune(max_iter=5000, stepsize=1000, lrAbove=None):
 
 	acc = {}
 	acc['numExamples'] = exNum
-	for nn in nw:
+	for nn in targetNw:
 		name = nw2name(nn)
 		acc[name] = []
 
