@@ -249,7 +249,7 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 									fine_base_lr=0.001, fineRunNum=1, fineNumData=1, 
 									fineMaxLayer=None, fineDataSet='sun',
 									fineMaxIter = 40000, addDrop=False, extraFc=False,
-									stepsize=20000, isResume=False, resumeIter=None):
+									stepsize=20000):
 	'''
 		convConcat     : Concatenate using the convolution layers
 		sourceModelIter: The number of model iterations of the source model to consider
@@ -268,8 +268,6 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 	caffePrms['stepsize']    = stepsize
 	caffePrms['imSz']        = imSz
 	caffePrms['convConcat']  = convConcat
-	caffePrms['isResume']    = isResume
-	caffePrms['resumIter']   = resumeIter
 	caffePrms['fine']        = {}
 	caffePrms['fine']['modelIter'] = sourceModelIter
 	caffePrms['fine']['lrAbove']   = lrAbove
@@ -290,9 +288,6 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 	expStr.append('pad%d' % contextPad)
 	expStr.append('imS%d' % imSz)	
 
-	if isResume:
-		assert resumeIter is not None
-		expStr.append('resume%dK' % int(resumeIter/1000))
 	if convConcat:
 		expStr.append('con-conv')
 
@@ -341,7 +336,7 @@ def setup_experiment_finetune(prms, cPrms):
 							 'kitti_finetune_fc6_deploy.prototxt')
 	#Setup the target experiment. 
 	tgCPrms = get_caffe_prms(isFineTune=True,
-			convConcat = cPrms['convConcat']
+			convConcat = cPrms['convConcat'],
 			fine_base_lr=cPrms['fine']['base_lr'],
 			fineRunNum = cPrms['fine']['runNum'],
 			sourceModelIter = cPrms['fine']['modelIter'],
@@ -475,17 +470,21 @@ def make_experiment(prms, cPrms, isFine=False, resumeIter=None):
 	else:
 		caffeExp  = setup_experiment(prms, cPrms)
 		modelFile = None
+
+	if resumeIter is not None:
+		modelFile = None
 	caffeExp.make(modelFile=modelFile, resumeIter=resumeIter)
 	return caffeExp	
 
 ##
-def run_experiment(prms, cPrms, isFine=False):
-	caffeExp = make_experiment(prms, cPrms, isFine=isFine)
+def run_experiment(prms, cPrms, isFine=False, resumeIter=None):
+	caffeExp = make_experiment(prms, cPrms, isFine=isFine, resumeIter=resumeIter)
 	caffeExp.run()
 
 
 def run_sun_layerwise(deviceId=1, runNum=2, addFc=True, addDrop=True,
-											fine_base_lr=0.001, imgntMean=False, stepsize=20000):
+											fine_base_lr=0.001, imgntMean=False, stepsize=20000,
+											resumeIter=None):
 	#maxLayers = ['fc6', 'pool5', 'relu4', 'relu3', 'pool2', 'pool1']
 	#lrAbove   = ['fc6', 'conv5', 'conv4', 'conv3', 'conv2', 'conv2']
 	maxLayers = ['fc6']
@@ -498,7 +497,9 @@ def run_sun_layerwise(deviceId=1, runNum=2, addFc=True, addDrop=True,
 					fineRunNum=runNum, fine_base_lr = fine_base_lr,
 					extraFc = addFc, addDrop = addDrop,
 					imgntMean = imgntMean)
-		run_experiment(prms, cPrms, True)
+		exp = make_experiment(prms, cPrms, True, resumeIter=resumeIter)
+		return exp
+		run_experiment(prms, cPrms, True, resumeIter=resumeIter)
 
 
 def run_sun_scratch(deviceId=1, runNum=1, addDrop=True, addFc=True,

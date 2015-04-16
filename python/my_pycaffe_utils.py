@@ -1169,6 +1169,8 @@ class ExperimentFiles:
 			os.makedirs(self.resultDir_)
 		self.resultLogTrain_ = os.path.join(self.resultDir_, logFileTrain)
 		self.resultLogTest_  = os.path.join(self.resultDir_, logFileTest)
+		self.isResume_       = False
+
 
 	##
 	# Write script for training.  
@@ -1178,11 +1180,13 @@ class ExperimentFiles:
 			f.write('TOOLS=%s \n \n' % self.paths_['tools'])
 			f.write('GLOG_logtostderr=1 $TOOLS/caffe train')
 			if self.isResume_:
+				assert modelFile == None
 				f.write('\t --snapshot=%s' % self.resumeSolver_)
+				f.write('\t --weights=%s' % self.resumeModel_)
 			else:
 				f.write('\t --solver=%s' % self.solver_)
-			if modelFile is not None:
-				f.write('\t --weights=%s' % modelFile)
+				if modelFile is not None:
+					f.write('\t --weights=%s' % modelFile)
 			f.write('\t -gpu %d' % self.deviceId_)
 			f.write('\t 2>&1 | tee %s \n' % self.logTrain_)
 		give_run_permissions_(self.runTrain_)
@@ -1406,7 +1410,9 @@ class CaffeExperiment:
 			os.makedirs(self.dirs_['snap'])
 		
 		if resumeIter is not None:
-			self.expFile_.setup_resume()	
+			self.expFile_.setup_resume(resumeIter)	
+			assert modelFile is None, "Model file cannot be specified with resume\
+							just specify the number of iterations"
  
 		self.expFile_.write_netdef()
 		self.expFile_.write_solver()
