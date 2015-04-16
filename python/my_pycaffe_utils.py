@@ -1172,16 +1172,15 @@ class ExperimentFiles:
 
 	##
 	# Write script for training.  
-	def write_run_train(self, modelFile=None, snapFile=None):
+	def write_run_train(self, modelFile=None):
 		with open(self.runTrain_,'w') as f:
 			f.write('#!/usr/bin/env sh \n \n')
 			f.write('TOOLS=%s \n \n' % self.paths_['tools'])
 			f.write('GLOG_logtostderr=1 $TOOLS/caffe train')
-			if snapFile is None:
-				f.write('\t --solver=%s' % self.solver_)
+			if self.isResume_:
+				f.write('\t --snapshot=%s' % self.resumeSolver_)
 			else:
-				#THings need to be resumed
-				f.write('\t --snapshot=%s' % snapFile)
+				f.write('\t --solver=%s' % self.solver_)
 			if modelFile is not None:
 				f.write('\t --weights=%s' % modelFile)
 			f.write('\t -gpu %d' % self.deviceId_)
@@ -1266,6 +1265,20 @@ class ExperimentFiles:
 			subprocess.check_call([('cd %s && ' % self.modelDir_) + self.runTest_] ,shell=True)
 			os.chdir(cwd)
 			shutil.copyfile(self.logTest_, self.resultLogTest_)		
+
+	def setup_resume(self, resumeIter):
+		modelFile  = self.extract_snapshot_name() % resumeIter
+		solverFile = modelname_2_solvername(modelFile)
+		self.isResume_     = True
+		self.resumeModel_  = modelFile	
+		self.resumeSolver_ = solverFile
+		if np.mod(resumeIter,1000)==0:
+			resumeStr = '_resume%dK' % int(resumeIter/1000)
+		else:
+			resumeIter = '_resume%d' % resumeIter
+		self.logTrain_       = self.logTrain_[:-4] + resumeStr + '.txt'
+		self.resultLogTrain_ = self.resultLogTrain_[:-4] + resumeStr + '.txt'
+		self.runTrain_       = self.runTrain_[:-3] + resumeStr + '.sh'
 
 
 class CaffeExperiment:
@@ -1378,24 +1391,27 @@ class CaffeExperiment:
 
 	# Make the experiment. 
 	def make(self, modelFile=None, writeTest=False, testIter=None, modelIter=None,
-								 solverSnapFile=None):
+								 resumeIter=None):
 		'''
 			modelFile - file to finetune from if needed.
 			writeTest - if the test file needs to be written. 
 			if writeTest is True:
 				testIter :  For number of iterations the test needs to be run.
 				modelIter:  Used for estimating the model used for running the tests. 
-			solverSnapFile: If the experiment needs to be resumed. 
+			resumeIter: If the experiment needs to be resumed. 
 		'''
 		if not os.path.exists(self.dirs_['exp']):
 			os.makedirs(self.dirs_['exp'])
 		if not os.path.exists(self.dirs_['snap']):
 			os.makedirs(self.dirs_['snap'])
-	 
+		
+		if resumeIter is not None:
+			self.expFile_.setup_resume()	
+ 
 		self.expFile_.write_netdef()
 		self.expFile_.write_solver()
 		print "MODEL: %s" % modelFile
-		self.expFile_.write_run_train(modelFile, solverSnapFile)
+		self.expFile_.write_run_train(modelFile)
 		if writeTest:
 			assert testIter is not None and modelIter is not None, 'Missing variables'
 			self.expFile_.write_run_test(modelIter, testIter)		
