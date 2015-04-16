@@ -268,6 +268,8 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 	caffePrms['stepsize']    = stepsize
 	caffePrms['imSz']        = imSz
 	caffePrms['convConcat']  = convConcat
+	caffePrms['isResume']    = isResume
+	caffePrms['resumIter']   = resumeIter
 	caffePrms['fine']        = {}
 	caffePrms['fine']['modelIter'] = sourceModelIter
 	caffePrms['fine']['lrAbove']   = lrAbove
@@ -339,6 +341,7 @@ def setup_experiment_finetune(prms, cPrms):
 							 'kitti_finetune_fc6_deploy.prototxt')
 	#Setup the target experiment. 
 	tgCPrms = get_caffe_prms(isFineTune=True,
+			convConcat = cPrms['convConcat']
 			fine_base_lr=cPrms['fine']['base_lr'],
 			fineRunNum = cPrms['fine']['runNum'],
 			sourceModelIter = cPrms['fine']['modelIter'],
@@ -459,7 +462,7 @@ def setup_experiment(prms, cPrms):
 	return caffeExp
 
 ##
-def make_experiment(prms, cPrms, isFine=False):
+def make_experiment(prms, cPrms, isFine=False, resumeIter=None):
 	if isFine:
 		caffeExp = setup_experiment_finetune(prms, cPrms)
 		#Get the model name from the source experiment. 
@@ -472,7 +475,7 @@ def make_experiment(prms, cPrms, isFine=False):
 	else:
 		caffeExp  = setup_experiment(prms, cPrms)
 		modelFile = None
-	caffeExp.make(modelFile=modelFile)
+	caffeExp.make(modelFile=modelFile, resumeIter=resumeIter)
 	return caffeExp	
 
 ##
