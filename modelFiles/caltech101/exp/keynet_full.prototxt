@@ -331,9 +331,6 @@ layer {
   bottom: "class_fc"
   bottom: "label"
   top: "accuracy"
-  include {
-    phase: TEST
-  }
 }
 layer {
   name: "loss"

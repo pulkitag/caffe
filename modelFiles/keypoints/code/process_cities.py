@@ -6,11 +6,12 @@ import os
 import pdb
 import matplotlib.pyplot as plt
 import subprocess
+import scipy.misc as scm
 
 def get_paths():
 	paths = {}
 	dataDir = '/data1/pulkitag/data_sets/cities/SanFrancisco_dataset'
-	imDir   = '/data0/pulkitag/data_sets/cities/SanFrancisco_dataset/images'
+	imDir   = '/data0/pulkitag/data_sets/cities/SanFrancisco_dataset/images/'
 	paths['dataDir']  = dataDir
 	paths['imDir']    = imDir
 	paths['imList']   = os.path.join(dataDir, 'list.txt')
@@ -48,8 +49,6 @@ def download_image_data(prms):
 		subprocess.check_call(['wget -l 0 %s' % name] ,shell=True)	
 	os.chdir(currDir)
 	
-	
-
 ##
 # Read the list of images
 def get_imnames(prms):
@@ -58,7 +57,7 @@ def get_imnames(prms):
 	imNames, blah, focal = [],[],[]
 	for l in imLines:
 		dat = l.split()
-		imNames.append(os.path.join(prms['paths']['dataDir'], dat[0]))
+		imNames.append(os.path.join(prms['paths']['imDir'], dat[0]))
 		blah.append(dat[0])
 		focal.append(dat[0])
 
@@ -68,21 +67,21 @@ def get_imnames(prms):
 def read_pairs(prms):
 	imNames,_,_ = get_imnames(prms)
 	with open(prms['paths']['pairList'], 'r') as f:
-		line  = f.read_line()
-		numIm, numPairs = int(line[0]), int(line[1])
-		assert numIm == len(imNames), 'Lenght mismatch'
+		line  = f.readline()
+		numIm, numPairs = int(line.split()[0]), int(line.split()[1])
+		assert numIm == len(imNames), 'Lenght mismatch %d v/s %d' % (numIm, len(imNames))
 		imName1, imName2 = [], []
 		euler = []
 		translation = []
 		for count in range(numPairs):
-			line = f.read_line()
+			line = f.readline()
 			lDat = line.split()
 			#Image Ids
 			imId1, imId2 = int(lDat[0]), int(lDat[1])
 			#The rotation matrix. 
 			rotMat = np.array(lDat[2:11]).astype(float).reshape((3,3))
 			euls   = ru.mat2euler(rotMat)
-			trans  = np.array(lData[11:]).astype(float)
+			trans  = np.array(lDat[11:14]).astype(float)
 			#Append the data
 			imName1.append(imNames[imId1])
 			imName2.append(imNames[imId2])
@@ -93,12 +92,20 @@ def read_pairs(prms):
 
 
 def vis_pairs(prms):
-	imName1, imName2, euls, trans = read_pairs(prms)	
+	imName1, imName2, euls, trans = read_pairs(prms)
+	N = len(imName1)
+	perm = np.random.permutation(N)	
 	fig = plt.figure()
 	plt.ion()
+	imName1 = [imName1[i] for i in perm]
+	imName2 = [imName2[i] for i in perm]
+	euls    = [euls[i] for i in perm]
+	trans   = [trans[i] for i in perm]
 	titleStr = 'Trans: ' + '%.3f ' * 3 + 'Rot: ' + '%.3f ' * 3
 	for (im1,im2,eu,tr) in zip(imName1, imName2, euls, trans):
-		titleName = titleStr % ((eu) + (tr))
+		titleName = titleStr % (tuple(tr) + eu)
+		im1 = scm.imread(im1)
+		im2 = scm.imread(im2)
 		vu.plot_pairs(im1, im2, fig, titleStr=titleName)
 		cmd = raw_input()	
 		if cmd == 'exit':

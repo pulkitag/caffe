@@ -345,6 +345,8 @@ def run_networks_conv(debug_info='false'):
 							('Convolution',{'num_output': 200, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
 							('Concat',{'concat_dim':1}),
 						  ('InnerProduct',{'num_output': 1000}),('ReLU',{}), ('Dropout', {'dropout_ratio': 0.5})]) 
+	'''
+
 	'''	
 	nw.append( [('Convolution',  {'num_output': 96,  'kernel_size': 3, 'stride': 1}), ('ReLU',{}),
 							('Pooling', {'kernel_size': 3, 'stride': 2}),
@@ -356,16 +358,34 @@ def run_networks_conv(debug_info='false'):
 						  ('InnerProduct', {'num_output': 1000}), ('ReLU',{}), 
 							('Dropout', {'dropout_ratio': 0.5}),
 							])			 
+	'''
+	'''
+	nw.append( [('Convolution',  {'num_output': 96,  'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+						('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+						('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+						('Concat', {'concat_dim': 1}),
+						('InnerProduct', {'num_output': 1000}), ('ReLU',{}), 
+						('Dropout', {'dropout_ratio': 0.5}),
+						])			 
+	'''
+	nw.append( [('Convolution',  {'num_output': 96,  'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+						('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+						('Concat', {'concat_dim': 1}),
+						('InnerProduct', {'num_output': 1000}), ('ReLU',{}), 
+						('Dropout', {'dropout_ratio': 0.5}),
+						])			 
 
-	prms  = mr.get_prms(maxRot=10, maxDeltaRot=30, lossType='classify', numTrainEx=1e+07)
+	numEx = [1e+6, 1e+7]
+	for ex in numEx:
+		prms  = mr.get_prms(maxRot=10, maxDeltaRot=30, lossType='classify', numTrainEx=ex)
 
-	for nn in nw:
-		name = nw2name(nn)
-		print name
-		#return nn
-		cPrms = get_caffe_prms(nn, isSiamese=True, base_lr=0.01,
-														debug_info=debug_info)
-		run_experiment(prms, cPrms, deviceId=deviceId)
+		for nn in nw:
+			name = nw2name(nn)
+			print name
+			#return nn
+			cPrms = get_caffe_prms(nn, isSiamese=True, base_lr=0.01,
+															debug_info=debug_info)
+			run_experiment(prms, cPrms, deviceId=deviceId)
 
 
 def read_accuracy(prms, cPrms):
