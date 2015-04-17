@@ -581,7 +581,7 @@ def run_random_experiment(isFineLast=True):
 ##
 #
 def run_pretrain_experiment(preTrainStr='rotObjs_kmedoids30_20_nodrop_iter120K', isFineLast=True,
-								runType='run', testNum=None, addDropLast=False, imSz=128):	
+								runType='run', testNum=None, addDropLast=False, imSz=128, maxIter=12000):	
 	'''
 		runType: 'run' run the experiment
 							'test' perform test
@@ -603,7 +603,7 @@ def run_pretrain_experiment(preTrainStr='rotObjs_kmedoids30_20_nodrop_iter120K',
 		if isFineLast:
 			initStd= 0.01
 			initLr = 0.001
-			stepSize = 1000
+			stepSize = 4000
 		else:
 			if l <= 1:
 				initStd = 0.001
@@ -626,7 +626,7 @@ def run_pretrain_experiment(preTrainStr='rotObjs_kmedoids30_20_nodrop_iter120K',
 													 isFineLast=isFineLast,
 													 initLr=initLr, initStd=initStd,
 													 testNum=testNum, stepSize=stepSize,
-													 addDropLast=addDropLast)
+													 addDropLast=addDropLast, maxIter=maxIter)
 		if runType=='run':
 			run_experiment(prms, cPrms, deviceId=1) #1 corresponds to first K40  
 		elif runType == 'test':

@@ -9,6 +9,7 @@ import scipy.misc as scm
 import myutils as myu
 import copy
 import my_pycaffe as mp
+import process_sun as ps
 
 SET_NAMES = ['train', 'test']
 baseFilePath = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/kitti/base_files'
@@ -229,17 +230,18 @@ def get_solver(cPrms, isFine=False):
 	if isFine:
 		base_lr  = cPrms['fine']['base_lr']
 		max_iter = cPrms['fine']['max_iter']
+		gamma    = cPrms['fine']['gamma']
 	else:
 		base_lr  = 0.001
 		max_iter = 250000 
+		gamma    = 0.5
 	solArgs = {'test_iter': 100,	'test_interval': 1000,
-						 'base_lr': base_lr, 'gamma': 0.5, 'stepsize': cPrms['stepsize'],
+						 'base_lr': base_lr, 'gamma': gamma, 'stepsize': cPrms['stepsize'],
 						 'max_iter': max_iter, 'snapshot': 10000, 
 						 'lr_policy': '"step"', 'debug_info': 'true',
 						 'weight_decay': 0.0005}
 	sol = mpu.make_solver(**solArgs) 
 	return sol
-
 
 
 def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId=1, 
@@ -250,9 +252,9 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 									fine_base_lr=0.001, fineRunNum=1, fineNumData=1, 
 									fineMaxLayer=None, fineDataSet='sun',
 									fineMaxIter = 40000, addDrop=False, extraFc=False,
-									stepsize=20000):
+									stepsize=20000, batchSz=128):
 	'''
-		convConcat     : Concatenate using the convolution layers
+		convConcat     : Concatenate the siamese net using the convolution layers
 		sourceModelIter: The number of model iterations of the source model to consider
 		fine_max_iter  : The maximum iterations to which the target model should be trained.
 		lrAbove        : If learning is to be performed some layer. 
@@ -269,6 +271,7 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 	caffePrms['stepsize']    = stepsize
 	caffePrms['imSz']        = imSz
 	caffePrms['convConcat']  = convConcat
+	caffePrms['batchSz']     = batchSz
 	caffePrms['fine']        = {}
 	caffePrms['fine']['modelIter'] = sourceModelIter
 	caffePrms['fine']['lrAbove']   = lrAbove
@@ -280,6 +283,8 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 	caffePrms['fine']['max_iter']  = fineMaxIter
 	caffePrms['fine']['addDrop']   = addDrop
 	caffePrms['fine']['extraFc']   = extraFc
+	caffePrms['fine']['gamma']     = 0.5
+	caffePrms['fine']['prms']      = None
 	expStr = []
 	expStr.append('con-%s' % concatLayer)
 	if isScratch:
@@ -293,6 +298,21 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 		expStr.append('con-conv')
 
 	if isFineTune:
+		if fineDataSet=='sun':
+			assert (fineMaxIter is None) and (stepsize is None)
+			#These will be done automatically.
+			sunPrms     = ps.get_prms(numTrainPerClass=fineNumData, runNum=fineRunNum)
+			numCl       = 397
+			numTrainEx  = numCl * fineNumData  
+			maxEpoch    = 15
+			numSteps    = 2
+			epochIter   = np.ceil(float(numTrainEx)/batchSz)
+			caffePrms['stepsize'] = int(maxEpoch * epochIter)
+			caffePrms['fine']['max_iter'] = int(numSteps * caffePrms['stepsize']) 
+			caffePrms['fine']['gamma'] = 0.1
+			caffePrms['fine']['prms']  = sunPrms
+			expStr.append('small-data')
+
 		expStr.append(fineDataSet)
 		if sourceModelIter is not None:
 			expStr.append('mItr%dK' % int(sourceModelIter/1000))
@@ -348,46 +368,80 @@ def setup_experiment_finetune(prms, cPrms):
 			fineMaxIter  = cPrms['fine']['max_iter'],
 			deviceId     = cPrms['deviceId'],
 			addDrop = cPrms['fine']['addDrop'], extraFc = cPrms['fine']['extraFc'],
-			imgntMean=cPrms['imgntMean'], stepsize=cPrms['stepsize'])
+			imgntMean=cPrms['imgntMean'], stepsize=cPrms['stepsize'],
+			batchSz=cPrms['batchSz'])
 	tgPrms  = copy.deepcopy(prms)
 	tgPrms['expName'] = 'fine-FROM-%s' % prms['expName']
 	tgExp   = get_experiment_object(tgPrms, tgCPrms)
 	tgExp.init_from_external(tgCPrms['solver'], defFile)
 	
-	#Do things as needed. 
-	if not tgCPrms['fine']['lrAbove'] is None:
-		tgExp.finetune_above(tgCPrms['fine']['lrAbove'])		
-
 	if not tgCPrms['fine']['maxLayer'] is None:
 		fcLayer   = copy.copy(tgExp.expFile_.netDef_.layers_['TRAIN']['class_fc'])
 		lossLayer = copy.copy(tgExp.expFile_.netDef_.layers_['TRAIN']['loss'])
 		accLayer  = copy.copy(tgExp.expFile_.netDef_.layers_['TRAIN']['accuracy'])
 		tgExp.del_all_layers_above(tgCPrms['fine']['maxLayer'])
+		mxLayer = tgCPrms['fine']['maxLayer']
 		lastTop = tgExp.get_last_top_name()
+		if tgCPrms['fine']['addDrop']:
+			dropLayer = mpu.get_layerdef_for_proto('Dropout', 'drop-%s' % lastTop, lastTop,
+													**{'top': lastTop, 'dropout_ratio': 0.5})
+			tgExp.add_layer('drop-%s' % lastTop, dropLayer, 'TRAIN')
+		if tgCPrms['fine']['extraFc']:
+			eName = 'fc-extra'
+			ipLayer = mpu.get_layerdef_for_proto('InnerProduct', eName, lastTop,
+													**{'top': eName, 'num_output': 2048})
+			reLayer = mpu.get_layerdef_for_proto('ReLU', 'relu-extra', eName, **{'top': eName})
+			tgExp.add_layer(eName, ipLayer, 'TRAIN')
+			tgExp.add_layer('relu-extra', reLayer, 'TRAIN')
+			lastTop = eName
+			if tgCPrms['fine']['addDrop']:
+				dropLayer = mpu.get_layerdef_for_proto('Dropout', 'drop-%s' % eName, eName,
+														**{'top': eName, 'dropout_ratio': 0.5})
+				tgExp.add_layer('drop-%s' % eName, dropLayer, 'TRAIN')
+
 		fcLayer['bottom'] = '"%s"' % lastTop
 		tgExp.add_layer('class_fc', fcLayer, phase='TRAIN') 
 		tgExp.add_layer('loss', lossLayer, phase='TRAIN') 
 		tgExp.add_layer('accuracy', accLayer, phase='TRAIN') 
 
+	#Do things as needed. 
+	if not tgCPrms['fine']['lrAbove'] is None:
+		tgExp.finetune_above(tgCPrms['fine']['lrAbove'])		
+
 	#Put the right data files.
-	if tgCPrms['fine']['numData'] == 1 and tgCPrms['fine']['dataset']=='sun':
+	if tgCPrms['fine']['prms'] is None:
+		assert (tgCPrms['fine']['numData'] == 1) and (tgCPrms['fine']['dataset']=='sun')
 		dbPath = '/data0/pulkitag/data_sets/sun/leveldb_store'
 		dbFile = os.path.join(dbPath, 'sun-leveldb-%s-%d')
 		trnFile = dbFile % ('train', tgCPrms['fine']['runNum'])
 		tstFile = dbFile % ('test', tgCPrms['fine']['runNum'])
-		tgExp.set_layer_property('data', ['data_param', 'source'],
-						'"%s"' % trnFile, phase='TRAIN')
-		tgExp.set_layer_property('data', ['data_param', 'source'],
-						'"%s"' % tstFile, phase='TEST')
 		tgExp.set_layer_property('data', ['data_param', 'backend'],
 						'LEVELDB', phase='TRAIN')
 		tgExp.set_layer_property('data', ['data_param', 'backend'],
 						'LEVELDB', phase='TEST')
-		if cPrms['imgntMean']:
-			muFile = '"%s"' % '/data1/pulkitag/caffe_models/ilsvrc2012_mean.binaryproto'
-			tgExp.set_layer_property('data', ['transform_param', 'mean_file'], muFile, phase='TRAIN')
-			tgExp.set_layer_property('data', ['transform_param', 'mean_file'], muFile, phase='TEST')
-			 
+	else:
+		trnFile = tgCPrms['fine']['prms']['paths']['lmdb']['train']
+		tstFile = tgCPrms['fine']['prms']['paths']['lmdb']['test']
+		tgExp.set_layer_property('data', ['data_param', 'backend'],
+						'LMDB', phase='TRAIN')
+		tgExp.set_layer_property('data', ['data_param', 'backend'],
+						'LMDB', phase='TEST')
+
+	#Set the data files
+	tgExp.set_layer_property('data', ['data_param', 'source'],
+						'"%s"' % trnFile, phase='TRAIN')
+	tgExp.set_layer_property('data', ['data_param', 'source'],
+					'"%s"' % tstFile, phase='TEST')
+	#Set the imagenet mean
+	if cPrms['imgntMean']:
+		muFile = '"%s"' % '/data1/pulkitag/caffe_models/ilsvrc2012_mean.binaryproto'
+		tgExp.set_layer_property('data', ['transform_param', 'mean_file'], muFile, phase='TRAIN')
+		tgExp.set_layer_property('data', ['transform_param', 'mean_file'], muFile, phase='TEST')
+	#Set the batch-size
+	tgExp.set_layer_property('data', ['data_param', 'batch_size'],
+						tgCPrms['batchSz'], phase='TRAIN')
+	tgExp.set_layer_property('data', ['data_param', 'batch_size'],
+					tgCPrms['batchSz'], phase='TEST')
 	return tgExp	
 	
 	
@@ -482,7 +536,7 @@ def run_experiment(prms, cPrms, isFine=False, resumeIter=None):
 	caffeExp = make_experiment(prms, cPrms, isFine=isFine, resumeIter=resumeIter)
 	caffeExp.run()
 
-
+#Layerwise with big data
 def run_sun_layerwise(deviceId=1, runNum=2, addFc=True, addDrop=True,
 											fine_base_lr=0.001, imgntMean=False, stepsize=20000,
 											resumeIter=None):
@@ -501,6 +555,27 @@ def run_sun_layerwise(deviceId=1, runNum=2, addFc=True, addDrop=True,
 		#exp = make_experiment(prms, cPrms, True, resumeIter=resumeIter)
 		run_experiment(prms, cPrms, True, resumeIter=resumeIter)
 
+#
+def run_sun_layerwise_small(deviceId=0, runNum=1, fineNumData=10,
+							  addFc=True, addDrop=True,
+								sourceModelIter=150000, imgntMean=True, concatLayer='fc6',
+								resumeIter=None, fine_base_lr=0.001):
+	#Set the prms
+	prms      = ku.get_prms(poseType='sigMotion', maxFrameDiff=7,
+						 imSz=None, isNewExpDir=True)
+
+	maxLayers = ['relu6']
+	lrAbove   = ['fc-extra']
+	for mxl, abv in zip(reversed(maxLayers), reversed(lrAbove)):
+		#Get CaffePrms
+		cPrms = get_caffe_prms(concatLayer=concatLayer, sourceModelIter=sourceModelIter,
+						fineMaxIter=None, stepsize=None, fine_base_lr=fine_base_lr,
+						extraFc=addFc, addDrop=addDrop,
+						fineMaxLayer=mxl, lrAbove=abv, 
+						fineRunNum=runNum, fineNumData=fineNumData, 
+						deviceId=deviceId, imgntMean=imgntMean)
+		run_experiment(prms, cPrms, True, resumeIter)
+	
 
 def run_sun_finetune(deviceId=1, runNum=2, addFc=True, addDrop=True,
 								fine_base_lr=0.001, imgntMean=True, stepsize=20000,
@@ -518,7 +593,8 @@ def run_sun_finetune(deviceId=1, runNum=2, addFc=True, addDrop=True,
 	run_experiment(prms, cPrms, True, resumeIter)
 							
 
-
+##
+# Run Sun from scratch
 def run_sun_scratch(deviceId=1, runNum=1, addDrop=True, addFc=True,
 									 fine_base_lr=0.001, imgntMean=False):
 	#I shouldnt be using prms here, but I am. 

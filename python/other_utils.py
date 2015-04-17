@@ -83,7 +83,7 @@ def get_item_dict(data, keyName):
 
 ##
 # Read the image
-def read_image(imName, color=True, isBGR=False):
+def read_image(imName, color=True, isBGR=False, imSz=None):
 	'''
 		color: True - if a gray scale image is encountered convert into color
 	'''
@@ -94,6 +94,10 @@ def read_image(imName, color=True, isBGR=False):
 			im = np.tile(im.reshape(im.shape[0], im.shape[1],1),(1,1,3))
 		if isBGR:
 			im = im[:,:,[2,1,0]]
+	#Resize if needed
+	if imSz is not None:
+		assert isinstance(imSz,int)
+		im = scm.imresize(im, (imSz,imSz))
 	return im			
 
 
