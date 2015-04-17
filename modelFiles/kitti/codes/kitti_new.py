@@ -10,6 +10,7 @@ import myutils as myu
 import copy
 import my_pycaffe as mp
 import process_sun as ps
+import h5py as h5
 
 SET_NAMES = ['train', 'test']
 baseFilePath = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/kitti/base_files'
@@ -304,7 +305,7 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 			sunPrms     = ps.get_prms(numTrainPerClass=fineNumData, runNum=fineRunNum)
 			numCl       = 397
 			numTrainEx  = numCl * fineNumData  
-			maxEpoch    = 15
+			maxEpoch    = 30
 			numSteps    = 2
 			epochIter   = np.ceil(float(numTrainEx)/batchSz)
 			caffePrms['stepsize'] = int(maxEpoch * epochIter)
@@ -347,7 +348,7 @@ def get_experiment_object(prms, cPrms):
 
 ##
 # Setups an experiment for finetuning. 
-def setup_experiment_finetune(prms, cPrms):
+def setup_experiment_finetune(prms, cPrms, returnTgCPrms=False):
 	#Get the def file.
 	if cPrms['fine']['extraFc'] and cPrms['fine']['addDrop']:
 		defFile = os.path.join(baseFilePath,
@@ -369,12 +370,14 @@ def setup_experiment_finetune(prms, cPrms):
 			deviceId     = cPrms['deviceId'],
 			addDrop = cPrms['fine']['addDrop'], extraFc = cPrms['fine']['extraFc'],
 			imgntMean=cPrms['imgntMean'], stepsize=cPrms['stepsize'],
-			batchSz=cPrms['batchSz'])
+			batchSz=cPrms['batchSz'],
+			concatLayer = cPrms['concatLayer'])
 	tgPrms  = copy.deepcopy(prms)
 	tgPrms['expName'] = 'fine-FROM-%s' % prms['expName']
 	tgExp   = get_experiment_object(tgPrms, tgCPrms)
 	tgExp.init_from_external(tgCPrms['solver'], defFile)
 	
+	#pdb.set_trace()
 	if not tgCPrms['fine']['maxLayer'] is None:
 		fcLayer   = copy.copy(tgExp.expFile_.netDef_.layers_['TRAIN']['class_fc'])
 		lossLayer = copy.copy(tgExp.expFile_.netDef_.layers_['TRAIN']['loss'])
@@ -442,7 +445,11 @@ def setup_experiment_finetune(prms, cPrms):
 						tgCPrms['batchSz'], phase='TRAIN')
 	tgExp.set_layer_property('data', ['data_param', 'batch_size'],
 					tgCPrms['batchSz'], phase='TEST')
-	return tgExp	
+
+	if returnTgCPrms:
+		return tgExp, tgCPrms	
+	else:
+		return tgExp	
 	
 	
 def setup_experiment(prms, cPrms):
@@ -519,7 +526,6 @@ def make_experiment(prms, cPrms, isFine=False, resumeIter=None):
 		srcCaffeExp  = setup_experiment(prms, cPrms)
 		if cPrms['fine']['modelIter'] is not None:
 			modelFile = srcCaffeExp.get_snapshot_name(cPrms['fine']['modelIter'])
-			#pdb.set_trace()
 		else:
 			modelFile = None
 	else:
@@ -535,6 +541,38 @@ def make_experiment(prms, cPrms, isFine=False, resumeIter=None):
 def run_experiment(prms, cPrms, isFine=False, resumeIter=None):
 	caffeExp = make_experiment(prms, cPrms, isFine=isFine, resumeIter=resumeIter)
 	caffeExp.run()
+
+
+def get_res_file(prms, cPrms):
+	resFile = prms['paths']['resFile'] % cPrms['expStr']
+	return resFile
+
+##
+def run_test(prms, cPrms, cropH=227, cropW=227, imH=256, imW=256):
+	caffeExp, cPrms  = setup_experiment_finetune(prms, cPrms, True)
+	lmdbFile  = cPrms['fine']['prms']['paths']['lmdb']['test']
+	caffeTest = mpu.CaffeTest.from_caffe_exp_lmdb(caffeExp, lmdbFile)
+	caffeTest.setup_network(['class_fc'], imH=imH, imW=imW,
+								 cropH=cropH, cropW=cropW, channels=3,
+								 modelIterations=cPrms['fine']['max_iter'] + 1)
+	caffeTest.run_test()
+	resFile  = get_res_file(prms, cPrms)
+	dirName  = os.path.dirname(resFile)
+	if not os.path.exists(dirName):
+		os.makedirs(dirName)
+	caffeTest.save_performance(['acc', 'accClassMean'], resFile)
+
+##
+def read_accuracy(prms, cPrms):
+	_, cPrms  = setup_experiment_finetune(prms, cPrms, True)
+	resFile = get_res_file(prms, cPrms)
+	print resFile
+	res     = h5.File(resFile, 'r')
+	#acc.append(res['acc'][:])
+	accClass = res['accClassMean'][:]
+	res.close()
+	return accClass
+
 
 #Layerwise with big data
 def run_sun_layerwise(deviceId=1, runNum=2, addFc=True, addDrop=True,
@@ -559,22 +597,53 @@ def run_sun_layerwise(deviceId=1, runNum=2, addFc=True, addDrop=True,
 def run_sun_layerwise_small(deviceId=0, runNum=1, fineNumData=10,
 							  addFc=True, addDrop=True,
 								sourceModelIter=150000, imgntMean=True, concatLayer='fc6',
-								resumeIter=None, fine_base_lr=0.001):
+								resumeIter=None, fine_base_lr=0.001, runType='run',
+								convConcat=False):
 	#Set the prms
 	prms      = ku.get_prms(poseType='sigMotion', maxFrameDiff=7,
 						 imSz=None, isNewExpDir=True)
 
-	maxLayers = ['relu6']
-	lrAbove   = ['fc-extra']
-	for mxl, abv in zip(reversed(maxLayers), reversed(lrAbove)):
+	acc = {}
+	maxLayers = ['pool1', 'pool2','relu3','relu4','pool5', 'fc6']
+	if addFc:
+		lrAbove   = ['fc-extra'] * len(maxLayers)
+	else:
+		lrAbove = ['class_fc'] * len(maxLayers)
+	for mxl, abv in zip(maxLayers, lrAbove):
 		#Get CaffePrms
 		cPrms = get_caffe_prms(concatLayer=concatLayer, sourceModelIter=sourceModelIter,
 						fineMaxIter=None, stepsize=None, fine_base_lr=fine_base_lr,
 						extraFc=addFc, addDrop=addDrop,
 						fineMaxLayer=mxl, lrAbove=abv, 
 						fineRunNum=runNum, fineNumData=fineNumData, 
-						deviceId=deviceId, imgntMean=imgntMean)
-		run_experiment(prms, cPrms, True, resumeIter)
+						deviceId=deviceId, imgntMean=imgntMean,
+						convConcat=convConcat)
+		if runType =='run':
+			run_experiment(prms, cPrms, True, resumeIter)
+		elif runType == 'test':
+			run_test(prms, cPrms)
+		elif runType == 'accuracy':
+			acc[mxl] = read_accuracy(prms,cPrms)
+
+	if runType=='accuracy':
+		return acc, maxLayers	
+
+##
+#
+def run_sun_layerwise_small_multiple():
+	runNum      = [1,2,3]
+	fineNumData = [5,10,20,50]
+	concatLayer     = ['fc6', 'conv5']
+	sourceModelIter = 60000
+	convConcat  = [False, True]
+	for r in runNum:
+		for num in fineNumData:
+			for cl,cc in zip(concatLayer, convConcat):
+				run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
+							sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc)
+				run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
+							sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
+							runType='test')
 	
 
 def run_sun_finetune(deviceId=1, runNum=2, addFc=True, addDrop=True,
@@ -592,6 +661,7 @@ def run_sun_finetune(deviceId=1, runNum=2, addFc=True, addDrop=True,
 						deviceId=deviceId, imgntMean=imgntMean)
 	run_experiment(prms, cPrms, True, resumeIter)
 							
+
 
 ##
 # Run Sun from scratch

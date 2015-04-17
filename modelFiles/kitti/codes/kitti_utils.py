@@ -37,7 +37,7 @@ def get_paths(isNewExpDir=False):
 	prms['expDir']      = expDir
 	prms['snapDir']     = snapDir 
 	prms['imRootDir']   = os.path.join(imDir, 'dataset', 'sequences')
-
+	prms['resDir']    = '/data1/pulkitag/data_sets/kitti/results/'
 	return prms
 
 
@@ -136,7 +136,8 @@ def get_prms(poseType='euler', nrmlzType='zScoreScaleSeperate',
 	paths['windowFile'] = {}
 	paths['windowFile']['train'] = os.path.join(paths['windowDir'], 'train_%s.txt' % expName)
 	paths['windowFile']['test']  = os.path.join(paths['windowDir'], 'test_%s.txt'  % teExpName)
-	
+	paths['resFile']       = os.path.join(paths['resDir'], expName, '%s.h5')
+
 	prms['paths'] = paths
 	#Get the pose stats
 	prms['poseStats'] = {}

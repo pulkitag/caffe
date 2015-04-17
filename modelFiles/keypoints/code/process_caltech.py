@@ -456,12 +456,12 @@ def get_res_file(prms, cPrms):
 	return resFile
 
 ## 
-def run_test(prms, cPrms, cropH=112, cropW=112, imH=128, imW=128):
+def run_test(prms, cPrms, cropH=112, cropW=112, imH=128, imW=128, extraIter=0):
 	caffeExp  = setup_experiment(prms, cPrms)
 	caffeTest = mpu.CaffeTest.from_caffe_exp_lmdb(caffeExp, prms['paths']['lmdb']['test'])
 	caffeTest.setup_network(['class_fc'], imH=imH, imW=imW,
 								 cropH=cropH, cropW=cropW, channels=3,
-								 modelIterations=cPrms['maxIter'] + 1,
+								 modelIterations=cPrms['maxIter'] + extraIter,
 								 maxClassCount=cPrms['testNum'], maxLabel=101)
 	caffeTest.run_test()
 	resFile  = get_res_file(prms, cPrms)
@@ -474,6 +474,7 @@ def run_test(prms, cPrms, cropH=112, cropW=112, imH=128, imW=128):
 # res file to the accuracy.
 def resfile2acc(prms, cPrms):
 	resFile = get_res_file(prms, cPrms)
+	print resFile
 	res     = h5.File(resFile, 'r')
 	acc,accClass =  res['acc'][:], res['accClassMean'][:]
 	res.close()
