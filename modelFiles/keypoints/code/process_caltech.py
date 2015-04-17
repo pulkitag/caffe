@@ -239,27 +239,47 @@ def get_pretrain_info(preTrainStr):
 		defFile = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/caltech101/exp/keynet_full.prototxt' 
 		return None, defFile
 
+	#Alex-Net
 	if preTrainStr == 'alex':
 		netFile = '/data1/pulkitag/caffe_models/caffe_imagenet_train_iter_310000'
 		defFile = '/data1/pulkitag/caffe_models/bvlc_reference/caffenet_full.prototxt'
+
+	#KMedoid rotation
 	elif preTrainStr in  ['rotObjs_kmedoids30_20_iter60K', 'rotObjs_kmedoids30_20_nodrop_iter120K']:
 		snapshotDir   = '/data1/pulkitag/snapshots/keypoints/'
 		imSz          = 128
+		
 		if preTrainStr == 'rotObjs_kmedoids30_20_iter60K':
 			numIterations = 60000
 			modelName  =  'keypoints_siamese_scratch_iter_%d.caffemodel' % numIterations
+		
 		elif preTrainStr == 'rotObjs_kmedoids30_20_nodrop_iter120K':
 			numIterations = 120000
 			modelName  =  'keypoints_siamese_scratch_nodrop_fc6_iter_%d.caffemodel' % numIterations
+		
 		else:
 			raise Exception('Unrecognized preTrainStr')
 		netFile = os.path.join(snapshotDir, 'exprotObjs_lblkmedoids30_20_imSz%d'% imSz, modelName) 
 		defFile = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/caltech101/exp/keynet_full.prototxt' 
+
+	#Kitti
 	elif preTrainStr == 'kitti_fc6':
 		snapshotDir = '/data1/pulkitag/projRotate/snapshots/kitti/los-cls-ind-bn22_mxDiff-7_pose-sigMotion_nrmlz-zScoreScaleSeperate_randcrp_concat-fc6_nTr-1000000/'
 		modelName = 'caffenet_con-fc6_scratch_pad24_imS227_iter_150000.caffemodel'
 		netFile = os.path.join(snapshotDir, modelName)
 		defFile = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/kitti/base_files/kitti_finetune_fc6_deploy.prototxt'
+
+	#Uniform Rotation/PASCAL Classification n/w	
+	elif preTrainStr in ['pascal_cls', 'uniform_az30_el10_drop_60K']:
+		snapshotDir='/data1/pulkitag/pascal3d/snapshots/pascal3d_imSz128_lbl-uni-az30el10_crp-contPad16_ns4e+04_mb50'
+		if preTrainStr == 'pascal_cls':
+			modelName = 'caffenet_scratch_sup_noRot_fc6_iter_60000.caffemodel'
+		elif preTrainStr == 'uniform_az30_el10_drop_60K':
+			modelName = 'caffenet_scratch_unsup_fc6_drop_iter_60000.caffemodel'
+		netFile   = os.path.join(snapshotDir, modelName)
+		defFile   = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/caltech101/exp/keynet_full.prototxt'
+
+
 	else:
 		raise Exception('Unrecognized preTrainStr: %s' % preTrainStr)
 	return netFile, defFile
@@ -456,7 +476,7 @@ def get_res_file(prms, cPrms):
 	return resFile
 
 ## 
-def run_test(prms, cPrms, cropH=112, cropW=112, imH=128, imW=128, extraIter=0):
+def run_test(prms, cPrms, cropH=112, cropW=112, imH=128, imW=128, extraIter=1):
 	caffeExp  = setup_experiment(prms, cPrms)
 	caffeTest = mpu.CaffeTest.from_caffe_exp_lmdb(caffeExp, prms['paths']['lmdb']['test'])
 	caffeTest.setup_network(['class_fc'], imH=imH, imW=imW,

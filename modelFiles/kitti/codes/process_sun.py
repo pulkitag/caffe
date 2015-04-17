@@ -269,13 +269,13 @@ def vis_lmdb(prms, setName='train'):
 
 ##
 # Make all the lmdbs
-def make_all_lmdbs():
+def make_all_lmdbs(imSz=256):
 	setNames  = ['train','test']
 	numTrain = [5,10,20,50]
 	runNum   = range(1,6)
 	for r in runNum:
 		for n in numTrain:
-			prms = get_prms(numTrainPerClass=n, runNum=r)
+			prms = get_prms(numTrainPerClass=n, runNum=r, imSz=imSz)
 			for s in setNames:
 				make_std_sub_splits(prms, setName=s)	
 				save_lmdb(prms, setName=s)		

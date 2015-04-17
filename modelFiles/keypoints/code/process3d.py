@@ -68,7 +68,8 @@ def get_basic_paths():
 	#Other dir
 	paths['otherDataDir'] = os.path.join(paths['myData'], 'other')
 	ou.create_dir(paths['otherDataDir'])
-	
+	#Experiment directory
+	paths['expDir'] = os.path.join(paths['myData'], 'exp')
 	return paths
 
 ##

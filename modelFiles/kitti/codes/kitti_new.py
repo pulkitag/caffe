@@ -11,6 +11,12 @@ import copy
 import my_pycaffe as mp
 import process_sun as ps
 import h5py as h5
+codePath = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/keypoints/code'
+cwd = os.getcwd()
+os.chdir(codePath)
+import process_caltech as pc
+import process3d as p3d
+os.chdir(cwd)
 
 SET_NAMES = ['train', 'test']
 baseFilePath = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/kitti/base_files'
@@ -253,7 +259,7 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 									fine_base_lr=0.001, fineRunNum=1, fineNumData=1, 
 									fineMaxLayer=None, fineDataSet='sun',
 									fineMaxIter = 40000, addDrop=False, extraFc=False,
-									stepsize=20000, batchSz=128):
+									stepsize=20000, batchSz=128, isMySimple=False):
 	'''
 		convConcat     : Concatenate the siamese net using the convolution layers
 		sourceModelIter: The number of model iterations of the source model to consider
@@ -273,6 +279,7 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 	caffePrms['imSz']        = imSz
 	caffePrms['convConcat']  = convConcat
 	caffePrms['batchSz']     = batchSz
+	caffePrms['isMySimple']  = isMySimple
 	caffePrms['fine']        = {}
 	caffePrms['fine']['modelIter'] = sourceModelIter
 	caffePrms['fine']['lrAbove']   = lrAbove
@@ -286,6 +293,7 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 	caffePrms['fine']['extraFc']   = extraFc
 	caffePrms['fine']['gamma']     = 0.5
 	caffePrms['fine']['prms']      = None
+	caffePrms['fine']['muFile']    = None
 	expStr = []
 	expStr.append('con-%s' % concatLayer)
 	if isScratch:
@@ -297,12 +305,22 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 
 	if convConcat:
 		expStr.append('con-conv')
+	
+	if isMySimple:
+		expStr.append('mysimple')
 
 	if isFineTune:
 		if fineDataSet=='sun':
 			assert (fineMaxIter is None) and (stepsize is None)
 			#These will be done automatically.
-			sunPrms     = ps.get_prms(numTrainPerClass=fineNumData, runNum=fineRunNum)
+			if imSz==227:
+				sunImSz = 256
+				muFile = '"%s"' % '/data1/pulkitag/caffe_models/ilsvrc2012_mean.binaryproto'
+			else:
+				sunImSz = 128
+				muFile = '"%s"' % '/data1/pulkitag/caffe_models/ilsvrc2012_mean_imSz128.binaryproto'
+			caffePrms['fine']['muFile'] = muFile 
+			sunPrms     = ps.get_prms(numTrainPerClass=fineNumData, runNum=fineRunNum, imSz=sunImSz)
 			numCl       = 397
 			numTrainEx  = numCl * fineNumData  
 			maxEpoch    = 30
@@ -348,14 +366,19 @@ def get_experiment_object(prms, cPrms):
 
 ##
 # Setups an experiment for finetuning. 
-def setup_experiment_finetune(prms, cPrms, returnTgCPrms=False):
-	#Get the def file.
-	if cPrms['fine']['extraFc'] and cPrms['fine']['addDrop']:
-		defFile = os.path.join(baseFilePath,
-							 'kitti_finetune_fc6_drop_extraFc_deploy.prototxt')
+def setup_experiment_finetune(prms, cPrms, returnTgCPrms=False, srcDefFile=None):
+
+	if srcDefFile is None:
+		#Get the def file.
+		if cPrms['fine']['extraFc'] and cPrms['fine']['addDrop']:
+			defFile = os.path.join(baseFilePath,
+								 'kitti_finetune_fc6_drop_extraFc_deploy.prototxt')
+		else:
+			defFile = os.path.join(baseFilePath,
+								 'kitti_finetune_fc6_deploy.prototxt')
 	else:
-		defFile = os.path.join(baseFilePath,
-							 'kitti_finetune_fc6_deploy.prototxt')
+		defFile = srcDefFile
+
 	#Setup the target experiment. 
 	tgCPrms = get_caffe_prms(isFineTune=True,
 			convConcat = cPrms['convConcat'],
@@ -371,7 +394,9 @@ def setup_experiment_finetune(prms, cPrms, returnTgCPrms=False):
 			addDrop = cPrms['fine']['addDrop'], extraFc = cPrms['fine']['extraFc'],
 			imgntMean=cPrms['imgntMean'], stepsize=cPrms['stepsize'],
 			batchSz=cPrms['batchSz'],
-			concatLayer = cPrms['concatLayer'])
+			concatLayer = cPrms['concatLayer'],
+			isMySimple  = cPrms['isMySimple'],
+			imSz = cPrms['imSz'])
 	tgPrms  = copy.deepcopy(prms)
 	tgPrms['expName'] = 'fine-FROM-%s' % prms['expName']
 	tgExp   = get_experiment_object(tgPrms, tgCPrms)
@@ -437,7 +462,8 @@ def setup_experiment_finetune(prms, cPrms, returnTgCPrms=False):
 					'"%s"' % tstFile, phase='TEST')
 	#Set the imagenet mean
 	if cPrms['imgntMean']:
-		muFile = '"%s"' % '/data1/pulkitag/caffe_models/ilsvrc2012_mean.binaryproto'
+		#muFile = '"%s"' % '/data1/pulkitag/caffe_models/ilsvrc2012_mean.binaryproto'
+		muFile = cPrms['fine']['muFile']
 		tgExp.set_layer_property('data', ['transform_param', 'mean_file'], muFile, phase='TRAIN')
 		tgExp.set_layer_property('data', ['transform_param', 'mean_file'], muFile, phase='TEST')
 	#Set the batch-size
@@ -469,6 +495,8 @@ def setup_experiment(prms, cPrms):
 		baseStr = '_cls-trn%d-rot%d' % (trnSz, rotSz)
 		if cPrms['convConcat']:
 			baseStr = baseStr + '_concat_conv'
+		if cPrms['isMySimple']:
+			baseStr = baseStr + '_mysimple'
 	else:
 		baseStr = ''
 	baseFile = os.path.join(baseFilePath, baseFileStr + baseStr + '.prototxt')
@@ -519,27 +547,40 @@ def setup_experiment(prms, cPrms):
 	return caffeExp
 
 ##
-def make_experiment(prms, cPrms, isFine=False, resumeIter=None):
+def make_experiment(prms, cPrms, isFine=False, resumeIter=None, 
+										srcModelFile=None, srcDefFile=None):
+	'''
+		Specifying the srcModelFile is a hack to overwrite a model file to 
+		use with pretraining. 
+	'''
 	if isFine:
-		caffeExp = setup_experiment_finetune(prms, cPrms)
-		#Get the model name from the source experiment. 
-		srcCaffeExp  = setup_experiment(prms, cPrms)
-		if cPrms['fine']['modelIter'] is not None:
-			modelFile = srcCaffeExp.get_snapshot_name(cPrms['fine']['modelIter'])
-		else:
-			modelFile = None
+		caffeExp = setup_experiment_finetune(prms, cPrms, srcDefFile=srcDefFile)
+		if srcModelFile is None:
+			#Get the model name from the source experiment. 
+			srcCaffeExp  = setup_experiment(prms, cPrms)
+			if cPrms['fine']['modelIter'] is not None:
+				modelFile = srcCaffeExp.get_snapshot_name(cPrms['fine']['modelIter'])
+			else:
+				modelFile = None
 	else:
 		caffeExp  = setup_experiment(prms, cPrms)
 		modelFile = None
 
 	if resumeIter is not None:
 		modelFile = None
+
+	if srcModelFile is not None:
+		modelFile = srcModelFile
+
 	caffeExp.make(modelFile=modelFile, resumeIter=resumeIter)
 	return caffeExp	
 
 ##
-def run_experiment(prms, cPrms, isFine=False, resumeIter=None):
-	caffeExp = make_experiment(prms, cPrms, isFine=isFine, resumeIter=resumeIter)
+def run_experiment(prms, cPrms, isFine=False, resumeIter=None, 
+										srcModelFile=None, srcDefFile=None):
+	caffeExp = make_experiment(prms, cPrms, isFine=isFine,
+							 resumeIter=resumeIter,
+							 srcModelFile=srcModelFile, srcDefFile=srcDefFile)
 	caffeExp.run()
 
 
@@ -598,10 +639,18 @@ def run_sun_layerwise_small(deviceId=0, runNum=1, fineNumData=10,
 							  addFc=True, addDrop=True,
 								sourceModelIter=150000, imgntMean=True, concatLayer='fc6',
 								resumeIter=None, fine_base_lr=0.001, runType='run',
-								convConcat=False):
+								convConcat=False, 
+								prms=None, srcDefFile=None, srcModelFile=None):
+
 	#Set the prms
-	prms      = ku.get_prms(poseType='sigMotion', maxFrameDiff=7,
-						 imSz=None, isNewExpDir=True)
+	if prms is None:
+		prms      = ku.get_prms(poseType='sigMotion', maxFrameDiff=7,
+							 imSz=None, isNewExpDir=True)
+	imSz = prms['imSz']
+	if imSz is None:
+		imSz, testImSz, testCrpSz = 227, 256, 227
+	else:
+		imSz, testImSz, testCrpSz = 128, 128, 112
 
 	acc = {}
 	maxLayers = ['pool1', 'pool2','relu3','relu4','pool5', 'fc6']
@@ -617,11 +666,13 @@ def run_sun_layerwise_small(deviceId=0, runNum=1, fineNumData=10,
 						fineMaxLayer=mxl, lrAbove=abv, 
 						fineRunNum=runNum, fineNumData=fineNumData, 
 						deviceId=deviceId, imgntMean=imgntMean,
-						convConcat=convConcat)
+						convConcat=convConcat, imSz=imSz)
 		if runType =='run':
-			run_experiment(prms, cPrms, True, resumeIter)
+			run_experiment(prms, cPrms, True, resumeIter,
+						 srcDefFile=srcDefFile, srcModelFile=srcModelFile)
 		elif runType == 'test':
-			run_test(prms, cPrms)
+			run_test(prms, cPrms, imH=testImSz, imW=testImSz,
+								cropH=testCrpSz, cropW=testCrpSz)
 		elif runType == 'accuracy':
 			acc[mxl] = read_accuracy(prms,cPrms)
 
@@ -630,8 +681,8 @@ def run_sun_layerwise_small(deviceId=0, runNum=1, fineNumData=10,
 
 ##
 #
-def run_sun_layerwise_small_multiple():
-	runNum      = [1,2,3]
+def run_sun_layerwise_small_multiple(deviceId=0):
+	runNum      = [4, 5]
 	fineNumData = [5,10,20,50]
 	concatLayer     = ['fc6', 'conv5']
 	sourceModelIter = 60000
@@ -640,12 +691,44 @@ def run_sun_layerwise_small_multiple():
 		for num in fineNumData:
 			for cl,cc in zip(concatLayer, convConcat):
 				run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
-							sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc)
+							sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
+							deviceId=deviceId)
 				run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
 							sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
-							runType='test')
-	
+							runType='test', deviceId=deviceId)
 
+##
+# Run Sun from pascal
+def run_sun_from_pascal(deviceId=0, preTrainStr='pascal_cls'):
+	runNum      = [4]
+	fineNumData = [5,10,20,50]
+	concatLayer     = ['fc6']
+	convConcat      = [False]
+	modelFile, defFile = pc.get_pretrain_info(preTrainStr)
+
+	#naming info
+	if preTrainStr == 'alex':
+		imSz   = 256
+		cropSz = 227
+	else:
+		imSz, cropSz = 128, 112
+	prms = p3d.get_exp_prms(imSz=imSz)
+	prms['expName'] = 'dummy_fine_on_sun_' + preTrainStr
+
+	#Finally running the models. 
+	for r in runNum:
+		for num in fineNumData:
+			for cl,cc in zip(concatLayer, convConcat):
+				run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
+							sourceModelIter=None, concatLayer=cl, convConcat=cc,
+							deviceId=deviceId,
+							prms=prms, srcDefFile=defFile, srcModelFile=modelFile)
+				run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
+							sourceModelIter=None, concatLayer=cl, convConcat=cc,
+							runType='test', deviceId=deviceId, 
+							prms=prms, srcDefFile=defFile, srcModelFile=modelFile)
+
+	
 def run_sun_finetune(deviceId=1, runNum=2, addFc=True, addDrop=True,
 								fine_base_lr=0.001, imgntMean=True, stepsize=20000,
 								resumeIter=None, fineMaxIter=100000, concatLayer='fc6',
