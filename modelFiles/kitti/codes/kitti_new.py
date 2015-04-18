@@ -704,9 +704,9 @@ def run_sun_layerwise_small_multiple(deviceId=0):
 ##
 # Run Sun from pascal
 def run_sun_from_pascal(deviceId=0, preTrainStr='pascal_cls'):
-	runNum      = [4]
-	#fineNumData = [5,10,20,50]
-	fineNumData = [5]
+	runNum      = [4, 5]
+	fineNumData = [10,20,50]
+	#fineNumData = [5]
 	concatLayer     = ['fc6']
 	convConcat      = [False]
 	modelFile, defFile = pc.get_pretrain_info(preTrainStr)

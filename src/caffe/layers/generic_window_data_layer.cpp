@@ -86,7 +86,12 @@ void GenericWindowDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& b
 	labels_.reset(new Blob<Dtype>(num_examples_, label_size_,1,1));
 
 	//Set size of the tops.
-	channels_ = 3; 
+	if (this->layer_param_.generic_window_data_parms().is_gray()){
+		channels_ = 1;
+	}
+	else{
+		channels_ = 3;
+	} 
 	top[0]->Reshape(batch_size_, img_group_size_ * channels_, crop_size, crop_size);
 	this->prefetch_data_.Reshape(batch_size_, img_group_size_ * channels_, crop_size, crop_size);
   LOG(INFO) << "output data size: " << top[0]->num() << ", "
