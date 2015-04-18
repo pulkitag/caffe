@@ -293,6 +293,20 @@ def setup_autoencoder_finetune(prms, cPrms, deviceId=0):
 
 
 ##
+# Finds if a snapshot from an experiment already exists.
+# If yes, then I don't need to re-run the experiment :)
+def find_experiment(prms, cPrms, modelIter):
+	caffeExp = setup_experiment(prms, cPrms)
+	snapName1 = caffeExp.get_snapshot_name(numIter=modelIter)
+	#Sometimes models are stored with modelIter + 1
+	snapName2 = caffeExp.get_snapshot_name(numIter=modelIter+1)
+	if os.path.exists(snapName1) or os.path.exists(snapName2):
+		return True
+	else:
+		return False
+
+
+##
 def make_experiment(prms, cPrms, deviceId=1):
 	caffeExp = setup_experiment(prms, cPrms, deviceId=deviceId)
 	if cPrms['isFineTune']:
@@ -585,7 +599,100 @@ def run_finetune(max_iter=5000, stepsize=1000, lrAbove=None,
 	if runType == 'accuracy':
 		return acc	
 
-		
+
+##
+#Convert a source n/w to a fine tune n/w
+def source2fine_network(nw):
+	#Remover the part after concatenation
+	concatLayer = nw[-4]
+	name,_ = concatLayer
+	assert name=='Concat'
+	nw = copy.deepcopy(nw[:-4])
+
+	#Add the bit required for classification
+	botNw = [	('InnerProduct', {'num_output': 500, 'nameDiff': 'ft'}), ('ReLU',{}),
+						('Dropout', {'dropout_ratio': 0.5}), 
+						('InnerProduct', {'num_output': 10, 'nameDiff': 'ft'}),
+						('SoftmaxWithLoss', {'bottom2': 'label', 'shareBottomWithNext': True}),
+						('Accuracy', {'bottom2': 'label'})]
+	nw = nw + botNw
+	return nw	
+
+
+def get_final_source_networks():
+	nw = []
+	nw.append([('Convolution',  {'num_output': 96,  'kernel_size': 7, 'stride': 2}), ('ReLU',{}),
+						('Concat', {'concat_dim': 1}),
+						('InnerProduct', {'num_output': 500}), ('ReLU',{}), 
+						('Dropout', {'dropout_ratio': 0.5}),
+						])			 
+	nw.append([('Convolution',  {'num_output': 96,  'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+						('Concat', {'concat_dim': 1}),
+						('InnerProduct', {'num_output': 500}), ('ReLU',{}), 
+						('Dropout', {'dropout_ratio': 0.5}),
+						])			 
+	nw.append([('Convolution',  {'num_output': 96,  'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+						('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+						('Concat', {'concat_dim': 1}),
+						('InnerProduct', {'num_output': 1000}), ('ReLU',{}), 
+						('Dropout', {'dropout_ratio': 0.5}),
+						])			 
+	nw.append([('Convolution',  {'num_output': 96,  'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+						('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+						('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+						('Concat', {'concat_dim': 1}),
+						('InnerProduct', {'num_output': 1000}), ('ReLU',{}), 
+						('Dropout', {'dropout_ratio': 0.5}),
+						])
+	#Pooling networks			 
+	nw.append([('Convolution',  {'num_output': 96,  'kernel_size': 7, 'stride': 1}), ('ReLU',{}),
+						 ('Pooling', {'kernel_size': 3, 'stride': 2}),
+						 ('Concat', {'concat_dim': 1}),
+						 ('InnerProduct', {'num_output': 500}), ('ReLU',{}), 
+						 ('Dropout', {'dropout_ratio': 0.5}),
+						])			
+	nw.append([('Convolution',  {'num_output': 96,  'kernel_size': 3, 'stride': 1}), ('ReLU',{}),
+						 ('Pooling', {'kernel_size': 3, 'stride': 2}),
+						 ('Concat', {'concat_dim': 1}),
+						 ('InnerProduct', {'num_output': 500}), ('ReLU',{}), 
+						 ('Dropout', {'dropout_ratio': 0.5}),
+						])			
+	nw.append([('Convolution',  {'num_output': 96,  'kernel_size': 3, 'stride': 1}), ('ReLU',{}),
+						('Pooling', {'kernel_size': 3, 'stride': 2}),
+						('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 1}), ('ReLU',{}),
+						('Pooling', {'kernel_size': 3, 'stride': 2}),
+						('Concat', {'concat_dim': 1}),
+						('InnerProduct', {'num_output': 1000}), ('ReLU',{}), 
+						('Dropout', {'dropout_ratio': 0.5}),
+						])			 
+	nw.append([('Convolution',  {'num_output': 96,  'kernel_size': 3, 'stride': 1}), ('ReLU',{}),
+						('Pooling', {'kernel_size': 3, 'stride': 2}),
+						('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 1}), ('ReLU',{}),
+						('Pooling', {'kernel_size': 3, 'stride': 2}),
+						('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 1}), ('ReLU',{}),
+						('Pooling', {'kernel_size': 3, 'stride': 2}),
+						('Concat', {'concat_dim': 1}),
+						('InnerProduct', {'num_output': 1000}), ('ReLU',{}), 
+						('Dropout', {'dropout_ratio': 0.5}),
+						])			 
+	return nw
+
+def run_final_pretrain(deviceId=1):
+	nw = get_final_source_networks()
+	numEx = 1e+7
+	prms  = mr.get_prms(maxRot=10, maxDeltaRot=30, lossType='classify', numTrainEx=numEx)
+	for nn in nw:
+		name = nw2name(nn)
+		cPrms = get_caffe_prms(nn, isSiamese=True, base_lr=0.01,
+														debug_info='false')
+		isExist = find_experiment(prms, cPrms, cPrms['max_iter'])
+		if isExist:
+			print '%s: EXISTS' % name
+		else:
+			run_experiment(prms, cPrms, deviceId=deviceId)
+
+
+	
 def run_scratch(lrAbove=None, max_iter=5000, stepsize=5000):
 	deviceId = 2
 	nw = []

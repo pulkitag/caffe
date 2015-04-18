@@ -29,10 +29,14 @@ def  write_proto(arr, outFile):
 
 ##
 # Convert the mean to be useful for siamese network. 
-def mean2siamese_mean(inFile, outFile):
+def mean2siamese_mean(inFile, outFile, isGray=False):
 	mn = mp.read_mean(inFile)
-	mn = np.concatenate((mn, mn))
+	if isGray:
+		mn = mn.reshape((1,mn.shape[0],mn.shape[1]))
+	mn    = np.concatenate((mn, mn))
+	dType = mn.dtype 
 	mn = mn.reshape((1, mn.shape[0], mn.shape[1], mn.shape[2]))
+	print "New mean shape: ", mn.shape, dType
 	write_proto(mn, outFile)
 
 ##
@@ -46,6 +50,24 @@ def siamese_mean2mean(inFile, outFile):
 	print "New number of channels: %d" % ch
 	newMn = mn[0:ch].reshape(1,ch,mn.shape[1],mn.shape[2])
 	write_proto(newMn.astype(mn.dtype), outFile)
+
+##
+# Convert to grayscale, mimics the matlab function
+def rgb2gray(rgb):
+	return np.dot(rgb[...,:3], [0.2989, 0.5870, 0.1140])
+
+##
+# Convert the mean grayscale mean
+def mean2graymean(inFile, outFile):
+	assert not os.path.exists(outFile), '%s already exists' % outFile
+	mn    = mp.read_mean(inFile)
+	dType = mn.dtype
+	ch = mn.shape[0]
+	assert ch==3
+	mn = rgb2gray(mn.transpose((1,2,0))).reshape((1,1,mn.shape[1],mn.shape[2]))
+	print "New mean shape: ", mn.shape, dType
+	write_proto(mn.astype(dType), outFile)
+
 		
 ##
 # Resize the mean to a different size
@@ -423,7 +445,7 @@ def save_lmdb_images(ims, dbFileName, labels=None, asFloat=False):
 ##
 # Save the weights in a form that will be used by matlab function
 # swap_weights to generate files useful for matconvnet. 
-def save_weights_for_matconvnet(net, outName):
+def save_weights_for_matconvnet(net, outName, matlabRefFile=None):
 	'''
 		net    : Instance of my_pycaffe.MyNet
 		outName: The matlab file which needs to store parameters. 
@@ -447,4 +469,8 @@ def save_weights_for_matconvnet(net, outName):
 			#Hacky way of finding a FC layer
 			N = h
 		params[bKey]    = params[bKey].reshape((1,N))
+	if matlabRefFile is not None:
+		params['refFile'] = matlabRefFile
+	else:
+		params['refFile'] = ''
 	sio.savemat(outName, params)

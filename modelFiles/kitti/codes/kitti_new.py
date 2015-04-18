@@ -685,28 +685,40 @@ def run_sun_layerwise_small(deviceId=0, runNum=1, fineNumData=10,
 
 ##
 #
-def run_sun_layerwise_small_multiple(deviceId=0):
+def run_sun_layerwise_small_multiple(deviceId=0, runType='run'):
 	runNum      = [4, 5]
 	fineNumData = [5,10,20,50]
 	concatLayer     = ['fc6', 'conv5']
 	sourceModelIter = 60000
 	convConcat  = [False, True]
+	acc = {}
+
 	for r in runNum:
 		for num in fineNumData:
 			for cl,cc in zip(concatLayer, convConcat):
-				run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
-							sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
-							deviceId=deviceId)
-				run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
-							sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
-							runType='test', deviceId=deviceId)
+				if runType=='accuracy':
+					key = '%s_num%d_run%d' % (cl, num, r)
+					try:
+						acc[key],_ = run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False,
+                          addDrop=True, sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
+                          deviceId=deviceId, runType='accuracy')
+					except IOError:
+						return acc
+				else:
+					run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
+								sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
+								deviceId=deviceId)
+					run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
+								sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
+								runType='test', deviceId=deviceId)
+
 
 ##
 # Run Sun from pascal
-def run_sun_from_pascal(deviceId=0, preTrainStr='pascal_cls'):
+def run_sun_from_pascal(deviceId=0, preTrainStr='pascal_cls', runType='run'):
 	runNum      = [4, 5]
 	fineNumData = [10,20,50]
-	#fineNumData = [5]
+	fineNumData = [5]
 	concatLayer     = ['fc6']
 	convConcat      = [False]
 	modelFile, defFile = pc.get_pretrain_info(preTrainStr)
@@ -719,21 +731,31 @@ def run_sun_from_pascal(deviceId=0, preTrainStr='pascal_cls'):
 		imSz, cropSz = 128, 112
 	expName = 'dummy_fine_on_sun_' + preTrainStr
 	prms = p3d.get_exp_prms(imSz=imSz, expName=expName)
+	acc = {}
 
 	#Finally running the models. 
 	for r in runNum:
 		for num in fineNumData:
 			for cl,cc in zip(concatLayer, convConcat):
+				if runType=='accuracy':
+					key = '%s_num%d_run%d' % (cl, num, r)
+					try:
+						acc[key],_ = run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False,
+                          addDrop=True, sourceModelIter=None, concatLayer=cl, convConcat=cc,
+                          deviceId=deviceId, prms=prms,
+                          srcDefFile=defFile, srcModelFile=modelFile, runType='accuracy')
+					except IOError:
+						return acc
+				else:	
+					run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
+								sourceModelIter=None, concatLayer=cl, convConcat=cc,
+								deviceId=deviceId,
+								prms=prms, srcDefFile=defFile, srcModelFile=modelFile)
 					
-				run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
-							sourceModelIter=None, concatLayer=cl, convConcat=cc,
-							deviceId=deviceId,
-							prms=prms, srcDefFile=defFile, srcModelFile=modelFile)
-				
-				run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
-							sourceModelIter=None, concatLayer=cl, convConcat=cc,
-							runType='test', deviceId=deviceId, 
-							prms=prms, srcDefFile=defFile, srcModelFile=modelFile)
+					run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
+								sourceModelIter=None, concatLayer=cl, convConcat=cc,
+								runType='test', deviceId=deviceId, 
+								prms=prms, srcDefFile=defFile, srcModelFile=modelFile)
 
 	
 def run_sun_finetune(deviceId=1, runNum=2, addFc=True, addDrop=True,
