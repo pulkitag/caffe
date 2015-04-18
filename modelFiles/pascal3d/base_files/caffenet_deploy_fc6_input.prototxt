@@ -1,52 +1,21 @@
-name: "KeyNet"
-layer {
-  name: "data"
-  type: "Data"
-  top: "data"
-  top: "label"
-  include {
-    phase: TRAIN
-  }
-  transform_param {
-    mirror: true
-    crop_size: 112
-    mean_file: "/data1/pulkitag/keypoints/leveldb_store/keypoints_im128_ch3_mean.binaryproto"
-  }
-  data_param {
-    source: ""
-    batch_size: 256
-		backend: LMDB
-  }
-}
-layer {
-  name: "data"
-  type: "Data"
-  top: "data"
-  top: "label"
-  include {
-    phase: TEST
-  }
-  transform_param {
-    mirror: false
-    crop_size: 112
-    mean_file: "/data1/pulkitag/keypoints/leveldb_store/keypoints_im128_ch3_mean.binaryproto"
-  }
-  data_param {
-    source: ""
-    batch_size: 50
- 		backend: LMDB
-	 }
-}
+name: "CaffeNet"
+input: "data"
+input_dim: 128
+input_dim: 3
+input_dim: 112
+input_dim: 112
 layer {
   name: "conv1"
   type: "Convolution"
   bottom: "data"
   top: "conv1"
   param {
+    name: "conv1_w"
     lr_mult: 1
     decay_mult: 1
   }
   param {
+    name: "conv1_b"
     lr_mult: 2
     decay_mult: 0
   }
@@ -98,10 +67,12 @@ layer {
   bottom: "norm1"
   top: "conv2"
   param {
+    name: "conv2_w"
     lr_mult: 1
     decay_mult: 1
   }
   param {
+    name: "conv2_b"
     lr_mult: 2
     decay_mult: 0
   }
@@ -154,10 +125,12 @@ layer {
   bottom: "norm2"
   top: "conv3"
   param {
+    name: "conv3_w"
     lr_mult: 1
     decay_mult: 1
   }
   param {
+    name: "conv3_b"
     lr_mult: 2
     decay_mult: 0
   }
@@ -187,10 +160,12 @@ layer {
   bottom: "conv3"
   top: "conv4"
   param {
+    name: "conv4_w"
     lr_mult: 1
     decay_mult: 1
   }
   param {
+    name: "conv4_b"
     lr_mult: 2
     decay_mult: 0
   }
@@ -221,10 +196,12 @@ layer {
   bottom: "conv4"
   top: "conv5"
   param {
+    name: "conv5_w"
     lr_mult: 1
     decay_mult: 1
   }
   param {
+    name: "conv5_b"
     lr_mult: 2
     decay_mult: 0
   }
@@ -266,10 +243,12 @@ layer {
   bottom: "pool5"
   top: "fc6"
   param {
+    name: "fc6_w"
     lr_mult: 1
     decay_mult: 1
   }
   param {
+    name: "fc6_b"
     lr_mult: 2
     decay_mult: 0
   }
@@ -290,53 +269,5 @@ layer {
   type: "ReLU"
   bottom: "fc6"
   top: "fc6"
-}
-layer {
-  name: "drop6"
-  type: "Dropout"
-  bottom: "fc6"
-  top: "fc6"
-  dropout_param {
-    dropout_ratio: 0.5
-  }
-}
-layer {
-  name: "class_fc"
-  type: "InnerProduct"
-  bottom: "fc6"
-  top: "class_fc"
-  param {
-    lr_mult: 1
-    decay_mult: 1
-  }
-  param {
-    lr_mult: 2
-    decay_mult: 0
-  }
-  inner_product_param {
-    num_output: 1000
-    weight_filler {
-      type: "gaussian"
-      std: 0.005
-    }
-    bias_filler {
-      type: "constant"
-      value: 1
-    }
-  }
-}
-layer {
-  name: "accuracy"
-  type: "Accuracy"
-  bottom: "class_fc"
-  bottom: "label"
-  top: "accuracy"
-}
-layer {
-  name: "loss"
-  type: "SoftmaxWithLoss"
-  bottom: "class_fc"
-  bottom: "label"
-  top: "loss"
 }
 

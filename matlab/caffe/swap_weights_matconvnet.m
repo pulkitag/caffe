@@ -5,13 +5,20 @@ function [] = swap_weights_for_matconvnet(sourceFile, targetFile, outFile)
 %             swapped into the sourceFile
 % outFile: Where the output needs to be saved
 
-srcData = load(sourceFile);
-tgtData = load(targetFile);
 
+srcData = load(sourceFile);
+
+%Source File that needs to be modified. 
 N = length(srcData.layers)
 layers        = cell(N,1);
 classes       = srcData.classes;
 normalization = srcData.normalization;   
+
+%The target weights that need to be used. 
+tgtData = load(targetFile);
+refFile = tgtData.refFile;
+assert (strcmp(sourceFile,refFile), 'File Names mismatch');
+
 count = 1;
 for i=1:1:length(srcData.layers)
 	lData = srcData.layers{i};
@@ -38,6 +45,10 @@ for i=1:1:length(srcData.layers)
 	count = count + 1;
 end
 layers = layers(1:count-1);
-save(outFile, 'layers', 'classes', 'normalization');
 
+if ~(exist('outFile','var')==1)
+	outFile = targetFile;
+end
+
+save(outFile, 'layers', 'classes', 'normalization');
 end

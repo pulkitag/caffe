@@ -68,7 +68,9 @@ def get_basic_paths():
 	#Other dir
 	paths['otherDataDir'] = os.path.join(paths['myData'], 'other')
 	ou.create_dir(paths['otherDataDir'])
-	
+	#Experiment directory
+	paths['expDir'] = os.path.join(paths['myData'], 'exp')
+	paths['resDir'] = os.path.join(paths['myData'], 'results')
 	return paths
 
 ##
@@ -76,7 +78,8 @@ def get_basic_paths():
 def get_exp_prms(imSz=128, lblType='diff', cropType='contPad',
 								 numSamplesTrain=40000, numSamplesVal=1000,
 								 mnBbox=50, contPad=16,
-								 azBin=30, elBin=10, mxRot=30, numMedoids=20):
+								 azBin=30, elBin=10, mxRot=30, numMedoids=20,
+								 expName=None):
 	'''
 	 imSz      : Size of the image to use
 	 lblType   : Type of labels to use
@@ -90,7 +93,8 @@ def get_exp_prms(imSz=128, lblType='diff', cropType='contPad',
 							 'contPad'-- pad the bounding box with some context.
 	 contPad   :  Amount of context padding.  
 	 numSamples:  Number of samples per class
-	 mnBbox    :  Minimum size of bbox to consider. 
+	 mnBbox    :  Minimum size of bbox to consider.
+	 expName   : if not none - then overwrite expName 
 	'''
 	assert lblType  in  ['diff', 'uniform', 'kmedoids', 'rotLim'], 'Unknown lblType encountered'
 	assert cropType in  ['resize', 'contPad'], 'Unknown cropType encountered' 
@@ -129,8 +133,11 @@ def get_exp_prms(imSz=128, lblType='diff', cropType='contPad',
 	else:
 		lblStr  = '%s' % lblType
 
-	prms['expName']    = 'pascal3d_imSz%d_lbl-%s_crp-%s_ns%.0e_mb%d' % \
-												(imSz, lblStr, cropStr, numSamplesTrain, mnBbox)
+	if expName is None:
+		prms['expName']    = 'pascal3d_imSz%d_lbl-%s_crp-%s_ns%.0e_mb%d' % \
+													(imSz, lblStr, cropStr, numSamplesTrain, mnBbox)
+	else:
+		prms['expName'] = expName
 
 	paths = get_basic_paths()
 	#Save the annotation data for the experiment. 
@@ -159,6 +166,8 @@ def get_exp_prms(imSz=128, lblType='diff', cropType='contPad',
 																	'train_window_%s.txt' % prms['expName']) 
 	paths['windowFile']['val']  = os.path.join(paths['windowDir'], 
 																	'val_window_%s.txt' % prms['expName'])
+	
+	paths['resFile']       = os.path.join(paths['resDir'], expName, '%s.h5')
 
 	prms['paths'] = paths
 	return prms

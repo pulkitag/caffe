@@ -7,7 +7,7 @@ layer {
 	generic_window_data_param {
 		source: "/data0/pulkitag/kitti/window-files/test_mxDiff-7_pose-sigMotion_nrmlz-zScoreScaleSeperate_imSz256_concat-fc6_nTe-10000.txt"
 		root_folder: "/data0/pulkitag/data_sets/kitti/odometry/dataset/sequences/imSz256/"
-		crop_size: 96
+		crop_size: 227
 		batch_size: 128
 		context_pad: 12
 		random_crop: false
@@ -27,7 +27,7 @@ layer {
 	generic_window_data_param {
 		source: "/data0/pulkitag/kitti/window-files/test_mxDiff-7_pose-sigMotion_nrmlz-zScoreScaleSeperate_imSz256_concat-fc6_nTe-10000.txt"
 		root_folder: "/data0/pulkitag/data_sets/kitti/odometry/dataset/sequences/imSz256/" 
-		crop_size: 96
+		crop_size: 227
 		batch_size: 50
 		context_pad: 12
 		random_crop: false
@@ -161,7 +161,7 @@ layer {
     decay_mult: 0
   }
   convolution_param {
-    num_output: 512
+    num_output: 256
     pad: 1
     kernel_size: 3
 		stride: 2
@@ -197,9 +197,10 @@ layer {
     decay_mult: 0
   }
   convolution_param {
-    num_output: 384
+    num_output: 256
     pad: 1
     kernel_size: 3
+		stride: 2
     weight_filler {
       type: "gaussian"
       std: 0.01
@@ -215,41 +216,6 @@ layer {
   type: "ReLU"
   bottom: "conv4"
   top: "conv4"
-}
-layer {
-  name: "conv5"
-  type: "Convolution"
-  bottom: "conv4"
-  top: "conv5"
-  param {
-    name: "conv5_w"
-    lr_mult: 1
-    decay_mult: 1
-  }
-  param {
-    name: "conv5_b"
-    lr_mult: 2
-    decay_mult: 0
-  }
-  convolution_param {
-    num_output: 256
-    pad: 1
-    kernel_size: 3
-    weight_filler {
-      type: "gaussian"
-      std: 0.01
-    }
-    bias_filler {
-      type: "constant"
-      value: 0
-    }
-  }
-}
-layer {
-  name: "relu5"
-  type: "ReLU"
-  bottom: "conv5"
-  top: "conv5"
 }
 layer {
   name: "conv1_p"
@@ -290,7 +256,7 @@ layer {
 layer {
   name: "conv2_p"
   type: "Convolution"
-  bottom: "norm1_p"
+  bottom: "conv1_p"
   top: "conv2_p"
   param {
     name: "conv2_w"
@@ -339,7 +305,7 @@ layer {
     decay_mult: 0
   }
   convolution_param {
-    num_output: 512
+    num_output: 256
     pad: 1
     kernel_size: 3
 		stride: 2
@@ -375,7 +341,7 @@ layer {
     decay_mult: 0
   }
   convolution_param {
-    num_output: 384
+    num_output: 256
     pad: 1
     kernel_size: 3
   	stride: 2 
@@ -396,26 +362,30 @@ layer {
   top: "conv4_p"
 }
 layer {
-  name: "conv5_p"
-  type: "Convolution"
+  name: "concat"
+  type: "Concat"
+  bottom: "conv4"
   bottom: "conv4_p"
-  top: "conv5_p"
+  top: "concat"
+}
+layer {
+  name: "conv6"
+  type: "Convolution"
+  bottom: "concat"
+  top: "conv6"
   param {
-    name: "conv5_w"
     lr_mult: 1
     decay_mult: 1
   }
   param {
-    name: "conv5_b"
     lr_mult: 2
     decay_mult: 0
   }
   convolution_param {
     num_output: 256
-    pad: 1
     kernel_size: 3
     stride: 2
-    weight_filler {
+		weight_filler {
       type: "gaussian"
       std: 0.01
     }
@@ -426,23 +396,49 @@ layer {
   }
 }
 layer {
-  name: "relu5_p"
+  name: "relu6"
   type: "ReLU"
-  bottom: "conv5_p"
-  top: "conv5_p"
+  bottom: "conv6"
+  top: "conv6"
 }
 layer {
-  name: "concat"
-  type: "Concat"
-  bottom: "conv5"
-  bottom: "conv5_p"
-  top: "concat"
+  name: "conv7"
+  type: "Convolution"
+  bottom: "conv6"
+  top: "conv7"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  convolution_param {
+    num_output: 128
+    kernel_size: 3
+    stride: 2
+		weight_filler {
+      type: "gaussian"
+      std: 0.01
+    }
+    bias_filler {
+      type: "constant"
+      value: 0
+    }
+  }
 }
 layer {
-  name: "common_fc7"
+  name: "relu7"
+  type: "ReLU"
+  bottom: "conv7"
+  top: "conv7"
+}
+layer {
+  name: "common_fc"
   type: "InnerProduct"
-  bottom: "concat"
-  top: "common_fc7"
+  bottom: "conv7"
+  top: "common_fc"
   param {
     lr_mult: 1
     decay_mult: 1
@@ -452,7 +448,7 @@ layer {
     decay_mult: 0
   }
   inner_product_param {
-    num_output: 2048
+    num_output: 500
     weight_filler {
       type: "gaussian"
       std: 0.005
@@ -464,16 +460,16 @@ layer {
   }
 }
 layer {
-  name: "relu7"
+  name: "relu8"
   type: "ReLU"
-  bottom: "common_fc7"
-  top: "common_fc7"
+  bottom: "common_fc"
+  top: "common_fc"
 }
 layer {
-	name: "drop7"
+	name: "drop8"
 	type: "Dropout"
-	bottom: "common_fc7"
-	top: "common_fc7"
+	bottom: "common_fc"
+	top: "common_fc"
 	dropout_param {
 		dropout_ratio: 0.5
 	}
@@ -481,7 +477,7 @@ layer {
 layer {
   name: "translation_fc_1"
   type: "InnerProduct"
-  bottom: "common_fc7"
+  bottom: "common_fc"
   top: "translation_fc_1"
   param {
     lr_mult: 1
@@ -506,7 +502,7 @@ layer {
 layer {
   name: "translation_fc_2"
   type: "InnerProduct"
-  bottom: "common_fc7"
+  bottom: "common_fc"
   top: "translation_fc_2"
   param {
     lr_mult: 1
@@ -531,7 +527,7 @@ layer {
 layer {
   name: "rotation_fc_1"
   type: "InnerProduct"
-  bottom: "common_fc7"
+  bottom: "common_fc"
   top: "rotation_fc_1"
   param {
     lr_mult: 1
@@ -595,4 +591,3 @@ layer {
   bottom: "rotation_label_1"
   top: "rotation_acc_1"
 }
-
