@@ -630,21 +630,32 @@ def run_sun_layerwise_small(deviceId=0, runNum=1, fineNumData=10,
 
 ##
 #
-def run_sun_layerwise_small_multiple():
+def run_sun_layerwise_small_multiple(runType='run'):
 	runNum      = [1,2,3]
 	fineNumData = [5,10,20,50]
 	concatLayer     = ['fc6', 'conv5']
 	sourceModelIter = 60000
 	convConcat  = [False, True]
+	acc = {}
 	for r in runNum:
 		for num in fineNumData:
 			for cl,cc in zip(concatLayer, convConcat):
-				run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
-							sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc)
-				run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
-							sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
-							runType='test')
-	
+				if runType=='accuracy':
+					key = 'run%d_num%d_con%s' % (r, num, cl)
+					try:
+						acc[key],_ = run_sun_layerwise_small(deviceId=1, runNum=r, fineNumData=num, addFc=False,
+												 addDrop=True, sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
+													runType='accuracy')
+					except IOError:
+						return acc
+				else:
+					run_sun_layerwise_small(deviceId=1, runNum=r, fineNumData=num, addFc=False, addDrop=True,
+								sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc)
+					run_sun_layerwise_small(deviceId=1, runNum=r, fineNumData=num, addFc=False, addDrop=True,
+								sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
+								runType='test')
+	return acc
+
 
 def run_sun_finetune(deviceId=1, runNum=2, addFc=True, addDrop=True,
 								fine_base_lr=0.001, imgntMean=True, stepsize=20000,
