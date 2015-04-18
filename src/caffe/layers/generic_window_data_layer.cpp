@@ -86,7 +86,7 @@ void GenericWindowDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& b
 	labels_.reset(new Blob<Dtype>(num_examples_, label_size_,1,1));
 
 	//Set size of the tops.
-	if (this->layer_param_.generic_window_data_parms().is_gray()){
+	if (this->layer_param_.generic_window_data_param().is_gray()){
 		channels_ = 1;
 	}
 	else{

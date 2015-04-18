@@ -76,6 +76,7 @@ void CropDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
   CHECK_GT(crop_size, 0);
   const int batch_size = this->layer_param_.generic_window_data_param().batch_size();
   const int channels = top[0]->channels();
+	channels_ = channels;
   this->prefetch_data_.Reshape(batch_size, channels, crop_size, crop_size);
   LOG(INFO) << "output data size: " << top[0]->num() << ","
       << top[0]->channels() << "," << top[0]->height() << ","
@@ -192,8 +193,13 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
 			pair<std::string, vector<int> > image = image_database_[read_count_];
 			imHeight = image.second[1];
 			imWidth  = image.second[2];
-			//LOG(INFO) << image.first; 
-			cv_img = cv::imread(image.first, CV_LOAD_IMAGE_COLOR);
+			//LOG(INFO) << image.first;
+			if (channels_ == 1){ 
+				cv_img = cv::imread(image.first, CV_LOAD_IMAGE_GRAYSCALE);
+			}
+			else{
+				cv_img = cv::imread(image.first, CV_LOAD_IMAGE_COLOR);
+			}
 			if (!cv_img.data) {
 				LOG(ERROR) << "Could not open or find file " << image.first;
 				return;
@@ -202,7 +208,7 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
 		read_time += timer.MicroSeconds();
 		timer.Start();
 		const int channels = cv_img.channels();
-		CHECK_EQ(channels, 3);
+		CHECK_EQ(channels, channels_);
 
 		// crop window out of image and warp it
 		int x1, y1, x2, y2;
