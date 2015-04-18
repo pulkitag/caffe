@@ -12,6 +12,7 @@ import pdb
 import make_rotations as mr
 import collections as co
 import h5py as h5
+import copy
 
 BASE_DIR = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/mnist/base_files/'
 
@@ -691,6 +692,63 @@ def run_final_pretrain(deviceId=1):
 		else:
 			run_experiment(prms, cPrms, deviceId=deviceId)
 
+
+def run_final_finetune(deviceId=1, runTypes=['run','test']):
+	nw       = get_final_source_networks()
+	runNum   = [0, 1, 2]
+	max_iter = 5000
+	stepsize = 5000
+	numEx    = [100, 300, 1000, 10000]
+
+	acc['numExamples'] = numEx
+	for nn in nw:
+		name = nw2name(nn)
+		acc[name] = []
+
+	sourceNw = nw
+	targetNw = [source2fine_network(nn) for nn in nw]
+	fineAll  = [False, True]
+	for ff in fineAll:
+		acc[name] = {}
+		if ff:
+			ffKey = 'all'
+		else:
+			ffKey = 'top'
+		acc[name][ffKey] = {}
+		for runType in runTypes:	
+			for ex in numEx:
+				exKey = 'n%d' % ex
+					acc[name][ffKey][exKey] = np.zeros((len(runNum),)) 
+				for snn,tnn in zip(sourceNw, targetNw):	
+					for r in runNum:
+						#Source Experiment
+						srcCaffePrms = get_caffe_prms(snn, isSiamese=True)
+						srcExp = setup_experiment(srcPrms, srcCaffePrms)
+						#Target Experiment
+						if ff:
+							lrAbove = None
+						else:
+						 	numLayers = len(tnn)
+							idx  = numLayers - 6
+							lType, ll   = tnn[numLayers - idx]
+							#Just some sanity checks
+							assert lType == 'InnerProduct'
+							assert ll['num_output'] == 500							
+							lrAbove = idx
+						tgtPrms = mr.get_prms(transform='normal', numTrainEx=ex, runNum=r)
+						tgtCaffePrms = get_caffe_prms(tnn, isSiamese=False, isFineTune=True, fineExp=srcExp,
+																fineModelIter=40000, max_iter=max_iter, stepsize=stepsize,
+																lrAbove=lrAbove)
+						if runType == 'run':
+							run_experiment(tgtPrms, tgtCaffePrms, deviceId=deviceId)
+						elif runType == 'test':
+							run_test(tgtPrms, tgtCaffePrms)
+						elif runType == 'accuracy':
+							name = nw2name(nn)
+							acc[name][ffKey][exKey][r] = read_accuracy(tgtPrms, tgtCaffePrms)
+						else:
+							raise Exception('Unrecognized run type %s' % runType)
+	return acc	
 
 	
 def run_scratch(lrAbove=None, max_iter=5000, stepsize=5000):
