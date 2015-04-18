@@ -319,7 +319,8 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 			else:
 				sunImSz = 128
 				muFile = '"%s"' % '/data1/pulkitag/caffe_models/ilsvrc2012_mean_imSz128.binaryproto'
-			caffePrms['fine']['muFile'] = muFile 
+			caffePrms['fine']['muFile'] = muFile
+			print "Using mean from: ", muFile 
 			sunPrms     = ps.get_prms(numTrainPerClass=fineNumData, runNum=fineRunNum, imSz=sunImSz)
 			numCl       = 397
 			numTrainEx  = numCl * fineNumData  
@@ -463,7 +464,8 @@ def setup_experiment_finetune(prms, cPrms, returnTgCPrms=False, srcDefFile=None)
 	#Set the imagenet mean
 	if cPrms['imgntMean']:
 		#muFile = '"%s"' % '/data1/pulkitag/caffe_models/ilsvrc2012_mean.binaryproto'
-		muFile = cPrms['fine']['muFile']
+		muFile = tgCPrms['fine']['muFile']
+		print muFile
 		tgExp.set_layer_property('data', ['transform_param', 'mean_file'], muFile, phase='TRAIN')
 		tgExp.set_layer_property('data', ['transform_param', 'mean_file'], muFile, phase='TEST')
 	#Set the batch-size
@@ -589,8 +591,9 @@ def get_res_file(prms, cPrms):
 	return resFile
 
 ##
-def run_test(prms, cPrms, cropH=227, cropW=227, imH=256, imW=256):
-	caffeExp, cPrms  = setup_experiment_finetune(prms, cPrms, True)
+def run_test(prms, cPrms, cropH=227, cropW=227, imH=256, imW=256,
+							srcDefFile=None):
+	caffeExp, cPrms  = setup_experiment_finetune(prms, cPrms, True, srcDefFile=srcDefFile)
 	lmdbFile  = cPrms['fine']['prms']['paths']['lmdb']['test']
 	caffeTest = mpu.CaffeTest.from_caffe_exp_lmdb(caffeExp, lmdbFile)
 	caffeTest.setup_network(['class_fc'], imH=imH, imW=imW,
@@ -672,7 +675,8 @@ def run_sun_layerwise_small(deviceId=0, runNum=1, fineNumData=10,
 						 srcDefFile=srcDefFile, srcModelFile=srcModelFile)
 		elif runType == 'test':
 			run_test(prms, cPrms, imH=testImSz, imW=testImSz,
-								cropH=testCrpSz, cropW=testCrpSz)
+								cropH=testCrpSz, cropW=testCrpSz,
+								srcDefFile=srcDefFile)
 		elif runType == 'accuracy':
 			acc[mxl] = read_accuracy(prms,cPrms)
 
@@ -701,7 +705,8 @@ def run_sun_layerwise_small_multiple(deviceId=0):
 # Run Sun from pascal
 def run_sun_from_pascal(deviceId=0, preTrainStr='pascal_cls'):
 	runNum      = [4]
-	fineNumData = [5,10,20,50]
+	#fineNumData = [5,10,20,50]
+	fineNumData = [5]
 	concatLayer     = ['fc6']
 	convConcat      = [False]
 	modelFile, defFile = pc.get_pretrain_info(preTrainStr)
@@ -712,17 +717,19 @@ def run_sun_from_pascal(deviceId=0, preTrainStr='pascal_cls'):
 		cropSz = 227
 	else:
 		imSz, cropSz = 128, 112
-	prms = p3d.get_exp_prms(imSz=imSz)
-	prms['expName'] = 'dummy_fine_on_sun_' + preTrainStr
+	expName = 'dummy_fine_on_sun_' + preTrainStr
+	prms = p3d.get_exp_prms(imSz=imSz, expName=expName)
 
 	#Finally running the models. 
 	for r in runNum:
 		for num in fineNumData:
 			for cl,cc in zip(concatLayer, convConcat):
+					
 				run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
 							sourceModelIter=None, concatLayer=cl, convConcat=cc,
 							deviceId=deviceId,
 							prms=prms, srcDefFile=defFile, srcModelFile=modelFile)
+				
 				run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
 							sourceModelIter=None, concatLayer=cl, convConcat=cc,
 							runType='test', deviceId=deviceId, 

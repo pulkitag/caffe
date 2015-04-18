@@ -473,7 +473,7 @@ def run_finetune(max_iter=5000, stepsize=1000, lrAbove=None,
 			if runType == 'run':
 				run_experiment(tgtPrms, tgtCaffePrms, deviceId=deviceId)
 			elif runType == 'test':
-				run_test(prms, cPrms)
+				run_test(tgtPrms, tgtCaffePrms)
 			elif runType == 'accuracy':
 				name = nw2name(nn)
 				acc[name] = read_accuracy(tgtPrms, tgtCaffePrms)
