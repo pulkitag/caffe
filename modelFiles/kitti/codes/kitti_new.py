@@ -696,14 +696,18 @@ def run_sun_layerwise_small(deviceId=0, runNum=1, fineNumData=10,
 
 ##
 #
-def run_sun_layerwise_small_multiple(deviceId=0, runType='run', isMySimple=False):
-	runNum      = [1, 2, 3]
+def run_sun_layerwise_small_multiple(deviceId=0, runType='run', isMySimple=False,
+																		 scratch=False):
+	runNum      = [1]
 	fineNumData = [5,10,20,50]
-	#concatLayer     = ['fc6', 'conv5']
-	#convConcat  = [False, True]
-	concatLayer  = ['conv4']
-	convConcat   = [True]
-	sourceModelIter = 60000
+	if scratch:
+		concatLayer = ['fc6']
+		convConcat  = [False]
+		sourceModelIter = None
+	else:
+		concatLayer     = ['fc6', 'conv5']
+		convConcat  = [False, True]
+		sourceModelIter = 60000
 	acc = {}
 	for r in runNum:
 		for num in fineNumData:
@@ -715,7 +719,7 @@ def run_sun_layerwise_small_multiple(deviceId=0, runType='run', isMySimple=False
                           addDrop=True, sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
                           deviceId=deviceId, runType='accuracy', isMySimple=isMySimple)
 					except IOError:
-						return acc
+						pass
 				else:
 					run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
 								sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
@@ -723,6 +727,7 @@ def run_sun_layerwise_small_multiple(deviceId=0, runType='run', isMySimple=False
 					run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
 								sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
 								runType='test', deviceId=deviceId, isMySimple=isMySimple)
+	return acc
 
 ##
 # Run Sun from pascal
