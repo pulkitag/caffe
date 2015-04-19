@@ -103,7 +103,7 @@ def get_caffe_prms(nw, isSiamese=True, batchSize=128, isTest=False,
 						isFineTune=False, fineExp=None, fineModelIter=None,
 						max_iter=40000, stepsize=10000, snapshot=5000, gamma=0.5, base_lr=0.01,
 						test_iter=100, test_interval=500, lr_policy='"step"',
-						lrAbove=None, debug_info='false', maxLayer=None):
+						lrAbove=None, debug_info='false', maxLayer=None, numTrainSamples=None):
 	'''
 		isFineTune: If the weights of an auxiliary experiment are to be used to start finetuning
 		fineExp   : Instance of CaffeExperiment from which finetuning needs to begin. 	
@@ -123,6 +123,12 @@ def get_caffe_prms(nw, isSiamese=True, batchSize=128, isTest=False,
 	cPrms['fineExp']    = fineExp
 	cPrms['fineModelIter'] = fineModelIter
 	cPrms['lrAbove']       = lrAbove
+
+	if isFineTune and numTrainSamples is not None:
+		numEpochs = 50
+		max_iter   = int(np.ceil(numEpochs * numTrainSamples / (float(batchSize))))
+		stepsize   = max_iter 
+
 	#Solver prms
 	cPrms['max_iter'] = max_iter
 	cPrms['debug_info'] = debug_info
@@ -693,18 +699,21 @@ def run_final_pretrain(deviceId=1):
 			run_experiment(prms, cPrms, deviceId=deviceId)
 
 
-def run_final_finetune(deviceId=1, runTypes=['run','test']):
+def run_final_finetune(deviceId=1, runTypes=['run','test'], runNum=[0,1,2]):
 	nw       = get_final_source_networks()
-	runNum   = [0, 1, 2]
-	max_iter = 5000
-	stepsize = 5000
+	#runNum   = [0, 1, 2]
+	max_iter = 4000
+	stepsize = 4000
 	numEx    = [100, 300, 1000, 10000]
-
+	
+	acc = {}
 	acc['numExamples'] = numEx
 	for nn in nw:
 		name = nw2name(nn)
 		acc[name] = []
 
+	srcPrms = mr.get_prms(maxRot=10, maxDeltaRot=30,
+					 lossType='classify', numTrainEx=1e+7)
 	sourceNw = nw
 	targetNw = [source2fine_network(nn) for nn in nw]
 	fineAll  = [False, True]
@@ -718,7 +727,7 @@ def run_final_finetune(deviceId=1, runTypes=['run','test']):
 		for runType in runTypes:	
 			for ex in numEx:
 				exKey = 'n%d' % ex
-					acc[name][ffKey][exKey] = np.zeros((len(runNum),)) 
+				acc[name][ffKey][exKey] = np.zeros((len(runNum),)) 
 				for snn,tnn in zip(sourceNw, targetNw):	
 					for r in runNum:
 						#Source Experiment
@@ -730,7 +739,7 @@ def run_final_finetune(deviceId=1, runTypes=['run','test']):
 						else:
 						 	numLayers = len(tnn)
 							idx  = numLayers - 6
-							lType, ll   = tnn[numLayers - idx]
+							lType, ll   = tnn[idx]
 							#Just some sanity checks
 							assert lType == 'InnerProduct'
 							assert ll['num_output'] == 500							
