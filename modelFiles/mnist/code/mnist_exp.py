@@ -13,6 +13,8 @@ import make_rotations as mr
 import collections as co
 import h5py as h5
 import copy
+import collections
+import pickle
 
 BASE_DIR = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/mnist/base_files/'
 
@@ -66,7 +68,6 @@ def make_def_proto(nw, isSiamese=True, baseFileStr='split_im.prototxt'):
 
 ##
 # Generates a string to represent the n/w name
-
 def nw2name(nw, getLayerNames=False):
 	nameGen     = mpu.LayerNameGenerator()
 	nwName   = []
@@ -95,6 +96,40 @@ def nw2name(nw, getLayerNames=False):
 	nwName = nwName[:-1]
 	if getLayerNames:
 		return nwName, allNames
+	else:
+		return nwName	
+
+##
+# This is highly hand engineered to suit my current needs for ICCV submission. 
+def nw2name_small(nw, isLatexName=False):
+	nameGen   = mpu.LayerNameGenerator()
+	nwName    = []
+	latexName = []
+	for l in nw:
+		lType, lParam = l
+		lName = ''
+		latName = ''
+		if lType in ['Convolution']:
+			lName   = 'C%d_k%d' % (lParam['num_output'], lParam['kernel_size'])
+			latName = 'C%d' % (lParam['num_output'])
+			nwName.append(lName)
+			latexName.append(latName)
+		elif lType in ['Pooling']:
+			lName = lName + 'P'
+			nwName.append(lName) 
+			latexName.append(lName)
+		elif lType in ['Concat']:
+			break
+		else:
+			pass
+	nwName = ''.join(s + '-' for s in nwName)
+	nwName = nwName[:-1]
+
+	latexName = ''.join(s + '-' for s in latexName)
+	latexName = latexName[:-1]
+
+	if isLatexName:
+		return nwName, latexName
 	else:
 		return nwName	
 
@@ -779,7 +814,132 @@ def run_final_finetune(deviceId=1, runTypes=['run','test'], runNum=[0,1,2]):
 							raise Exception('Unrecognized run type %s' % runType)
 	return acc	
 
+
+def run_final_scratch(deviceId=1, runTypes=['run','test'], runNum=[0,1,2]):
+	nw       = get_final_source_networks()
+	#runNum   = [0, 1, 2]
+	max_iter = 4000
+	stepsize = 4000
+	numEx    = [100, 300, 1000, 10000]
 	
+	acc = {}
+	acc['numExamples'] = numEx
+
+	srcPrms = mr.get_prms(maxRot=10, maxDeltaRot=30,
+					 lossType='classify', numTrainEx=1e+7)
+
+	sourceNw = nw
+	targetNw = [source2fine_network(nn) for nn in nw]
+	fineAll  = [False, True]
+	for ff in fineAll:
+		if ff:
+			ffKey = 'all'
+		else:
+			ffKey = 'top'
+		acc[ffKey] = {}
+		for runType in runTypes:	
+			for ex in numEx:
+				exKey = 'n%d' % ex
+				acc[ffKey][exKey] = {}
+				for snn,tnn in zip(sourceNw, targetNw):	
+					name = nw2name(snn)
+					acc[ffKey][exKey][name] = np.zeros((3,))
+					for r in runNum:
+						if ff:
+							lrAbove = None
+						else:
+						 	numLayers = len(tnn)
+							idx  = numLayers - 6
+							lType, ll   = tnn[idx]
+							#Just some sanity checks
+							assert lType == 'InnerProduct'
+							assert ll['num_output'] == 500							
+							lrAbove = idx
+						tgtPrms = mr.get_prms(transform='normal', numTrainEx=ex, runNum=r)
+						tgtCaffePrms = get_caffe_prms(tnn, isSiamese=False, isFineTune=False, 
+														max_iter=max_iter, stepsize=stepsize, lrAbove=lrAbove)
+						if runType == 'run':
+							isExist = find_experiment(tgtPrms, tgtCaffePrms, max_iter)
+							print 'EXPERIMENT EXISTS - SKIPPING'
+							if not isExist:
+								run_experiment(tgtPrms, tgtCaffePrms, deviceId=deviceId)
+						elif runType == 'test':
+							run_test(tgtPrms, tgtCaffePrms)
+						elif runType == 'accuracy':
+							try:
+								acc[ffKey][exKey][name][r] = read_accuracy(tgtPrms, tgtCaffePrms)
+							except IOError:
+								return acc
+						else:
+							raise Exception('Unrecognized run type %s' % runType)
+	return acc	
+
+def compile_mnist_results(isScratch=False):
+	outDir = '/data1/pulkitag/mnist/results/compiled'
+	if isScratch:
+		outFile = os.path.join(outDir,'scratch.pkl')
+		acc = run_final_scratch(runNum=[0,1,2], deviceId=0, runTypes=['accuracy'])
+	else:
+		outFile = os.path.join(outDir, 'pretrain.pkl')
+		acc = run_final_finetune(runNum=[0,1,2], deviceId=0, runTypes=['accuracy'])
+	fineKeys = ['all','top']
+	numEx    = [100, 300, 1000, 10000]
+	exKey    = ['n%d' % ex for ex in numEx]
+	
+	muAcc, sdAcc = co.OrderedDict(), co.OrderedDict()
+	nws = get_final_source_networks()
+	for ff in fineKeys:
+		muAcc[ff], sdAcc[ff] = co.OrderedDict(), co.OrderedDict()
+		for ex in exKey:
+			muAcc[ff][ex], sdAcc[ff][ex] = co.OrderedDict(), co.OrderedDict()
+			for nn in nws:
+				name  = nw2name(nn)
+				sName = nw2name_small(nn)
+				muAcc[ff][ex][sName] = 100 - 100 * np.mean(acc[ff][ex][name])
+				sdAcc[ff][ex][sName] = 100 * np.std(acc[ff][ex][name])
+	
+	pickle.dump({'muAcc': muAcc, 'sdAcc': sdAcc}, open(outFile,'w'))	
+	return muAcc, sdAcc
+
+
+def compile_results_latex():
+	resDir      = '/data1/pulkitag/mnist/results/compiled'
+	resFile     = os.path.join(resDir, 'results.txt')
+	scratchFile = os.path.join(resDir, 'scratch.pkl')
+	preFile     = os.path.join(resDir, 'pretrain.pkl') 
+
+	sData = pickle.load(open(scratchFile,'r'))
+	pData = pickle.load(open(preFile,'r'))
+	sMu, sSd = sData['muAcc'], sData['sdAcc']
+	pMu, pSd = pData['muAcc'], pData['sdAcc']
+
+	fineKeys = ['top', 'all']
+	numEx    = [100, 300, 1000, 10000]
+	exKey    = ['n%d' % ex for ex in numEx]
+	nws = get_final_source_networks()
+	lines = []
+	for nn in nws:
+		key, latKey = nw2name_small(nn, True)
+		l = latKey
+		#Random results 
+		for ff in fineKeys:
+			for ex in exKey:
+				l = l + ' & ' + '%.1f' % sMu[ff][ex][key] +' $\pm$ ' + '%.1f' % sSd[ff][ex][key]
+		#PreTrain Results
+		for ff in fineKeys:
+			for ex in exKey:
+				l = l	+ ' & ' + '%.1f' % pMu[ff][ex][key] +' $\pm$ ' + '%.1f' % pSd[ff][ex][key] 
+		l = l + '\\\ \n'
+		lines.append(l)
+
+	fid = open(resFile, 'w')
+	for l in lines:
+		fid.write(l)
+	fid.close()
+	print "NOTE: LATEX NAME IS IGNORING THE KERNEL SIZE - SO TWO NETWORKS MAY HAVE SAME NAME"
+	#return lines
+	
+
 def run_scratch(lrAbove=None, max_iter=5000, stepsize=5000):
 	deviceId = 2
 	nw = []
