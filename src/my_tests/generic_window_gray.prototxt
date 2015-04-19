@@ -1,0 +1,59 @@
+layer {
+	name: "window_data"
+	top:  "data"
+	top:  "label"
+	type: "GenericWindowData"
+	generic_window_data_param {
+		#source: "/data1/pulkitag/data_sets/pascal_3d/my/window_file_val.txt"
+		#root_folder: "/data1/pulkitag/data_sets/pascal_3d/PASCAL3D+_release1.1/Images/"
+		source: "/data0/pulkitag/kitti/window-files/test_mxDiff-7_pose-sigMotion_nrmlz-zScoreScaleSeperate_randcrp_concat-fc6_nTe-10000.txt"
+		root_folder: "/data0/pulkitag/data_sets/kitti/odometry/dataset/sequences/asJpg/" 
+		crop_size : 150
+		batch_size: 5
+		context_pad: 24
+		random_crop: true
+		is_gray: true
+	}
+	include {
+		phase: TRAIN
+	}
+}
+layer {
+	name: "window_data"
+	top:  "data"
+	top:  "label"
+	type: "GenericWindowData"
+	generic_window_data_param {
+		#source: "/data1/pulkitag/data_sets/pascal_3d/my/window_file_val.txt"
+		#root_folder: "/data1/pulkitag/data_sets/pascal_3d/PASCAL3D+_release1.1/Images/"
+		source: "/data0/pulkitag/kitti/window-files/test_mxDiff-7_pose-sigMotion_nrmlz-zScoreScaleSeperate_randcrp_concat-fc6_nTe-10000.txt"
+		root_folder: "/data0/pulkitag/data_sets/kitti/odometry/dataset/sequences/imSz/asJpg/" 
+		crop_size : 150
+		batch_size: 5
+		context_pad: 24
+		random_crop: true
+		is_gray: true
+	}
+	include {
+		phase: TEST
+	}
+}
+layer {
+	name: "ipchannel"
+	type: "Slice"
+	bottom: "data"
+	top   : "data_1"
+	top   : "data_2"
+	slice_param {
+		slice_dim: 1
+		slice_point: 1
+	}
+}
+layer {
+	name: "silence"
+	type: "Silence"
+	bottom: "data_1"
+	bottom: "data_2"
+}
+
+

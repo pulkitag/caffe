@@ -1,0 +1,280 @@
+name: "MNISTAutoencoder"
+layer {
+  name: "pair_data"
+  type: "Data"
+  top: "pair_data"
+  include {
+    phase: TRAIN
+  }
+  transform_param {
+    scale: 0.0039215684
+  }
+  data_param {
+    source: "examples/mnist/mnist_train_lmdb"
+    batch_size: 100
+    backend: LMDB
+  }
+}
+layer {
+  name: "pair_data"
+  type: "Data"
+  top: "pair_data"
+  include {
+    phase: TEST
+  }
+  transform_param {
+    scale: 0.0039215684
+  }
+  data_param {
+    source: "examples/mnist/mnist_test_lmdb"
+    batch_size: 100
+    backend: LMDB
+  }
+}
+layer {
+    name: "slice_pair"
+    type: "Slice"
+    bottom: "pair_data"
+    top: "data"
+    top: "data_p"
+    slice_param {
+        slice_dim: 1
+        slice_point: 1
+    }
+}
+layer {
+	name: "silence_data"
+	type: "Silence"
+	bottom: "data_p"
+}
+
+layer { 
+ name: "conv1" 
+ type: "Convolution" 
+ bottom: "data" 
+ top: "conv1" 
+ param { 
+	  name: "conv1_w" 
+	  lr_mult: 1 
+	  decay_mult: 1 
+ } 
+ param { 
+	  name: "conv1_b" 
+	  lr_mult: 2 
+	  decay_mult: 0 
+ } 
+ convolution_param { 
+	  num_output: 96 
+	  kernel_size: 3 
+	  stride: 2 
+	  weight_filler { 
+	 	  std: 0.01 
+	 	  type: "gaussian" 
+	  } 
+	  bias_filler { 
+	 	  type: "constant" 
+	 	  value: 0.0 
+	  } 
+ } 
+} 
+layer { 
+ name: "sig1" 
+ type: "Sigmoid" 
+ bottom: "conv1" 
+ top: "sig1" 
+} 
+layer { 
+ name: "conv2" 
+ type: "Convolution" 
+ bottom: "sig2" 
+ top: "conv2" 
+ param { 
+	  name: "conv2_w" 
+	  lr_mult: 1 
+	  decay_mult: 1 
+ } 
+ param { 
+	  name: "conv2_b" 
+	  lr_mult: 2 
+	  decay_mult: 0 
+ } 
+ convolution_param { 
+	  num_output: 256 
+	  kernel_size: 3 
+	  stride: 2 
+	  weight_filler { 
+	 	  std: 0.01 
+	 	  type: "gaussian" 
+	  } 
+	  bias_filler { 
+	 	  type: "constant" 
+	 	  value: 0.0 
+	  } 
+ } 
+} 
+layer { 
+ name: "sig2" 
+ type: "Sigmoid" 
+ bottom: "conv2" 
+ top: "sig2" 
+} 
+layer { 
+ name: "conv3" 
+ type: "Convolution" 
+ bottom: "sig2" 
+ top: "conv3" 
+ param { 
+	  name: "conv3_w" 
+	  lr_mult: 1 
+	  decay_mult: 1 
+ } 
+ param { 
+	  name: "conv3_b" 
+	  lr_mult: 2 
+	  decay_mult: 0 
+ } 
+ convolution_param { 
+	  num_output: 256 
+	  kernel_size: 3 
+	  stride: 2 
+	  weight_filler { 
+	 	  std: 0.01 
+	 	  type: "gaussian" 
+	  } 
+	  bias_filler { 
+	 	  type: "constant" 
+	 	  value: 0.0 
+	  } 
+ } 
+} 
+layer { 
+ name: "sig3" 
+ type: "Sigmoid" 
+ bottom: "conv3" 
+ top: "sig3" 
+}
+layer { 
+ name: "deconv3" 
+ type: "Deconvolution" 
+ bottom: "sig3" 
+ top: "deconv3" 
+ param { 
+	  name: "conv3_w" 
+	  lr_mult: 1 
+	  decay_mult: 1 
+ } 
+ param { 
+	  name: "conv3_b" 
+	  lr_mult: 2 
+	  decay_mult: 0 
+ } 
+ convolution_param { 
+	  num_output: 256 
+	  kernel_size: 3 
+	  stride: 2 
+	  weight_filler { 
+	 	  std: 0.01 
+	 	  type: "gaussian" 
+	  } 
+	  bias_filler { 
+	 	  type: "constant" 
+	 	  value: 0.0 
+	  } 
+ } 
+} 
+layer { 
+ name: "desig3" 
+ type: "Sigmoid" 
+ bottom: "deconv3" 
+ top: "desig3" 
+}
+layer { 
+ name: "deconv2" 
+ type: "Deconvolution" 
+ bottom: "desig3" 
+ top: "deconv2" 
+ param { 
+	  name: "conv2_w" 
+	  lr_mult: 1 
+	  decay_mult: 1 
+ } 
+ param { 
+	  name: "conv2_b" 
+	  lr_mult: 2 
+	  decay_mult: 0 
+ } 
+ convolution_param { 
+	  num_output: 256 
+	  kernel_size: 3 
+	  stride: 2 
+	  weight_filler { 
+	 	  std: 0.01 
+	 	  type: "gaussian" 
+	  } 
+	  bias_filler { 
+	 	  type: "constant" 
+	 	  value: 0.0 
+	  } 
+ } 
+} 
+layer { 
+ name: "desig2" 
+ type: "Sigmoid" 
+ bottom: "deconv2" 
+ top: "desig2" 
+}
+layer { 
+ name: "deconv1" 
+ type: "Deconvolution" 
+ bottom: "desig2" 
+ top: "deconv1" 
+ param { 
+	  name: "conv1_w" 
+	  lr_mult: 1 
+	  decay_mult: 1 
+ } 
+ param { 
+	  name: "conv1_b" 
+	  lr_mult: 2 
+	  decay_mult: 0 
+ } 
+ convolution_param { 
+	  num_output: 256 
+	  kernel_size: 3 
+	  stride: 2 
+	  weight_filler { 
+	 	  std: 0.01 
+	 	  type: "gaussian" 
+	  } 
+	  bias_filler { 
+	 	  type: "constant" 
+	 	  value: 0.0 
+	  } 
+ } 
+} 
+layer { 
+ name: "desig1" 
+ type: "Sigmoid" 
+ bottom: "deconv1" 
+ top: "desig1" 
+}
+layer {
+  name: "flatdata"
+  type: "Flatten"
+  bottom: "data"
+  top: "flatdata"
+}
+layer {
+  name: "flatpred"
+  type: "Flatten"
+  bottom: "desig1"
+  top: "flatpred"
+}
+layer {
+  name: "loss"
+  type: "SigmoidCrossEntropyLoss"
+  bottom: "flatpred"
+  bottom: "flatdata"
+  top: "cross_entropy_loss"
+  loss_weight: 1
+}

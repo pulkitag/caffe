@@ -1,0 +1,17 @@
+# Autotmatically generated solver prototxt 
+ net: "/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/mnist/exp/tf-rotTrans_cls_dRot30_dTrn3_mxRot10_tr1e+07_run0_conv1-96sz3-st1_pool1-sz3-st2_concat1_fc2-500_drop3/caffenet_siam_bLr1e-02_stp1e+04_mIt4e+04.prototxt" 
+ test_iter: 100 
+ test_interval: 500 
+ base_lr: 0.01 
+ momentum: 0.9 
+ weight_decay: 0.0005 
+ gamma: 0.5 
+ stepsize: 10000 
+ lr_policy: "step" 
+ display: 20 
+ max_iter: 40000 
+ snapshot: 10000 
+ snapshot_prefix: "/data1/pulkitag/mnist/snapshots/tf-rotTrans_cls_dRot30_dTrn3_mxRot10_tr1e+07_run0_conv1-96sz3-st1_pool1-sz3-st2_concat1_fc2-500_drop3/caffenet_siam_bLr1e-02_stp1e+04_mIt4e+04" 
+ solver_mode: GPU 
+ device_id: 1 
+ debug_info: false 

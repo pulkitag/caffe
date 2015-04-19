@@ -10,7 +10,13 @@ rootFolder = "/data0/pulkitag/data_sets/kitti/odometry/dataset/sequences/imSz256
 
 #rootFolder = "/data1/pulkitag/data_sets/pascal_3d/PASCAL3D+_release1.1/Images/"
 #sFile       = '/data1/pulkitag/data_sets/pascal_3d/my/window_file_val.txt'
-protoFile   = 'generic_window.prototxt'
+
+def get_protofile(isGray=False):
+	if isGray:
+		protoFile = 'generic_window_gray.prototxt'
+	else:
+		protoFile   = 'generic_window.prototxt'
+	return protoFile
 
 def read_window_file(fName=sFile):
 	fid = open(fName,'r')
@@ -70,17 +76,19 @@ def plot_pairs(fig, im1, im2, titleStr=''):
 	plt.title(titleStr)
 	plt.show()
 
-def compare_windows():
+def compare_windows(isGray=False):
 	figGt = plt.figure()  #Ground-Truth
 	figDt = plt.figure()	#Data
 	plt.ion()
+	plt.set_cmap(plt.cm.gray)
 	
 	#Get ground truth data.
 	imNamesGt, bboxGt, labelsGt = read_window_file()
 	N = labelsGt.shape[0]	
 
 	#Setup the network. 
-	net     = caffe.Net(protoFile, caffe.TRAIN)
+	protoFile = get_protofile(isGray)
+	net       = caffe.Net(protoFile, caffe.TRAIN)
 	imCount = 0
 	cropPrms = {}
 	cropPrms['cropType'] = 'contPad'
@@ -93,10 +101,15 @@ def compare_windows():
 		batchSz = imData.shape[0]
 		for b in range(batchSz):
 			#Plot network data. 
-			im1 = imData[b,0:3].transpose((1,2,0))
-			im2 = imData[b,3:6].transpose((1,2,0))
-			im1 = im1[:,:,[2,1,0]]
-			im2 = im2[:,:,[2,1,0]]
+			if isGray:
+				im1 = imData[b,0:1].transpose((1,2,0)).squeeze()
+				im2 = imData[b,1:].transpose((1,2,0)).squeeze()
+			else:
+				im1 = imData[b,0:3].transpose((1,2,0))
+				im2 = imData[b,3:6].transpose((1,2,0))
+				im1 = im1[:,:,[2,1,0]]
+				im2 = im2[:,:,[2,1,0]]
+
 			lb  = lblDat[b].squeeze()
 			lbStr = 'az: %f, el: %f, cl: %f' % (lb[0],lb[1],lb[2])	
 			plot_pairs(figDt, im1, im2, lbStr) 

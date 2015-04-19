@@ -1,0 +1,79 @@
+layer { 
+ name: "extra_fc" 
+ type: "InnerProduct" 
+ bottom: "" 
+ top: "extra_fc" 
+ param { 
+	  lr_mult: 1 
+	  decay_mult: 1 
+ } 
+ param { 
+	  lr_mult: 2 
+	  decay_mult: 0 
+ } 
+ inner_product_param { 
+	  num_output: 500 
+	  weight_filler { 
+	 	  std: 0.005 
+	 	  type: "gaussian" 
+	  } 
+	  bias_filler { 
+	 	  type: "constant" 
+	 	  value: 0.0 
+	  } 
+ } 
+}
+layer {
+ name: "relu_extra"
+ bottom: "extra_fc"
+ top:    "extra_fc"
+ type:   "ReLU"
+}
+layer {
+ name: "drop_extra"
+ bottom: "extra_fc"
+ top:    "extra_fc"
+ type:   "Dropout"
+ dropout_param {
+	dropout_ratio: 0.5
+ }
+}
+layer { 
+ name: "class_fc" 
+ type: "InnerProduct" 
+ bottom: "extra_fc" 
+ top: "class_fc" 
+ param { 
+	  lr_mult: 1 
+	  decay_mult: 1 
+ } 
+ param { 
+	  lr_mult: 2 
+	  decay_mult: 0 
+ } 
+ inner_product_param { 
+	  num_output: 10 
+	  weight_filler { 
+	 	  std: 0.005 
+	 	  type: "gaussian" 
+	  } 
+	  bias_filler { 
+	 	  type: "constant" 
+	 	  value: 0.0 
+	  } 
+ } 
+}
+layer {
+  name: "loss"
+  type: "SoftmaxWithLoss"
+  bottom: "class_fc"
+  bottom: "label"
+  top: "loss"
+}
+layer {
+  name: "accuracy"
+  type: "Accuracy"
+  bottom: "class_fc"
+  bottom: "label"
+  top: "accuracy"
+}

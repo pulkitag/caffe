@@ -179,6 +179,18 @@ def make_normal_lmdb(prms, setName):
 	db.close()
 
 ##
+def make_all_normal_lmdbs():
+	sets  = ['train', 'test']
+	numEx = [100, 300, 1000, 10000]
+	run   = [1, 2] 
+	for n in numEx:
+		for r in run:
+			prms = get_prms(transform='normal', numTrainEx=n, runNum=r)
+			for s in sets: 
+				make_normal_lmdb(prms, s)
+
+
+##
 def make_null_transform_lmdb(prms, setName='test'):
 	'''
 		The LMDB with standard Images - but in a siamese way. 
