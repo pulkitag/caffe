@@ -724,26 +724,27 @@ def run_final_finetune(deviceId=1, runTypes=['run','test'], runNum=[0,1,2]):
 	
 	acc = {}
 	acc['numExamples'] = numEx
+	for nn in nw:
+		name = nw2name(nn)
+		acc[name] = []
 
 	srcPrms = mr.get_prms(maxRot=10, maxDeltaRot=30,
 					 lossType='classify', numTrainEx=1e+7)
-
 	sourceNw = nw
 	targetNw = [source2fine_network(nn) for nn in nw]
 	fineAll  = [False, True]
 	for ff in fineAll:
+		acc[name] = {}
 		if ff:
 			ffKey = 'all'
 		else:
 			ffKey = 'top'
-		acc[ffKey] = {}
+		acc[name][ffKey] = {}
 		for runType in runTypes:	
 			for ex in numEx:
 				exKey = 'n%d' % ex
-				acc[ffKey][exKey] = {}
+				acc[name][ffKey][exKey] = np.zeros((len(runNum),)) 
 				for snn,tnn in zip(sourceNw, targetNw):	
-					name = nw2name(snn)
-					acc[ffKey][exKey][name] = np.zeros((3,))
 					for r in runNum:
 						#Source Experiment
 						srcCaffePrms = get_caffe_prms(snn, isSiamese=True)
@@ -771,8 +772,9 @@ def run_final_finetune(deviceId=1, runTypes=['run','test'], runNum=[0,1,2]):
 						elif runType == 'test':
 							run_test(tgtPrms, tgtCaffePrms)
 						elif runType == 'accuracy':
+							name = nw2name(nn)
 							try:
-								acc[ffKey][exKey][name][r] = read_accuracy(tgtPrms, tgtCaffePrms)
+								acc[name][ffKey][exKey][r] = read_accuracy(tgtPrms, tgtCaffePrms)
 							except IOError:
 								return acc
 						else:

@@ -1613,6 +1613,7 @@ class CaffeTest:
 	##
 	# Save Accuracy
 	def save_performance(self, accTypes, outFile):
+		print outFile
 		fid = h5.File(outFile, 'w')
 		print "Saving accuracies over %d examples" % self.testCount_
 		for key in accTypes:
