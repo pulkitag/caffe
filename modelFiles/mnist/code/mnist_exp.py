@@ -101,26 +101,37 @@ def nw2name(nw, getLayerNames=False):
 
 ##
 # This is highly hand engineered to suit my current needs for ICCV submission. 
-def nw2name_small(nw):
-	nameGen     = mpu.LayerNameGenerator()
-	nwName   = []
-	allNames = []
+def nw2name_small(nw, isLatexName=False):
+	nameGen   = mpu.LayerNameGenerator()
+	nwName    = []
+	latexName = []
 	for l in nw:
 		lType, lParam = l
 		lName = ''
+		latName = ''
 		if lType in ['Convolution']:
-			lName = 'C%d_k%d' % (lParam['num_output'], lParam['kernel_size'])
+			lName   = 'C%d_k%d' % (lParam['num_output'], lParam['kernel_size'])
+			latName = 'C%d' % (lParam['num_output'])
 			nwName.append(lName)
+			latexName.append(latName)
 		elif lType in ['Pooling']:
 			lName = lName + 'P'
 			nwName.append(lName) 
+			latexName.append(lName)
 		elif lType in ['Concat']:
 			break
 		else:
 			pass
 	nwName = ''.join(s + '-' for s in nwName)
 	nwName = nwName[:-1]
-	return nwName	
+
+	latexName = ''.join(s + '-' for s in latexName)
+	latexName = latexName[:-1]
+
+	if isLatexName:
+		return nwName, latexName
+	else:
+		return nwName	
 
 
 def get_caffe_prms(nw, isSiamese=True, batchSize=128, isTest=False,
@@ -804,7 +815,7 @@ def run_final_finetune(deviceId=1, runTypes=['run','test'], runNum=[0,1,2]):
 	return acc	
 
 
-def run_final_sratch(deviceId=1, runTypes=['run','test'], runNum=[0,1,2]):
+def run_final_scratch(deviceId=1, runTypes=['run','test'], runNum=[0,1,2]):
 	nw       = get_final_source_networks()
 	#runNum   = [0, 1, 2]
 	max_iter = 4000
@@ -867,7 +878,7 @@ def compile_mnist_results(isScratch=False):
 	outDir = '/data1/pulkitag/mnist/results/compiled'
 	if isScratch:
 		outFile = os.path.join(outDir,'scratch.pkl')
-		pass
+		acc = run_final_scratch(runNum=[0,1,2], deviceId=0, runTypes=['accuracy'])
 	else:
 		outFile = os.path.join(outDir, 'pretrain.pkl')
 		acc = run_final_finetune(runNum=[0,1,2], deviceId=0, runTypes=['accuracy'])
@@ -892,21 +903,41 @@ def compile_mnist_results(isScratch=False):
 
 
 def compile_results_latex():
-	muAcc, sdAcc = compile_mnist_results()
+	resDir      = '/data1/pulkitag/mnist/results/compiled'
+	resFile     = os.path.join(resDir, 'results.txt')
+	scratchFile = os.path.join(resDir, 'scratch.pkl')
+	preFile     = os.path.join(resDir, 'pretrain.pkl') 
+
+	sData = pickle.load(open(scratchFile,'r'))
+	pData = pickle.load(open(preFile,'r'))
+	sMu, sSd = sData['muAcc'], sData['sdAcc']
+	pMu, pSd = pData['muAcc'], pData['sdAcc']
+
 	fineKeys = ['top', 'all']
 	numEx    = [100, 300, 1000, 10000]
 	exKey    = ['n%d' % ex for ex in numEx]
 	nws = get_final_source_networks()
 	lines = []
 	for nn in nws:
-		key = nw2name_small(nn)
-		l = key
+		key, latKey = nw2name_small(nn, True)
+		l = latKey
+		#Random results 
 		for ff in fineKeys:
 			for ex in exKey:
-				l = l + ' & ' + '%.2f' % muAcc[ff][ex][key] +' $\pm$ ' + '%.2f' % sdAcc[ff][ex][key]  
-		l = l + '\\'
+				l = l + ' & ' + '%.1f' % sMu[ff][ex][key] +' $\pm$ ' + '%.1f' % sSd[ff][ex][key]
+		#PreTrain Results
+		for ff in fineKeys:
+			for ex in exKey:
+				l = l	+ ' & ' + '%.1f' % pMu[ff][ex][key] +' $\pm$ ' + '%.1f' % pSd[ff][ex][key] 
+		l = l + '\\\ \n'
 		lines.append(l)
-	return lines
+
+	fid = open(resFile, 'w')
+	for l in lines:
+		fid.write(l)
+	fid.close()
+	print "NOTE: LATEX NAME IS IGNORING THE KERNEL SIZE - SO TWO NETWORKS MAY HAVE SAME NAME"
+	#return lines
 	
 
 def run_scratch(lrAbove=None, max_iter=5000, stepsize=5000):
