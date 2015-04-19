@@ -779,7 +779,68 @@ def run_final_finetune(deviceId=1, runTypes=['run','test'], runNum=[0,1,2]):
 							raise Exception('Unrecognized run type %s' % runType)
 	return acc	
 
+
+
+def run_final_sratch(deviceId=1, runTypes=['run','test'], runNum=[0,1,2]):
+	nw       = get_final_source_networks()
+	#runNum   = [0, 1, 2]
+	max_iter = 4000
+	stepsize = 4000
+	numEx    = [100, 300, 1000, 10000]
 	
+	acc = {}
+	acc['numExamples'] = numEx
+
+	srcPrms = mr.get_prms(maxRot=10, maxDeltaRot=30,
+					 lossType='classify', numTrainEx=1e+7)
+
+	sourceNw = nw
+	targetNw = [source2fine_network(nn) for nn in nw]
+	fineAll  = [False, True]
+	for ff in fineAll:
+		if ff:
+			ffKey = 'all'
+		else:
+			ffKey = 'top'
+		acc[ffKey] = {}
+		for runType in runTypes:	
+			for ex in numEx:
+				exKey = 'n%d' % ex
+				acc[ffKey][exKey] = {}
+				for snn,tnn in zip(sourceNw, targetNw):	
+					name = nw2name(snn)
+					acc[ffKey][exKey][name] = np.zeros((3,))
+					for r in runNum:
+						if ff:
+							lrAbove = None
+						else:
+						 	numLayers = len(tnn)
+							idx  = numLayers - 6
+							lType, ll   = tnn[idx]
+							#Just some sanity checks
+							assert lType == 'InnerProduct'
+							assert ll['num_output'] == 500							
+							lrAbove = idx
+						tgtPrms = mr.get_prms(transform='normal', numTrainEx=ex, runNum=r)
+						tgtCaffePrms = get_caffe_prms(tnn, isSiamese=False, isFineTune=False, 
+														max_iter=max_iter, stepsize=stepsize, lrAbove=lrAbove)
+						if runType == 'run':
+							isExist = find_experiment(tgtPrms, tgtCaffePrms, max_iter)
+							print 'EXPERIMENT EXISTS - SKIPPING'
+							if not isExist:
+								run_experiment(tgtPrms, tgtCaffePrms, deviceId=deviceId)
+						elif runType == 'test':
+							run_test(tgtPrms, tgtCaffePrms)
+						elif runType == 'accuracy':
+							try:
+								acc[ffKey][exKey][name][r] = read_accuracy(tgtPrms, tgtCaffePrms)
+							except IOError:
+								return acc
+						else:
+							raise Exception('Unrecognized run type %s' % runType)
+	return acc	
+
+
 def run_scratch(lrAbove=None, max_iter=5000, stepsize=5000):
 	deviceId = 2
 	nw = []
