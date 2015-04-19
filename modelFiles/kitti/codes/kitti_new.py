@@ -116,6 +116,8 @@ def get_pose_label_normalized(prms, pose1, pose2):
 		lbBatch = lbBatch - muPose
 		lbBatch = lbBatch / sdPose	
 		lbBatch = lbBatch * scale
+	elif prms['nrmlz'] is None:
+		pass
 	else:
 		raise Exception('Nrmlz Type Not Recognized')
 
@@ -375,8 +377,11 @@ def setup_experiment_finetune(prms, cPrms, returnTgCPrms=False, srcDefFile=None)
 			defFile = os.path.join(baseFilePath,
 								 'kitti_finetune_fc6_drop_extraFc_deploy.prototxt')
 		else:
-			defFile = os.path.join(baseFilePath,
-								 'kitti_finetune_fc6_deploy.prototxt')
+			if cPrms['concatLayer'] == 'conv4' and cPrms['isMySimple']:
+				defFile = os.path.join(baseFilePath, 'kitti_finetune_conv4_mysimple_deploy.prototxt')
+			else:
+				defFile = os.path.join(baseFilePath,
+									 'kitti_finetune_fc6_deploy.prototxt')
 	else:
 		defFile = srcDefFile
 
@@ -558,7 +563,7 @@ def make_experiment(prms, cPrms, isFine=False, resumeIter=None,
 	if isFine:
 		caffeExp = setup_experiment_finetune(prms, cPrms, srcDefFile=srcDefFile)
 		if srcModelFile is None:
-			#Get the model name from the source experiment. 
+			#Get the model name from the source experiment.
 			srcCaffeExp  = setup_experiment(prms, cPrms)
 			if cPrms['fine']['modelIter'] is not None:
 				modelFile = srcCaffeExp.get_snapshot_name(cPrms['fine']['modelIter'])
@@ -643,7 +648,8 @@ def run_sun_layerwise_small(deviceId=0, runNum=1, fineNumData=10,
 								sourceModelIter=150000, imgntMean=True, concatLayer='fc6',
 								resumeIter=None, fine_base_lr=0.001, runType='run',
 								convConcat=False, 
-								prms=None, srcDefFile=None, srcModelFile=None):
+								prms=None, srcDefFile=None, srcModelFile=None,
+								isMySimple=False):
 
 	#Set the prms
 	if prms is None:
@@ -656,7 +662,11 @@ def run_sun_layerwise_small(deviceId=0, runNum=1, fineNumData=10,
 		imSz, testImSz, testCrpSz = 128, 128, 112
 
 	acc = {}
-	maxLayers = ['pool1', 'pool2','relu3','relu4','pool5', 'fc6']
+	if isMySimple:
+		maxLayers = ['relu1', 'relu2','relu3','relu4']
+	else:
+		maxLayers = ['pool1', 'pool2','relu3','relu4','pool5', 'fc6']
+
 	if addFc:
 		lrAbove   = ['fc-extra'] * len(maxLayers)
 	else:
@@ -669,7 +679,8 @@ def run_sun_layerwise_small(deviceId=0, runNum=1, fineNumData=10,
 						fineMaxLayer=mxl, lrAbove=abv, 
 						fineRunNum=runNum, fineNumData=fineNumData, 
 						deviceId=deviceId, imgntMean=imgntMean,
-						convConcat=convConcat, imSz=imSz)
+						convConcat=convConcat, imSz=imSz,
+						isMySimple=isMySimple)
 		if runType =='run':
 			run_experiment(prms, cPrms, True, resumeIter,
 						 srcDefFile=srcDefFile, srcModelFile=srcModelFile)
@@ -685,12 +696,14 @@ def run_sun_layerwise_small(deviceId=0, runNum=1, fineNumData=10,
 
 ##
 #
-def run_sun_layerwise_small_multiple(deviceId=0, runType='run'):
-	runNum      = [1,2,3]
+def run_sun_layerwise_small_multiple(deviceId=0, runType='run', isMySimple=False):
+	runNum      = [1, 2, 3]
 	fineNumData = [5,10,20,50]
-	concatLayer     = ['fc6', 'conv5']
+	#concatLayer     = ['fc6', 'conv5']
+	#convConcat  = [False, True]
+	concatLayer  = ['conv4']
+	convConcat   = [True]
 	sourceModelIter = 60000
-	convConcat  = [False, True]
 	acc = {}
 	for r in runNum:
 		for num in fineNumData:
@@ -700,22 +713,22 @@ def run_sun_layerwise_small_multiple(deviceId=0, runType='run'):
 					try:
 						acc[key],_ = run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False,
                           addDrop=True, sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
-                          deviceId=deviceId, runType='accuracy')
+                          deviceId=deviceId, runType='accuracy', isMySimple=isMySimple)
 					except IOError:
 						return acc
 				else:
 					run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
 								sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
-								deviceId=deviceId)
+								deviceId=deviceId, isMySimple=isMySimple)
 					run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
 								sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
-								runType='test', deviceId=deviceId)
+								runType='test', deviceId=deviceId, isMySimple=isMySimple)
 
 ##
 # Run Sun from pascal
 def run_sun_from_pascal(deviceId=0, preTrainStr='pascal_cls', runType='run'):
-	runNum      = [4, 5]
-	fineNumData = [10,20,50]
+	runNum      = [4]
+	#fineNumData = [10,20,50]
 	fineNumData = [5]
 	concatLayer     = ['fc6']
 	convConcat      = [False]
@@ -754,6 +767,7 @@ def run_sun_from_pascal(deviceId=0, preTrainStr='pascal_cls', runType='run'):
 								sourceModelIter=None, concatLayer=cl, convConcat=cc,
 								runType='test', deviceId=deviceId, 
 								prms=prms, srcDefFile=defFile, srcModelFile=modelFile)
+	return acc
 
 	
 def run_sun_finetune(deviceId=1, runNum=2, addFc=True, addDrop=True,
