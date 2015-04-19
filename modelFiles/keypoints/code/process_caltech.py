@@ -12,25 +12,28 @@ import h5py as h5
 
 ##
 # Get the basic paths
-def get_basic_paths():
+def get_basic_paths(isNewExpDir=False):
 	paths            = {}
 	paths['dataset']   = 'caltech101' 
 	paths['imDir']     = '/data1/pulkitag/data_sets/caltech101/101_ObjectCategories/'
 	paths['splitsDir'] = '/data1/pulkitag/caltech101/train_test_splits/'
 	paths['lmdbDir']   = '/data0/pulkitag/caltech101/lmdb-store/'
-	paths['expDir']    = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/caltech101/exp/'
+	if isNewExpDir:
+		paths['expDir']    = '/data0/pulkitag/caltech101/exp/'
+	else:
+		paths['expDir']    = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/caltech101/exp/'
 	paths['snapDir']   = '/data1/pulkitag/caltech101/snapshots/'
 	paths['resDir']    = '/data1/pulkitag/caltech101/results/'
 	return paths	
 
 ##
 # Get the experiment prms
-def get_prms(imSz=128, numTrain=30, numTest=-1, runNum=0):
+def get_prms(imSz=128, numTrain=30, numTest=-1, runNum=0, isNewExpDir=False):
 	'''
 		numTest: -1 means that use the remaining images as test
 	'''
 	prms  = {}
-	paths = get_basic_paths()
+	paths = get_basic_paths(isNewExpDir)
 
 	prms['numTrain'] = numTrain
 	prms['numTest']  = numTest
@@ -607,12 +610,12 @@ def run_random_experiment(isFineLast=True):
 #
 def run_pretrain_experiment(preTrainStr='rotObjs_kmedoids30_20_nodrop_iter120K', isFineLast=True,
 								runType='run', testNum=30, addDropLast=False, imSz=128, maxIter=12000,
-								forceStepSize=None):	
+								forceStepSize=None, deviceId=1):	
 	'''
 		runType: 'run' run the experiment
 							'test' perform test
 	'''
-	prms    = get_prms(imSz=imSz)
+	prms    = get_prms(imSz=imSz, isNewExpDir=True)
 	#For layers 5,6 I used initLr of 0.001 and std of 0.01
 	#mxLayer = [1,2,3,4,5,6]
 	mxLayer = [6,5,4,3,2]
@@ -659,7 +662,7 @@ def run_pretrain_experiment(preTrainStr='rotObjs_kmedoids30_20_nodrop_iter120K',
 													 testNum=testNum, stepSize=stepSize,
 													 addDropLast=addDropLast, maxIter=maxIter)
 		if runType=='run':
-			run_experiment(prms, cPrms, deviceId=1) #1 corresponds to first K40  
+			run_experiment(prms, cPrms, deviceId=deviceId) #1 corresponds to first K40  
 		elif runType == 'test':
 			run_test(prms, cPrms, imH=imH, imW=imW, cropW=cropW, cropH=cropH)
 		elif runType == 'acc':
