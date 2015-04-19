@@ -703,9 +703,10 @@ def run_sun_layerwise_small_multiple(deviceId=0):
 
 ##
 # Run Sun from pascal
-def run_sun_from_pascal(deviceId=0, preTrainStr='pascal_cls'):
-	runNum      = [4]
+def run_sun_from_pascal(deviceId=0, preTrainStr='pascal_cls', runType='run'):
+	#runNum      = [1,2,3, 4, 5]
 	#fineNumData = [5,10,20,50]
+	runNum      = [5]
 	fineNumData = [5]
 	concatLayer     = ['fc6']
 	convConcat      = [False]
@@ -719,22 +720,33 @@ def run_sun_from_pascal(deviceId=0, preTrainStr='pascal_cls'):
 		imSz, cropSz = 128, 112
 	expName = 'dummy_fine_on_sun_' + preTrainStr
 	prms = p3d.get_exp_prms(imSz=imSz, expName=expName)
+	acc  = {}
 
 	#Finally running the models. 
 	for r in runNum:
 		for num in fineNumData:
 			for cl,cc in zip(concatLayer, convConcat):
+				if runType == 'accuracy':				
+					key = '%s_num%d_run%d' % (cl, num, r)
+					try:
+						acc[key],_ = run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False,
+													addDrop=True, sourceModelIter=None, concatLayer=cl, convConcat=cc,
+													deviceId=deviceId, prms=prms,
+													srcDefFile=defFile, srcModelFile=modelFile, runType='accuracy')
+					except IOError:
+						pass	
+				else:
+					run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
+								sourceModelIter=None, concatLayer=cl, convConcat=cc,
+								deviceId=deviceId,
+								prms=prms, srcDefFile=defFile, srcModelFile=modelFile)
 					
-				run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
-							sourceModelIter=None, concatLayer=cl, convConcat=cc,
-							deviceId=deviceId,
-							prms=prms, srcDefFile=defFile, srcModelFile=modelFile)
-				
-				run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
-							sourceModelIter=None, concatLayer=cl, convConcat=cc,
-							runType='test', deviceId=deviceId, 
-							prms=prms, srcDefFile=defFile, srcModelFile=modelFile)
+					run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
+								sourceModelIter=None, concatLayer=cl, convConcat=cc,
+								runType='test', deviceId=deviceId, 
+								prms=prms, srcDefFile=defFile, srcModelFile=modelFile)
 
+	return acc
 	
 def run_sun_finetune(deviceId=1, runNum=2, addFc=True, addDrop=True,
 								fine_base_lr=0.001, imgntMean=True, stepsize=20000,
