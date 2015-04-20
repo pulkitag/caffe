@@ -698,7 +698,7 @@ def run_sun_layerwise_small(deviceId=0, runNum=1, fineNumData=10,
 #
 def run_sun_layerwise_small_multiple(deviceId=0, runType='run', isMySimple=False,
 																		 scratch=False):
-	runNum      = [1]
+	runNum      = [5]
 	fineNumData = [5,10,20,50]
 	if scratch:
 		concatLayer = ['fc6']
@@ -741,7 +741,7 @@ def run_sun_from_pascal(deviceId=0, preTrainStr='pascal_cls', runType='run'):
 	modelFile, defFile = pc.get_pretrain_info(preTrainStr)
 
 	#naming info
-	if preTrainStr == 'alex':
+	if preTrainStr in ['alex', 'imagenet20K']:
 		imSz   = 256
 		cropSz = 227
 	else:
@@ -773,6 +773,7 @@ def run_sun_from_pascal(deviceId=0, preTrainStr='pascal_cls', runType='run'):
 								runType='test', deviceId=deviceId, 
 								prms=prms, srcDefFile=defFile, srcModelFile=modelFile)
 	return acc
+ 
 	
 def run_sun_finetune(deviceId=1, runNum=2, addFc=True, addDrop=True,
 								fine_base_lr=0.001, imgntMean=True, stepsize=20000,
