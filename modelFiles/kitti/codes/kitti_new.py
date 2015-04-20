@@ -315,7 +315,7 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 		if fineDataSet=='sun':
 			assert (fineMaxIter is None) and (stepsize is None)
 			#These will be done automatically.
-			if imSz==227:
+			if imSz==227 or imSz==256:
 				sunImSz = 256
 				muFile = '"%s"' % '/data1/pulkitag/caffe_models/ilsvrc2012_mean.binaryproto'
 			else:
@@ -466,6 +466,7 @@ def setup_experiment_finetune(prms, cPrms, returnTgCPrms=False, srcDefFile=None)
 						'"%s"' % trnFile, phase='TRAIN')
 	tgExp.set_layer_property('data', ['data_param', 'source'],
 					'"%s"' % tstFile, phase='TEST')
+
 	#Set the imagenet mean
 	if cPrms['imgntMean']:
 		#muFile = '"%s"' % '/data1/pulkitag/caffe_models/ilsvrc2012_mean.binaryproto'
@@ -734,7 +735,7 @@ def run_sun_layerwise_small_multiple(deviceId=0, runType='run', isMySimple=False
 def run_sun_from_pascal(deviceId=0, preTrainStr='pascal_cls', runType='run'):
 	#runNum      = [1,2,3, 4, 5]
 	#fineNumData = [5,10,20,50]
-	runNum      = [5]
+	runNum      = [5, 20]
 	fineNumData = [5]
 	concatLayer     = ['fc6']
 	convConcat      = [False]
@@ -744,10 +745,14 @@ def run_sun_from_pascal(deviceId=0, preTrainStr='pascal_cls', runType='run'):
 	if preTrainStr in ['alex', 'imagenet20K']:
 		imSz   = 256
 		cropSz = 227
+		pImSz  = None
 	else:
 		imSz, cropSz = 128, 112
+		pImSz        = 128
 	expName = 'dummy_fine_on_sun_' + preTrainStr
 	prms = p3d.get_exp_prms(imSz=imSz, expName=expName)
+	prms['imSz'] = pImSz
+
 	acc = {}
 	#Finally running the models. 
 	for r in runNum:
@@ -773,7 +778,7 @@ def run_sun_from_pascal(deviceId=0, preTrainStr='pascal_cls', runType='run'):
 								runType='test', deviceId=deviceId, 
 								prms=prms, srcDefFile=defFile, srcModelFile=modelFile)
 	return acc
- 
+
 	
 def run_sun_finetune(deviceId=1, runNum=2, addFc=True, addDrop=True,
 								fine_base_lr=0.001, imgntMean=True, stepsize=20000,
