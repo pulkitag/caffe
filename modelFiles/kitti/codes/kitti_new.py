@@ -613,6 +613,18 @@ def run_test(prms, cPrms, cropH=227, cropW=227, imH=256, imW=256,
 	caffeTest.save_performance(['acc', 'accClassMean'], resFile)
 
 ##
+# Find if an experiment exists
+def find_experiment(prms, cPrms, srcDefFile=None):
+	caffeExp, cPrms  = setup_experiment_finetune(prms, cPrms, True, srcDefFile=srcDefFile)
+	modelFile = caffeExp.get_snapshot_name(cPrms['fine']['max_iter'])
+	if not os.path.exists(modelFile):
+		modelFile = caffeExp.get_snapshot_name(cPrms['fine']['max_iter'] + 1)
+	if os.path.exists(modelFile):
+		return True
+	else:
+		return False
+
+##
 def read_accuracy(prms, cPrms):
 	_, cPrms  = setup_experiment_finetune(prms, cPrms, True)
 	resFile = get_res_file(prms, cPrms)
@@ -683,7 +695,12 @@ def run_sun_layerwise_small(deviceId=0, runNum=1, fineNumData=10,
 						convConcat=convConcat, imSz=imSz,
 						isMySimple=isMySimple)
 		if runType =='run':
-			run_experiment(prms, cPrms, True, resumeIter,
+			isExist = find_experiment(prms, cPrms, srcDefFile=srcDefFile);
+			if isExist:
+				print 'EXPERIMENT FOUND, SKIPPING'
+				continue
+			else:
+				run_experiment(prms, cPrms, True, resumeIter,
 						 srcDefFile=srcDefFile, srcModelFile=srcModelFile)
 		elif runType == 'test':
 			run_test(prms, cPrms, imH=testImSz, imW=testImSz,
@@ -735,8 +752,8 @@ def run_sun_layerwise_small_multiple(deviceId=0, runType='run', isMySimple=False
 def run_sun_from_pascal(deviceId=0, preTrainStr='pascal_cls', runType='run'):
 	#runNum      = [1,2,3, 4, 5]
 	#fineNumData = [5,10,20,50]
-	runNum      = [5, 20]
-	fineNumData = [5]
+	runNum      = [1, 4, 5]
+	fineNumData = [5, 20]
 	concatLayer     = ['fc6']
 	convConcat      = [False]
 	modelFile, defFile = pc.get_pretrain_info(preTrainStr)
