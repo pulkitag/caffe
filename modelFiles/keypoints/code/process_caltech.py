@@ -245,8 +245,11 @@ def get_pretrain_info(preTrainStr):
 	#Alex-Net
 	if preTrainStr == 'alex':
 		netFile = '/data1/pulkitag/caffe_models/caffe_imagenet_train_iter_310000'
-		defFile = '/data1/pulkitag/caffe_models/bvlc_reference/caffenet_full.prototxt'
-
+		#defFile = '/data1/pulkitag/caffe_models/bvlc_reference/caffenet_full.prototxt'
+		defFile = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/kitti/base_files/alexnet_finetune_fc6_deploy.prototxt'
+	elif preTrainStr == 'imagenet20K':
+		netFile = '/data1/pulkitag/others/imagenet20K.caffemodel'
+		defFile = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/kitti/base_files/alexnet_finetune_fc6_deploy.prototxt'
 	#KMedoid rotation
 	elif preTrainStr in  ['rotObjs_kmedoids30_20_iter60K', 'rotObjs_kmedoids30_20_nodrop_iter120K']:
 		snapshotDir   = '/data1/pulkitag/snapshots/keypoints/'

@@ -1,5 +1,6 @@
-function [] = read_weights_matconvnet(net, outFile)
+function [] = read_weights_matconvnet(inFile, outFile)
 
+net = load(inFile);
 N = length(net.layers);
 weights = {};
 biases  = {};
@@ -16,6 +17,5 @@ for i =1:1:N
 end
 
 save(outFile,'weights','biases','names');
-
 
 end

@@ -474,3 +474,84 @@ def save_weights_for_matconvnet(net, outName, matlabRefFile=None):
 	else:
 		params['refFile'] = ''
 	sio.savemat(outName, params)
+
+##
+# Convert matconvnet network into a caffemodel
+def matconvnet_to_caffemodel(inFile, outFile):
+	'''
+		Relies on a matlab helper function which converts a matconvnet model 
+		into an approrpriate format. 
+	'''
+	#Right now the code is hacked to work with the BVLC reference model definition. 
+	defFile = '/data1/pulkitag/caffe_models/bvlc_reference/caffenet_deploy.prototxt'
+	net     = caffe.Net(defFile, caffe.TEST)
+
+	#Load the weights
+	dat = sio.loadmat(inFile, squeeze_me=True)
+	w     = dat['weights']
+	b     = dat['biases']
+	names = dat['names']
+	
+	#Hack the names
+	names[5] = 'fc6'
+	names[6] = 'fc7'
+	names[7] = 'fc8'
+
+	count = 0
+	for n,weight,bias in zip(names, w, b):
+		if 'conv' in n:
+			weight = weight.transpose((3,2,0,1))
+		elif 'fc' in n:
+			print weight.shape
+			if weight.ndim==4:
+				weight = weight.transpose((3,2,0,1))
+				print weight.shape
+				num,ch,h,w = weight.shape
+				weight = weight.reshape((1,1,num,ch*h*w))
+			else:
+				weight = weight.transpose((1,0))		
+	
+		bias   = bias.reshape((1,1,1,len(bias)))
+		if count == 0:
+			#RGB to BGR flip for the first layer channels
+			weight = weight[:,[2,1,0],:,:]	
+		net.params[n][0].data[...] = weight
+		net.params[n][1].data[...] = bias
+		count+=1		
+	#Save the network
+	print outFile
+	net.save(outFile)
+
+##
+# Test the conversion of matconvnet into caffemodel
+def test_convert():
+	inFile = '/data1/pulkitag/others/tmp.mat'
+	outFile = '/data1/pulkitag/others/tmp.caffemodel'
+	#inFile   = '/data1/pulkitag/others/alex-matconvnet.mat'
+	#outFile  = '/data1/pulkitag/others/alex-matconvnet.caffemodel'
+	matconvnet_to_caffemodel(inFile, outFile)
+
+def vis_convert():
+	defFile = '/data1/pulkitag/caffe_models/bvlc_reference/caffenet_deploy.prototxt'
+	modelFile  = '/data1/pulkitag/others/alex-matconvnet.caffemodel'
+	net = mp.MyNet(defFile, modelFile)
+	net.vis_weights('conv1')
+
+
+def test_convert_features():	
+	
+	defFile = '/data1/pulkitag/caffe_models/bvlc_reference/caffenet_deploy.prototxt'
+	netFile = '/data1/pulkitag/others/tmp.caffemodel'
+	#netFile  = '/data1/pulkitag/others/alex-matconvnet.caffemodel'
+	net = mp.MyNet(defFile, netFile)
+
+	net.set_preprocess(isBlobFormat=True, chSwap=None)	
+	imData = sio.loadmat('/data1/pulkitag/others/ref_imdata.mat',squeeze_me=True)
+	imData = imData['im']
+	imData = imData.transpose((3,2,0,1))
+	imData = imData[:,[2,1,0],:,:]
+	imData = imData[0:10]
+
+	op = net.forward_all(blobs=['fc8','conv1','data','conv2','conv5','fc6','fc7'],**{'data': imData})
+	pdb.set_trace()
+	
