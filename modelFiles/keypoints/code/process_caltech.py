@@ -289,7 +289,6 @@ def get_pretrain_info(preTrainStr):
 		netFile   = os.path.join(snapshotDir, modelName)
 		defFile   = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/caltech101/exp/keynet_full.prototxt'
 
-
 	else:
 		raise Exception('Unrecognized preTrainStr: %s' % preTrainStr)
 	return netFile, defFile
