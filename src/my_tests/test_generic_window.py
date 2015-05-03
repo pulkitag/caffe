@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import pdb
 import caffe
 import os
+import scipy.misc as scm
 
 sFile =  "/data0/pulkitag/kitti/window-files/test_mxDiff-7_pose-sigMotion_nrmlz-zScoreScaleSeperate_imSz256_concat-fc6_nTe-10000.txt"
 rootFolder = "/data0/pulkitag/data_sets/kitti/odometry/dataset/sequences/imSz256/" 
@@ -11,12 +12,17 @@ rootFolder = "/data0/pulkitag/data_sets/kitti/odometry/dataset/sequences/imSz256
 #rootFolder = "/data1/pulkitag/data_sets/pascal_3d/PASCAL3D+_release1.1/Images/"
 #sFile       = '/data1/pulkitag/data_sets/pascal_3d/my/window_file_val.txt'
 
-def get_protofile(isGray=False):
+def get_protofile(isGray=False, isSF=False):
+	protoDir = '/work4/pulkitag-code/pkgs/caffe-v2-2/src/my_tests/'
 	if isGray:
-		protoFile = 'generic_window_gray.prototxt'
+		protoFile = os.path.join(protoDir, 'generic_window_gray.prototxt')
 	else:
-		protoFile   = 'generic_window.prototxt'
+		if isSF:
+			protoFile   = os.path.join(protoDir, 'generic_window_sf.prototxt')
+		else:
+			protoFile   = os.path.join(protoDir, 'generic_window.prototxt')
 	return protoFile
+
 
 def read_window_file(fName=sFile):
 	fid = open(fName,'r')
@@ -76,7 +82,7 @@ def plot_pairs(fig, im1, im2, titleStr=''):
 	plt.title(titleStr)
 	plt.show()
 
-def compare_windows(isGray=False):
+def compare_windows(isGray=False, isSave=False, svIdx=None, svPath=None, isSF=False):
 	figGt = plt.figure()  #Ground-Truth
 	figDt = plt.figure()	#Data
 	plt.ion()
@@ -87,13 +93,14 @@ def compare_windows(isGray=False):
 	N = labelsGt.shape[0]	
 
 	#Setup the network. 
-	protoFile = get_protofile(isGray)
+	protoFile = get_protofile(isGray, isSF=isSF)
 	net       = caffe.Net(protoFile, caffe.TRAIN)
 	imCount = 0
 	cropPrms = {}
 	cropPrms['cropType'] = 'contPad'
 	cropPrms['imSz']     = 227
 	cropPrms['contPad']  = 16
+	svCount = 0
 	for i in range(N):
 		allDat  = net.forward(['data','label'])
 		imData  = allDat['data']
@@ -112,22 +119,33 @@ def compare_windows(isGray=False):
 
 			lb  = lblDat[b].squeeze()
 			lbStr = 'az: %f, el: %f, cl: %f' % (lb[0],lb[1],lb[2])	
-			plot_pairs(figDt, im1, im2, lbStr) 
+		
+			if isSave:
+				if imCount in svIdx:
+					imN1 = svPath % (svCount,1)
+					imN2 = svPath % (svCount,2)
+					scm.imsave(imN1, im1)
+					scm.imsave(imN2, im2)
+					svCount += 1
+					if svCount == len(svIdx):
+						print 'Saved all images: %d' % svCount
+						return
+			else:
+				plot_pairs(figDt, im1, im2, lbStr) 
+				#Plot the gt data
+				imName1 = os.path.join(rootFolder, imNamesGt['im1'][imCount])
+				imName2 = os.path.join(rootFolder, imNamesGt['im2'][imCount])
+				im1   = ou.read_crop_im(imName1, bboxGt['im1'][imCount], **cropPrms)
+				im2   = ou.read_crop_im(imName2, bboxGt['im2'][imCount], **cropPrms)
+				lb    = labelsGt[imCount]
+				lbStr = 'az: %f, el: %f, cl: %f' % (lb[0],lb[1],lb[2])	
+				plot_pairs(figGt, im1, im2, lbStr)
+				print imCount
+				raw_input("Enter")
 
-			#Plot the gt data
-			imName1 = os.path.join(rootFolder, imNamesGt['im1'][imCount])
-			imName2 = os.path.join(rootFolder, imNamesGt['im2'][imCount])
-			im1   = ou.read_crop_im(imName1, bboxGt['im1'][imCount], **cropPrms)
-			im2   = ou.read_crop_im(imName2, bboxGt['im2'][imCount], **cropPrms)
-			lb    = labelsGt[imCount]
-			lbStr = 'az: %f, el: %f, cl: %f' % (lb[0],lb[1],lb[2])	
-			plot_pairs(figGt, im1, im2, lbStr)
 			imCount += 1
 			if imCount==N:
 				imCount = 0
-			print imCount
-			raw_input("Enter")
-
 
 def save_pairs():
 	figGt = plt.figure()  #Ground-Truth

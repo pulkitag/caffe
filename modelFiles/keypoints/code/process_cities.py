@@ -13,6 +13,7 @@ cwd = os.getcwd()
 dirName = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/kitti/codes/'
 os.chdir(dirName)
 import kitti_new as kn
+import kitti_utils as ku
 os.chdir(cwd)
 
 ##
@@ -288,10 +289,12 @@ def make_window_file(prms):
 	gen.close()
 	np.random.set_state(oldState)
 
-def vis_pairs(prms):
+def vis_pairs(prms, isSave=False, svIdx=None, svPath=None):
 	imName1, imName2, euls, trans = read_pairs(prms)
 	N = len(imName1)
-	perm = np.random.permutation(N)	
+	seed      = 3
+	randState = np.random.RandomState(seed)
+	perm = randState.permutation(N)
 	fig = plt.figure()
 	plt.ion()
 	imName1 = [imName1[i] for i in perm]
@@ -299,15 +302,28 @@ def vis_pairs(prms):
 	euls    = [euls[i] for i in perm]
 	trans   = [trans[i] for i in perm]
 	titleStr = 'Trans: ' + '%.3f ' * 3 + 'Rot: ' + '%.3f ' * 3
+	count   = 0
+	numSave = 0
 	for (im1,im2,eu,tr) in zip(imName1, imName2, euls, trans):
 		titleName = titleStr % (tuple(tr) + eu)
 		im1 = scm.imread(im1)
 		im2 = scm.imread(im2)
-		vu.plot_pairs(im1, im2, fig, titleStr=titleName)
-		cmd = raw_input()	
-		if cmd == 'exit':
-			return
-
+		print count
+		if isSave:
+			if count in svIdx:
+				imN1 = svPath % (count,1)
+				imN2 = svPath % (count,2)
+				scm.imsave(imN1,im1)
+				scm.imsave(imN2,im2)
+				numSave += 1
+				if numSave==len(svIdx):
+					return 
+		else:
+			vu.plot_pairs(im1, im2, fig, titleStr=titleName)
+			cmd = raw_input()	
+			if cmd == 'exit':
+				return
+		count += 1
 ##
 def get_caffe_prms(**kwargs):
 	return kn.get_caffe_prms(**kwargs)	
@@ -320,7 +336,10 @@ def get_experiment_object(prms, cPrms):
 	return caffeExp
 
 ##
-def setup_experiment(prms, cPrms):
+def setup_experiment(prms, cPrms, odoTune=False):
+	'''
+		odoTune: If finetuning for odometry is required. 
+	'''
 	#The size of the labels
 	if prms['pose'] == 'euler':
 		rotSz = 3
@@ -337,7 +356,10 @@ def setup_experiment(prms, cPrms):
 		baseStr = baseStr + '_concat_conv'
 	if cPrms['isMySimple']:
 		baseStr = baseStr + '_mysimple'
-	baseFile = os.path.join(baseFilePath, baseFileStr + baseStr + '.prototxt')
+	if odoTune:
+		baseFile = os.path.join(baseFilePath, baseFileStr + baseStr + '_finetune.prototxt')
+	else:
+		baseFile = os.path.join(baseFilePath, baseFileStr + baseStr + '.prototxt')
 	print baseFile
 
 	protoDef = mpu.ProtoDef(baseFile)	 
@@ -364,19 +386,31 @@ def setup_experiment(prms, cPrms):
 		caffeExp.set_layer_property('window_data', ['generic_window_data_param', 'random_crop'],
 			'true', phase='TEST')
 	
+	if odoTune:
+		addStr = '-ft'
+	else:
+		addStr = ''
 
 	#Set the size of the translation and rotation fc layers	
 	for t in range(trnSz):
-		caffeExp.set_layer_property('translation_fc_%d' % (t+1), ['inner_product_param', 'num_output'],
+		caffeExp.set_layer_property(('translation_fc_%d' % (t+1)) + addStr,
+								 ['inner_product_param', 'num_output'],
 								prms['binCount'], phase='TRAIN')
 	for r in range(rotSz):
-		caffeExp.set_layer_property('rotation_fc_%d' % (r+1), ['inner_product_param', 'num_output'],
+		caffeExp.set_layer_property(('rotation_fc_%d' % (r+1)) + addStr, 
+								['inner_product_param', 'num_output'],
 								prms['binCount'], phase='TRAIN')
 
 	#Decide the slice point for the label
 	#The slice point is decided by the translation labels.	
 	caffeExp.set_layer_property('slice_label', ['slice_param', 'slice_point'], trnSz)	
 	return caffeExp
+
+##
+# Fine tune exp
+def setup_experiment_finetune(prms, cPrms, **kwargs):
+	return kn.setup_experiment_finetune(prms, cPrms, **kwargs)
+
 
 ##
 def make_experiment(prms, cPrms, isFine=False, resumeIter=None, 
@@ -407,7 +441,109 @@ def make_experiment(prms, cPrms, isFine=False, resumeIter=None,
 	caffeExp.make(modelFile=modelFile, resumeIter=resumeIter)
 	return caffeExp	
 
+##
+# Finetune a network for predicting the transformations from a pretrained network. 
+def finetune_odometry(netType='alex', addFc=False, addDrop=False, imgntMean=True,
+											concatLayer='conv5', convConcat=True, fine_base_lr=0.001,
+											contextPad=16, deviceId=0):
 
+	prms  = get_prms()
+	cPrms = get_caffe_prms(concatLayer=concatLayer, convConcat=convConcat,
+									 contextPad=contextPad, extraFc=addFc, addDrop=addDrop,
+									 imgntMean=imgntMean, fine_base_lr=0.001, deviceId=deviceId)
+	prms['expName'] = prms['expName'] + 'fine_from_' + netType
+	if netType=='alex':
+		srcModelFile = '/data1/pulkitag/caffe_models/caffe_imagenet_train_iter_310000'
+	elif netType == 'kitti':
+		srcPrms  = ku.get_prms(poseType='sigMotion', maxFrameDiff=7, lossType='classify', imSz=None)
+		srcCPrms = kn.get_caffe_prms(concatLayer='conv5', convConcat=True)
+		srcExp   = kn.setup_experiment(srcPrms, srcCPrms)
+		srcModelFile = srcExp.get_snapshot_name(60000)
+
+	exp = setup_experiment(prms, cPrms, odoTune=True)
+	exp.make(modelFile=srcModelFile)
+	exp.run()
+
+##
 def run_experiment(prms, cPrms, **kwargs):
 	caffeExp = make_experiment(prms, cPrms, **kwargs)
 	caffeExp.run()
+
+##
+def run_test(prms, cPrms, **kwargs):
+	kn.run_test(prms, cPrms, **kwargs)
+
+#
+def run_sun_layerwise_small(deviceId=0, runNum=1, fineNumData=10,
+							  addFc=True, addDrop=True,
+								sourceModelIter=150000, imgntMean=True, concatLayer='fc6',
+								resumeIter=None, fine_base_lr=0.001, runType='run',
+								convConcat=False, 
+								prms=None, srcDefFile=None, srcModelFile=None,
+								isMySimple=False):
+
+	imSz, testImSz, testCrpSz = 227, 256, 227
+	#Set the prms
+	if prms is None:
+		prms      = get_prms()
+
+	acc = {}
+	maxLayers = ['pool1', 'pool2','relu3','relu4','pool5', 'fc6']
+
+	if addFc:
+		lrAbove   = ['fc-extra'] * len(maxLayers)
+	else:
+		lrAbove = ['class_fc'] * len(maxLayers)
+	for mxl, abv in zip(maxLayers, lrAbove):
+		#Get CaffePrms
+		cPrms = get_caffe_prms(concatLayer=concatLayer, sourceModelIter=sourceModelIter,
+						fineMaxIter=None, stepsize=None, fine_base_lr=fine_base_lr,
+						extraFc=addFc, addDrop=addDrop,
+						fineMaxLayer=mxl, lrAbove=abv, 
+						fineRunNum=runNum, fineNumData=fineNumData, 
+						deviceId=deviceId, imgntMean=imgntMean,
+						convConcat=convConcat, imSz=imSz,
+						isMySimple=isMySimple, contextPad=16)
+		if runType =='run':
+			run_experiment(prms, cPrms, isFine=True, resumeIter=resumeIter,
+						 srcDefFile=srcDefFile, srcModelFile=srcModelFile)
+		elif runType == 'test':
+			run_test(prms, cPrms, imH=testImSz, imW=testImSz,
+								cropH=testCrpSz, cropW=testCrpSz,
+								srcDefFile=srcDefFile)
+		elif runType == 'accuracy':
+			acc[mxl] = kn.read_accuracy(prms,cPrms)
+
+	if runType=='accuracy':
+		return acc, maxLayers	
+
+
+def run_sun_layerwise_small_multiple(deviceId=0, runType='run', isMySimple=False):
+	runNum      = [1, 4, 5]
+	fineNumData = [5, 20]
+	concatLayer = ['conv5']
+	convConcat  = [True]
+	sourceModelIter = 60000
+	acc = {}
+	for r in runNum:
+		for num in fineNumData:
+			for cl,cc in zip(concatLayer, convConcat):
+				if runType=='accuracy':
+					key = '%s_num%d_run%d' % (cl, num, r)
+					try:
+						acc[key],_ = run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False,
+                          addDrop=True, sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
+                          deviceId=deviceId, runType='accuracy', isMySimple=isMySimple)
+					except IOError:
+						pass
+				else:
+					run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
+								sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
+								deviceId=deviceId, isMySimple=isMySimple)
+					run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
+								sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
+								runType='test', deviceId=deviceId, isMySimple=isMySimple)
+	return acc
+
+
+

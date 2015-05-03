@@ -473,7 +473,8 @@ class MyNet:
 		return copy.deepcopy(ops) 
 
 
-	def vis_weights(self, blobName, blobNum=0, ax=None, titleName=None, isFc=False): 
+	def vis_weights(self, blobName, blobNum=0, ax=None, titleName=None, isFc=False,
+						 h=None, w=None): 
 		assert blobName in self.net.blobs, 'BlobName not found'
 		dat  = copy.deepcopy(self.net.params[blobName][blobNum].data)
 		if isFc:
@@ -487,7 +488,10 @@ class MyNet:
 			print dat.shape
 			vis_square(dat, ax=ax, titleName=titleName)	
 		else:
-			vis_square(dat.transpose(0,2,3,1), ax=ax, titleName=titleName)	
+			if h is None and w is None:
+				vis_square(dat.transpose(0,2,3,1), ax=ax, titleName=titleName)	
+			else:
+				vis_rect(dat.transpose(0,2,3,1), h, w, ax=ax, titleName=titleName)	
 
 
 class MySolver:
@@ -509,7 +513,8 @@ class MySolver:
 		index = self.layerNames_.index(layerName)
 		return self.net_.layers[index]
 
-
+##
+# Visualize filters
 def vis_square(data, padsize=1, padval=0, ax=None, titleName=None):
 	'''
 		data is numFitlers * height * width or numFilters * height * width * channels
@@ -536,6 +541,32 @@ def vis_square(data, padsize=1, padval=0, ax=None, titleName=None):
 	else:
 		plt.imshow(data)
 		plt.title(titleName)
+
+#Make rectangular filters
+def vis_rect(data, h, w, padsize=1, padval=0, ax=None, titleName=None):
+	'''
+		data is numFitlers * height * width or numFilters * height * width * channels
+	'''
+	data -= data.min()
+	data /= data.max()
+
+	padding = ((0, h * w - data.shape[0]), (0, padsize), (0, padsize)) + ((0, 0),) * (data.ndim - 3)
+	data = np.pad(data, padding, mode='constant', constant_values=(padval, padval))
+
+	# tile the filters into an image
+	data = data.reshape((h, w) + data.shape[1:]).transpose((0, 2, 1, 3) + tuple(range(4, data.ndim + 1)))
+	data = data.reshape((h * data.shape[1], w * data.shape[3]) + data.shape[4:])
+
+	if titleName is None:
+		titleName = ''
+	data = data.squeeze()
+	if ax is not None:
+		ax.imshow(data)
+		ax.set_title(titleName)
+	else:
+		plt.imshow(data)
+		plt.title(titleName)
+
 
 
 def setup_prototypical_network(netName='vgg', layerName='pool4'):

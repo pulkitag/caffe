@@ -402,7 +402,8 @@ def setup_experiment_finetune(prms, cPrms, returnTgCPrms=False, srcDefFile=None)
 			batchSz=cPrms['batchSz'],
 			concatLayer = cPrms['concatLayer'],
 			isMySimple  = cPrms['isMySimple'],
-			imSz = cPrms['imSz'])
+			imSz = cPrms['imSz'],
+			contextPad = cPrms['contextPad'])
 	tgPrms  = copy.deepcopy(prms)
 	tgPrms['expName'] = 'fine-FROM-%s' % prms['expName']
 	tgExp   = get_experiment_object(tgPrms, tgCPrms)

@@ -312,7 +312,7 @@ def get_layerdef_for_proto(layerType, layerName, bottom, numOutput=1, **kwargs):
 		layerDef[ipKey]['bias_filler']['type'] = '"constant"'
 		layerDef[ipKey]['bias_filler']['value']  = str(0.)
 
-	elif layerType == 'ReLU':
+	elif layerType in ['ReLU', 'Sigmoid']:
 		if kwargs.has_key('top'):
 			topName = kwargs['top']
 		else:
@@ -941,6 +941,7 @@ class ProtoDef():
 				if count == len(lNames):
 					doFlag = False
 
+		#pdb.set_trace()
 		if not foundFlag:
 			raise Exception('Layer Name %s is not learnable or not found'
 					% layerName)
@@ -1332,6 +1333,7 @@ class CaffeExperiment:
 											runFileTrain = runFile % 'train', runFileTest = runFile % 'test', 
 											deviceId = deviceId, repNum = repNum, isTest=isTest)
 		self.isTest_  = isTest
+		self.net_     = None
 
 	##
 	#initalize from solver file/SolverDef and netdef file/ProtoDef
@@ -1391,6 +1393,19 @@ class CaffeExperiment:
 	## Set init std of all layers that are gaussian
 	def set_std_gaussian_weight_init(self, stdVal):
 		self.expFile_.netDef_.set_std_all(stdVal)
+
+	##Setup the network
+	def setup_net(self, **kwargs):
+		if self.net_ is None:
+			self.make(**kwargs)
+			snapName  = self.get_snapshot_name(kwargs['modelIter'])
+			self.net_ = mp.MyNet(self.files_['netdef'], snapName)
+
+	##Get weights from a layer.
+	def get_weights(self, layerName, **kwargs):
+		self.setup_net(**kwargs)
+		return self.net_.net.params[layerName][0].data 
+
 
 	# Make the experiment. 
 	def make(self, modelFile=None, writeTest=False, testIter=None, modelIter=None,

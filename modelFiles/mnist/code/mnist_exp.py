@@ -88,7 +88,7 @@ def nw2name(nw, getLayerNames=False):
 			lName = lName + '-sz%d-st%d' % (lParam['kernel_size'], 
 										lParam['stride'])
 			nwName.append(lName) 
-		elif lType in ['Concat', 'Dropout']:
+		elif lType in ['Concat', 'Dropout', 'Sigmoid']:
 			nwName.append(lName)
 		else:
 			pass
@@ -114,8 +114,16 @@ def nw2name_small(nw, isLatexName=False):
 			latName = 'C%d' % (lParam['num_output'])
 			nwName.append(lName)
 			latexName.append(latName)
+		elif lType in ['InnerProduct']:
+			lName = 'F%d' % lParam['num_output']
+			nwName.append(lName)
+			latexName.append(latName)
 		elif lType in ['Pooling']:
 			lName = lName + 'P'
+			nwName.append(lName) 
+			latexName.append(lName)
+		elif lType in ['Sigmoid']:
+			lName = lName + 'S'
 			nwName.append(lName) 
 			latexName.append(lName)
 		elif lType in ['Concat']:
@@ -327,7 +335,6 @@ def setup_autoencoder_finetune(prms, cPrms, deviceId=0):
 	for lName,l in botDef.layers_['TRAIN'].iteritems():
 		caffeExp.add_layer(l['name'][1:-1], l, 'TRAIN')
 	caffeExp.set_layer_property('extra_fc', ['bottom'], '"%s"' % lastTop)
-	
 	#If learning in some layers needs to be set to 0
 	if cPrms['lrAbove'] is not None:
 		caffeExp.finetune_above(cPrms['lrAboveName'])	
@@ -337,13 +344,21 @@ def setup_autoencoder_finetune(prms, cPrms, deviceId=0):
 ##
 # Finds if a snapshot from an experiment already exists.
 # If yes, then I don't need to re-run the experiment :)
-def find_experiment(prms, cPrms, modelIter):
+def find_experiment(prms, cPrms, modelIter, returnFile=False):
 	caffeExp = setup_experiment(prms, cPrms)
 	snapName1 = caffeExp.get_snapshot_name(numIter=modelIter)
 	#Sometimes models are stored with modelIter + 1
 	snapName2 = caffeExp.get_snapshot_name(numIter=modelIter+1)
-	if os.path.exists(snapName1) or os.path.exists(snapName2):
-		return True
+	if os.path.exists(snapName1):
+		if returnFile:
+			return True, snapName1
+		else:
+			return True
+ 	elif os.path.exists(snapName2):
+		if returnFile:
+			return True, snapName2
+		else:
+			return True
 	else:
 		return False
 
@@ -371,22 +386,37 @@ def run_pretrain_autoencoder(deviceId=0):
 	caffeExp.run()
 
 
-def run_finetune_autoencoder(deviceId=0, lrAbove='extra_fc'):
+def run_finetune_autoencoder(deviceId=0, lrAbove='extra_fc', runType='test'):
 	srcPrms    = mr.get_prms(maxRot=10, maxDeltaRot=30, lossType='classify', numTrainEx=1e+07)
 	srcPrms['expName'] = 'autoencoder'
 	srcCPrms   = get_caffe_prms([], isSiamese=False)
 	srcExp     = setup_experiment_autoencoder(srcPrms, srcCPrms)
 	modelFile  = srcExp.get_snapshot_name(65001)
 
-	for mxl in [1,2,3]:
-		for ex in [100, 300, 1000, 10000]:
+	acc = {}
+	for ex in [100, 300, 1000, 10000]:
+		exKey = 'n%d' % ex
+		acc[exKey] = np.zeros((3,1))
+		for mxl in [1,2,3]:
 			tgtPrms    = mr.get_prms(transform='normal', numTrainEx=ex)
 			tgtPrms['expName'] = 'finetune_autoencoder_' + tgtPrms['expName']
 			tgtCPrms   = get_caffe_prms([], isSiamese=False, lrAbove=lrAbove,
 										maxLayer=mxl, max_iter=5000, stepsize=5000)
 			tgtExp = setup_autoencoder_finetune(tgtPrms, tgtCPrms, deviceId=deviceId)
 			tgtExp.make(modelFile=modelFile)
-			tgtExp.run()
+			if runType=='run':
+				tgtExp.run()
+			elif runType == 'test':
+				run_test(tgtPrms, tgtCPrms, isAuto=True)
+			elif runType == 'accuracy':
+				try:
+					acc[exKey][mxl-1] = read_accuracy(tgtPrms, tgtCPrms)
+				except IOError:
+					pass
+			else:
+				raise Exception('Unrecognized run type %s' % runType)
+	return acc	
+
 
 ##
 # Run InnerProduct networks
@@ -1053,8 +1083,11 @@ def find_adversary_scratch(runType='run', max_iter=10000, stepsize=10000):
 		return acc, numEx	
 	
 ## 
-def run_test(prms, cPrms, cropH=28, cropW=28, imH=28, imW=28):
-	caffeExp  = setup_experiment(prms, cPrms)
+def run_test(prms, cPrms, cropH=28, cropW=28, imH=28, imW=28, isAuto=False):
+	if isAuto:
+		caffeExp  = setup_autoencoder_finetune(prms, cPrms)
+	else:
+		caffeExp  = setup_experiment(prms, cPrms)
 	caffeTest = mpu.CaffeTest.from_caffe_exp_lmdb(caffeExp, prms['paths']['lmdb']['test']['im'])
 	
 	delLayers = []
@@ -1063,7 +1096,7 @@ def run_test(prms, cPrms, cropH=28, cropW=28, imH=28, imW=28):
 
 	#The last inner product layer is the classification layer.
 	opNames   = caffeExp.get_layernames_from_type('InnerProduct')
-	numOp     = caffeExp.get_layer_property(opNames[-1], 'num_output')
+	numOp     = int(caffeExp.get_layer_property(opNames[-1], 'num_output'))
 	assert numOp==10, 'Last FC layer has wrong number of outputs, %d instead of 10' % numOp
 	#Find which model to use
 	modelFile = caffeExp.get_snapshot_name(numIter=cPrms['max_iter'])
