@@ -13,6 +13,13 @@ void RandomNoiseLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
   CHECK_NE(top[0], bottom[0]) << this->type() << " Layer does not "
     "allow in-place computation.";
 }
+template <typename Dtype>
+void RandomNoiseLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top) {
+	NeuronLayer<Dtype>::Reshape(bottom, top);
+	noise_.Reshape(1,1,1,2);	
+}
+
 
 template <typename Dtype>
 void RandomNoiseLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
@@ -55,5 +62,6 @@ STUB_GPU(RandomNoiseLayer);
 #endif
 
 INSTANTIATE_CLASS(RandomNoiseLayer);
+REGISTER_LAYER_CLASS(RandomNoise);
 
 }  // namespace caffe

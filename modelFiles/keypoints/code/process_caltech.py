@@ -269,14 +269,19 @@ def get_pretrain_info(preTrainStr):
 		defFile = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/caltech101/exp/keynet_full.prototxt' 
 
 	#Kitti
-	elif preTrainStr in ['kitti_conv5', 'kitti_fc6', 'kitti_conv4']:
+	elif preTrainStr in ['kitti_conv5', 'kitti_fc6', 'kitti_conv4',
+					'kitti_sanity']:
 		snapshotDir = '/data1/pulkitag/projRotate/snapshots/kitti/los-cls-ind-bn22_mxDiff-7_pose-sigMotion_nrmlz-zScoreScaleSeperate_randcrp_concat-fc6_nTr-1000000/'
 		if preTrainStr == 'kitti_fc6':
 			modelName = 'caffenet_con-fc6_scratch_pad24_imS227_iter_150000.caffemodel'
 			defFile = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/kitti/base_files/kitti_finetune_fc6_deploy.prototxt'
-		elif preTrainStr == 'kitti_conv5':
-			modelName = 'caffenet_con-conv5_scratch_pad24_imS227_con-conv_iter_60000.caffemodel' 
+		elif preTrainStr in ['kitti_conv5', 'kitti_sanity']:
 			defFile = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/kitti/base_files/kitti_finetune_fc6_deploy.prototxt'
+			if preTrainStr == 'kitti_conv5':
+				modelName = 'caffenet_con-conv5_scratch_pad24_imS227_con-conv_iter_60000.caffemodel' 
+			else:
+				modelName = 'caffenet_con-conv5_scratch_pad24_imS227_con-conv_run2_iter_60000.caffemodel' 
+			
 		netFile = os.path.join(snapshotDir, modelName)
 
 	#Uniform Rotation/PASCAL Classification n/w	

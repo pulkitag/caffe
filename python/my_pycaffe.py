@@ -536,10 +536,10 @@ def vis_square(data, padsize=1, padval=0, ax=None, titleName=None):
 
 	data = data.squeeze()
 	if ax is not None:
-		ax.imshow(data)
+		ax.imshow(data, interpolation='none')
 		ax.set_title(titleName)
 	else:
-		plt.imshow(data)
+		plt.imshow(data, interpolation='none')
 		plt.title(titleName)
 
 #Make rectangular filters
@@ -561,11 +561,11 @@ def vis_rect(data, h, w, padsize=1, padval=0, ax=None, titleName=None):
 		titleName = ''
 	data = data.squeeze()
 	if ax is not None:
-		ax.imshow(data)
+		ax.imshow(data, interpolation='none')
 		ax.set_title(titleName)
 	else:
 		plt.imshow(data)
-		plt.title(titleName)
+		plt.title(titleName, interpolation='none')
 
 
 

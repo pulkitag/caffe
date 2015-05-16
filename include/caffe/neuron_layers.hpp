@@ -358,6 +358,8 @@ class RandomNoiseLayer : public NeuronLayer<Dtype> {
   virtual inline const char* type() const { return "RandomNoise"; }
   virtual void LayerSetUp(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top);
+  virtual void Reshape(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top);
  protected:
   /**
    * @param bottom input Blob vector (length 1)

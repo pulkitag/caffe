@@ -197,6 +197,7 @@ class LayerNameGenerator:
 		self.nc_ = {} #Naming convention 
 		self.nc_['InnerProduct']  = 'fc'
 		self.nc_['ReLU']          = 'relu'
+		self.nc_['Sigmoid']       = 'sigmoid'
 		self.nc_['Concat']        = 'concat'
 		self.nc_['EuclideanLoss'] = 'loss' 
 		self.nc_['SoftmaxWithLoss'] = 'loss' 
@@ -209,9 +210,9 @@ class LayerNameGenerator:
 	def next_name(self, layerType):
 		assert layerType in self.nc_.keys(), 'layerType %s not found' % layerType
 		prefix = self.nc_[layerType]
-		if layerType in ['ReLU','Pooling'] and self.lastType_ in ['InnerProduct', 'Convolution']:
+		if layerType in ['ReLU','Pooling','Sigmoid'] and self.lastType_ in ['InnerProduct', 'Convolution']:
 			pass
-		elif layerType in ['Pooling'] and self.lastType_ in ['ReLU']:
+		elif layerType in ['Pooling'] and self.lastType_ in ['ReLU', 'Sigmoid']:
 			pass
 		elif layerType == 'Concat':
 			#Don't increment the counter for concatenation layer. 

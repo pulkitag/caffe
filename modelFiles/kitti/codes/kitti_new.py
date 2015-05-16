@@ -679,7 +679,8 @@ def run_sun_layerwise_small(deviceId=0, runNum=1, fineNumData=10,
 	if isMySimple:
 		maxLayers = ['relu1', 'relu2','relu3','relu4']
 	else:
-		maxLayers = ['pool1', 'pool2','relu3','relu4','pool5', 'fc6']
+		#maxLayers = ['pool1', 'pool2','relu3','relu4','pool5', 'fc6']
+		maxLayers = ['pool5']		
 
 	if addFc:
 		lrAbove   = ['fc-extra'] * len(maxLayers)
@@ -753,14 +754,14 @@ def run_sun_layerwise_small_multiple(deviceId=0, runType='run', isMySimple=False
 def run_sun_from_pascal(deviceId=0, preTrainStr='pascal_cls', runType='run'):
 	#runNum      = [1,2,3, 4, 5]
 	#fineNumData = [5,10,20,50]
-	runNum      = [1, 4, 5]
-	fineNumData = [5, 20]
+	runNum      = [1]
+	fineNumData = [20]
 	concatLayer     = ['fc6']
 	convConcat      = [False]
 	modelFile, defFile = pc.get_pretrain_info(preTrainStr)
 
 	#naming info
-	if preTrainStr in ['alex', 'imagenet20K']:
+	if preTrainStr in ['alex', 'imagenet20K', 'kitti_sanity']:
 		imSz   = 256
 		cropSz = 227
 		pImSz  = None

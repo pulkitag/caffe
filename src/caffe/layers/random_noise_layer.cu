@@ -7,23 +7,6 @@
 namespace caffe {
 
 template <typename Dtype>
-__global__ void RandomNoiseForward(const int n, const Dtype* in,
-		 Dtype* out, Dtype mu, Dtype sigma, bool adaptive_sigma,
-		 Dtype adaptive_factor) {
-  CUDA_KERNEL_LOOP(index, n) {
-		if (adaptive_sigma){
-			sigma = adaptive_factor * in[index];
-			mu    = 0; 
-		}
-		Dtype noise = 0;
-		//caffe::caffe_rng_gaussian(1, mu, sigma, &noise);
-  	//LOG(INFO) << "FORWARD PASS in RANDOM NOISE LAYER IS NOT IMPLEMENTED CORRECTLY";
-		//THIS NEEDS TO BE DONE PROPERLY 
-	 out[index] = in[index] + noise;
-  }
-}
-
-template <typename Dtype>
 void RandomNoiseLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
     const vector<Blob<Dtype>*>& top) {
   const Dtype* bottom_data = bottom[0]->gpu_data();
@@ -33,11 +16,31 @@ void RandomNoiseLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
   Dtype sigma = this->layer_param_.random_noise_param().sigma();
 	bool adaptive_sigma   = this->layer_param_.random_noise_param().adaptive_sigma();
 	Dtype adaptive_factor = this->layer_param_.random_noise_param().adaptive_factor();
-  // NOLINT_NEXT_LINE(whitespace/operators)
-  RandomNoiseForward<Dtype><<<CAFFE_GET_BLOCKS(count), CAFFE_CUDA_NUM_THREADS>>>(
-      count, bottom_data, top_data, mu, sigma, adaptive_sigma,
-			adaptive_factor);
-  CUDA_POST_KERNEL_CHECK;
+	Dtype* noise = noise_.mutable_gpu_data();
+	int nCount = noise_.count();
+	LOG(INFO) << "nCount " << nCount << 
+							 " tCount" << top[0]->count() << 
+							 " count" << count;
+	//Add the noise to the inputs. 
+	caffe_gpu_set(count, Dtype(0.0), top_data);  
+  for (int i = 0; i < count; ++i) {
+		//LOG(INFO) << i;
+		if (adaptive_sigma){
+			sigma = adaptive_factor * bottom_data[i];
+			mu    = 0; 
+		}
+		//When generating random numbers using cuda - it should be a multiple of 2
+		//Otherwise error. 
+		caffe_gpu_rng_gaussian(2, mu, sigma, noise);
+		caffe_gpu_add(1, noise, bottom_data + i, top_data + i); 
+		//LOG(INFO) << "Step Done";
+  }
+ 	//LOG(INFO) << "done";
+	// NOLINT_NEXT_LINE(whitespace/operators)
+  //RandomNoiseForward<Dtype><<<CAFFE_GET_BLOCKS(count), CAFFE_CUDA_NUM_THREADS>>>(
+  //    count, bottom_data, top_data, mu, sigma, adaptive_sigma,
+	//		adaptive_factor);
+  // CUDA_POST_KERNEL_CHECK;
   // << " count: " << count << " bottom_data: "
   //     << (unsigned long)bottom_data
   //     << " top_data: " << (unsigned long)top_data
