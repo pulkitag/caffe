@@ -1,0 +1,39 @@
+layer {
+	name: "square_box_data"
+	top:  "data"
+	top:  "label"
+	type: "SquareBoxData"
+	square_box_data_param {
+		source: "/data0/pulkitag/projMpi/window_files/val.txt"
+		root_folder: "/work5/pulkitag/mpii/images/" 
+		crop_size : 227
+		batch_size: 5
+	}
+	include {
+		phase: TRAIN
+	}
+}
+
+layer {
+	name: "square_box_data"
+	top:  "data"
+	top:  "label"
+	type: "SquareBoxData"
+	square_box_data_param {
+		source: "/data0/pulkitag/projMpi/window_files/val.txt"
+		root_folder: "/work5/pulkitag/mpii/images/" 
+		crop_size : 227
+		batch_size: 5
+	}
+	include {
+		phase: TEST
+	}
+}
+
+layer {
+	name: "silence"
+	type: "Silence"
+	bottom: "data"
+}
+
+

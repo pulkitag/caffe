@@ -443,12 +443,17 @@ class MyNet:
 
 		return ims
 
-	
-	def forward_all(self, blobs=None, noInputs=False, **kwargs):
+
+	##
+	#Core function for running forward and backward passes. 
+	def _run_forward_backward_all(self, runType, blobs=None, noInputs=False, diffs=None, **kwargs):
 		'''
-			blobs: The blobs to extract in the forward_all pass
+			runType : 'forward_all'
+								'forward_backward_all'
+			blobs   : The blobs to extract in the forward_all pass
 			noInputs: Set to true when there are no input blobs. 
-			kwargs: A dictionary where each input blob has associated data
+			diffs   : the blobs for which the gradient needs to be extracted. 
+			kwargs  : A dictionary where each input blob has associated data
 		'''
 		if not noInputs:
 			if kwargs:
@@ -460,17 +465,62 @@ class MyNet:
 				for in_, data in kwargs.iteritems():
 					N             = data.shape[0] #The first dimension must be equivalent of batchSz
 					procData[in_] = self.preprocess_batch(data, ipName=in_)
-
-				ops = self.net.forward_all(blobs=blobs, **procData)
+				
+				if runType == 'forward_all':
+					ops = self.net.forward_all(blobs=blobs, **procData)
+				elif runType == 'forward':
+					ops = self.net.forward(blobs=blobs, **procData)
+				elif runType == 'backward':
+					ops = self.net.backward(diff=diff, **procData)
+				elif runType == 'forward_backward_all':
+					ops, opDiff = self.net_forward_backward_all(blobs=blobs, diffs=diffs, **procData)
+					#Resize diffs in the right size
+					for opd_, data in ops.iteritems():
+						opDiff[opd_] = data[0:N]
+				else:
+					raise Exception('runType %s not recognized' % runType)
 				#Resize data in the right size
 				for op_, data in ops.iteritems():
 					ops[op_] = data[0:N]
 			else:
 				raise Exception('No Input data specified.')
 		else:
-			ops = self.net.forward(blobs=blobs)
+			if runType in ['forward_all', 'forward']:
+				ops = self.net.forward(blobs=blobs)
+			elif runType in ['backward']:	
+				ops = self.net.backward(diffs=diffs)
+			elif runType in ['forward_backward_all']:
+				ops, opDiff = self.net.forward_backward_all(blobs=blobs, diffs=diffs)
+			else:
+				raise Exception('runType %s not recognized' % runType)
 
-		return copy.deepcopy(ops) 
+		if runType in ['forward', 'forward_all', 'backward']:
+			return copy.deepcopy(ops) 
+		else:
+			return copy.deepcopy(ops), copy.deepcopy(opDiff)
+	
+
+	def forward_all(self, blobs=None, noInputs=False, **kwargs):
+		'''
+			See _run_forward_backward_all
+		'''
+		return self._run_forward_backward_all(runType='forward_all', blobs=blobs,
+											 noInputs=noInputs, **kwargs)
+	
+		
+	def forward_backward_all(self, blobs=None, noInputs=False, **kwargs):
+		return self._run_forward_backward_all(runType='forward_backward_all', blobs=blobs,
+											 noInputs=noInputs, **kwargs)
+
+	
+	def forward(self, blobs=None, noInputs=False, **kwargs):
+		return self._run_forward_backward_all(runType='forward', blobs=blobs,
+											 noInputs=noInputs, **kwargs)
+
+
+	def backward(self, diffs=None, noInputs=False, **kwargs):
+		return self._run_forward_backward_all(runType='backward', diffs=diffs,
+											 noInputs=noInputs, **kwargs)
 
 
 	def vis_weights(self, blobName, blobNum=0, ax=None, titleName=None, isFc=False,

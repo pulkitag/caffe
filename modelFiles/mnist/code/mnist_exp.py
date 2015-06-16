@@ -90,6 +90,12 @@ def nw2name(nw, getLayerNames=False):
 			nwName.append(lName) 
 		elif lType in ['Concat', 'Dropout', 'Sigmoid']:
 			nwName.append(lName)
+		elif lType in ['RandomNoise']:
+			if lParam.has_key('adaptive_sigma'):
+				lName = lName + '-asig%.2f' % lParam['adaptive_factor']
+			else:
+				lName = lName + '-sig%.2f' % lParam['sigma']
+			nwName.append(lName)
 		else:
 			pass
 	nwName = ''.join(s + '_' for s in nwName)

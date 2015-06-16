@@ -205,6 +205,7 @@ class LayerNameGenerator:
 		self.nc_['Convolution']   = 'conv'
 		self.nc_['Accuracy']      = 'accuracy'
 		self.nc_['Pooling']       = 'pool'
+		self.nc_['RandomNoise']   = 'rn'
 		self.lastType_ = None
 
 	def next_name(self, layerType):
@@ -371,7 +372,6 @@ def get_layerdef_for_proto(layerType, layerName, bottom, numOutput=1, **kwargs):
 		layerDef['concat_param']['concat_dim'] = kwargs['concat_dim']
 		layerDef['top']   = '"%s"' % layerName
 
-		
 	elif layerType in ['DeployData']:
 		layerDef['input'] = '"%s"' % layerName
 		ipDims = kwargs['ipDims'] #(batch_size, channels, h, w)
@@ -380,6 +380,14 @@ def get_layerdef_for_proto(layerType, layerName, bottom, numOutput=1, **kwargs):
 		layerDef[key] = ipDims[1]
 		layerDef[make_key('input_dim', layerDef.keys())] = ipDims[2]		
 		layerDef[make_key('input_dim', layerDef.keys())] = ipDims[3]		
+
+	elif layerType in ['RandomNoise']:
+		layerDef['top']    = '"%s"' % layerName
+		if kwargs.has_key('adaptive_sigma'):
+			layerDef['random_noise_param'] = co.OrderedDict()
+			layerDef['random_noise_param']['adaptive_sigma']  = kwargs['adaptive_sigma']
+			layerDef['random_noise_param']['adaptive_factor'] = kwargs['adaptive_factor'] 		
+
 	else:
 		raise Exception('%s layer type not found' % layerType)
 	return layerDef

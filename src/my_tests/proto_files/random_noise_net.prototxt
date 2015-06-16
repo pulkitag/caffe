@@ -1,0 +1,82 @@
+name: "RandomNet"
+layer {
+ name: "data"
+ type: "Data"
+ top: "data"
+ top: "label"
+ data_param {
+    source: "/data0/pulkitag/mnist/lmdb-store/train/images_normaltr1e+04_run0-lmdb"
+    batch_size: 128
+    backend: LMDB
+ }
+ transform_param {
+    scale: 0.00390625
+ }
+ include {
+    phase: TRAIN
+ }
+}
+layer {
+ name: "data"
+ type: "Data"
+ top: "data"
+ top: "label"
+ data_param {
+    source: "/data0/pulkitag/mnist/lmdb-store/test/images_normalte1e+04_run0-lmdb"
+    batch_size: 100
+    backend: LMDB
+ }
+ transform_param {
+    scale: 0.00390625
+ }
+ include {
+    phase: TEST
+ }
+}
+layer {
+	name: "conv1"
+	type: "Convolution"
+	bottom: "data"
+	top: "conv1"
+	convolution_param {
+		num_output: 20
+		kernel_size: 5
+		stride: 3
+		weight_filler {
+			type: "gaussian"
+			std: 0.005
+		}
+	}	
+}
+layer {
+	name: "rn1"
+	type: "RandomNoise"
+	bottom: "conv1"
+	random_noise_param{
+		adaptive_sigma: true
+		adaptive_factor: 1
+	}
+	top: "rn1"
+}
+layer {
+	name: "output"
+	type: "InnerProduct"
+	bottom: "rn1"
+	top: "output"
+	inner_product_param {
+		num_output: 10
+		weight_filler {
+			type: "gaussian"
+			std: 0.005
+		}
+	}
+}
+layer {
+ name: "loss"
+ type: "SoftmaxWithLoss"
+ bottom: "output"
+ bottom: "label"
+ top: "loss"
+ loss_weight: 1
+}
+

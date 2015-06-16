@@ -9,6 +9,7 @@ import numpy as np
 
 from ._caffe import Net, SGDSolver
 import caffe.io
+import pdb
 
 # We directly update methods from Net here (rather than using composition or
 # inheritance) so that nets created by caffe (e.g., by SGDSolver) will
@@ -171,46 +172,47 @@ def _Net_forward_all(self, blobs=None, **kwargs):
 
 
 def _Net_forward_backward_all(self, blobs=None, diffs=None, **kwargs):
-    """
-    Run net forward + backward in batches.
+	"""
+	Run net forward + backward in batches.
 
-    Take
-    blobs: list of blobs to extract as in forward()
-    diffs: list of diffs to extract as in backward()
-    kwargs: Keys are input (for forward) and output (for backward) blob names
-            and values are ndarrays. Refer to forward() and backward().
-            Prefilled variants are called for lack of input or output blobs.
+	Take
+	blobs: list of blobs to extract as in forward()
+	diffs: list of diffs to extract as in backward()
+	kwargs: Keys are input (for forward) and output (for backward) blob names
+					and values are ndarrays. Refer to forward() and backward().
+					Prefilled variants are called for lack of input or output blobs.
 
-    Give
-    all_blobs: {blob name: blob ndarray} dict.
-    all_diffs: {blob name: diff ndarray} dict.
-    """
-    # Batch blobs and diffs.
-    all_outs = {out: [] for out in set(self.outputs + (blobs or []))}
-    all_diffs = {diff: [] for diff in set(self.inputs + (diffs or []))}
-    forward_batches = self._batch({in_: kwargs[in_]
-                                   for in_ in self.inputs if in_ in kwargs})
-    backward_batches = self._batch({out: kwargs[out]
-                                    for out in self.outputs if out in kwargs})
-    # Collect outputs from batches (and heed lack of forward/backward batches).
-    for fb, bb in izip_longest(forward_batches, backward_batches, fillvalue={}):
-        batch_blobs = self.forward(blobs=blobs, **fb)
-        batch_diffs = self.backward(diffs=diffs, **bb)
-        for out, out_blobs in batch_blobs.iteritems():
-            all_outs[out].extend(out_blobs)
-        for diff, out_diffs in batch_diffs.iteritems():
-            all_diffs[diff].extend(out_diffs)
-    # Package in ndarray.
-    for out, diff in zip(all_outs, all_diffs):
-        all_outs[out] = np.asarray(all_outs[out])
-        all_diffs[diff] = np.asarray(all_diffs[diff])
-    # Discard padding at the end and package in ndarray.
-    pad = len(all_outs.itervalues().next()) - len(kwargs.itervalues().next())
-    if pad:
-        for out, diff in zip(all_outs, all_diffs):
-            all_outs[out] = all_outs[out][:-pad]
-            all_diffs[diff] = all_diffs[diff][:-pad]
-    return all_outs, all_diffs
+	Give
+	all_blobs: {blob name: blob ndarray} dict.
+	all_diffs: {blob name: diff ndarray} dict.
+	"""
+	# Batch blobs and diffs.
+	all_outs = {out: [] for out in set(self.outputs + (blobs or []))}
+	all_diffs = {diff: [] for diff in set(self.inputs + (diffs or []))}
+	forward_batches = self._batch({in_: kwargs[in_]
+																 for in_ in self.inputs if in_ in kwargs})
+	backward_batches = self._batch({out: kwargs[out]
+																	for out in self.outputs if out in kwargs})
+	# Collect outputs from batches (and heed lack of forward/backward batches).
+	for fb, bb in izip_longest(forward_batches, backward_batches, fillvalue={}):
+			batch_blobs = self.forward(blobs=blobs, **fb)
+			batch_diffs = self.backward(diffs=diffs, **bb)
+			for out, out_blobs in batch_blobs.iteritems():
+					all_outs[out].extend(out_blobs)
+			for diff, out_diffs in batch_diffs.iteritems():
+					all_diffs[diff].extend(out_diffs)
+	# Package in ndarray.
+	for out, diff in zip(all_outs, all_diffs):
+			all_outs[out] = np.asarray(all_outs[out])
+			all_diffs[diff] = np.asarray(all_diffs[diff])
+	pdb.set_trace()
+	# Discard padding at the end and package in ndarray.
+	pad = len(all_outs.itervalues().next()) - len(kwargs.itervalues().next())
+	if pad:
+			for out, diff in zip(all_outs, all_diffs):
+					all_outs[out] = all_outs[out][:-pad]
+					all_diffs[diff] = all_diffs[diff][:-pad]
+	return all_outs, all_diffs
 
 
 def _Net_set_input_arrays(self, data, labels):

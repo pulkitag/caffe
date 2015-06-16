@@ -422,6 +422,121 @@ class GenericWindowWriter:
 	def close(self):
 		self.fid_.close()
 
+
+##
+# For writing sqbox window file layers. 
+class SqBoxWindowWriter:
+	def __init__(self, fileName, numEx):
+		'''
+			fileName   : the file to write to.
+			numEx      : the number of examples
+			The format
+			# ExNum
+			IMG_NAME IMG_SZ
+			NUM_OBJ
+			OBJ1_X OBJ1_Y BBOX1_X BBOX1_Y BBOX1_SZ
+			..
+			.
+			# ExNum
+			..
+			.
+			- x1, y1 for object position
+			- xc, yc for the center of desired bbox
+			- sqSz the length of the desired bbox
+			express sqSz as the ratio of the largest imgSz / sqSz 
+		'''
+		self.file_  = fileName
+		self.num_   = numEx
+		self.count_ = 0 #The number of examples written. 
+
+		dirName = os.path.dirname(fileName)
+		if not os.path.exists(dirName):
+			os.makedirs(dirName)
+
+		self.fid_ = open(self.file_, 'w')	
+		self.fid_.write('# SqBoxWindowDataLayer\n')
+		self.fid_.write('%d\n' % self.num_) #Num Examples. 
+
+	##
+	# Private Helper function for writing the images for the WindowFile
+	def write_image_line_(self, imgName, imgSz, numObj):
+		'''
+			imgSz : channels * height * width
+			numObj: number of objects in the image
+		'''
+		ch, h, w = imgSz
+		self.fid_.write('%d\n' % numObj)
+		self.fid_.write('%s %d %d %d\n' % (imgName, 
+							ch, h, w))
+
+	##
+	def write(self, *args):
+		self.fid_.write('# %d\n' % self.count_)
+		#Write the images
+		imName, imSz, objPos, bboxPos, bboxSz = args
+		numObj = len(objPos)
+		self.write_image_line_(imName, imSz, numObj)
+		for i in range(numObj):
+			xObjPos, yObjPos = objPos[i]
+			xBbxPos, yBbxPos = bboxPos[i]
+			self.fid_.write('%d %d %d %d %d\n' % (xObjPos, yObjPos, xBbxPos, yBbxPos, bboxSz[i]))		
+		self.count_ += 1
+		if self.count_ == self.num_:
+			self.close()	
+
+	##
+	def close(self):
+		self.fid_.close()
+
+##
+# For reading generic window reader. 
+class SqBoxWindowReader:
+	def __init__(self, fileName):
+		self.fid_ = open(fileName,'r')
+		line      = self.fid_.readline()
+		assert(line.split()[1] == 'SqBoxWindowDataLayer')
+		self.num_   = int(self.fid_.readline())
+		self.count_ = 0
+
+	def read_next(self):
+		if self.count_ == self.num_:
+			print "All lines already read"
+			return None, None
+		count = int(self.fid_.readline().split()[1])
+		assert count == self.count_
+		self.count_ += 1
+		#The number of boxes in the image
+		numBox = int(self.fid_.readline())
+		imName.append(self.fid_.readline())
+		#Read all the boxes
+		objPos, bbxPos, bbxSz = [], [], []
+		for n in range(numBox):
+			lbls = self.fid_.readline().split()
+			lbls = [int(l) for l in lbls]
+			ox, oy, bx, by, bs = lbls
+			objPos.append([ox, oy])
+			bbxPos.append([bx, by])
+			bbxSz.append(bs)
+		return imName, objPos, bbxPos, bbxSz
+				
+	def get_all_labels(self):
+		readFlag = True
+		lbls     = []
+		while readFlag:
+			_, lbl = self.read_next()
+			if lbl is None:
+				readFlag = False
+				continue
+			else:
+				lbls.append(lbl)
+		lbls = np.concatenate(lbls)
+		return lbls
+		
+	def close(self):
+		self.fid_.close()
+
+
+
 	
 def save_lmdb_images(ims, dbFileName, labels=None, asFloat=False):
 	'''

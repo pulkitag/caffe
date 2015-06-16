@@ -17,7 +17,8 @@ template <typename Dtype>
 void RandomNoiseLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) {
 	NeuronLayer<Dtype>::Reshape(bottom, top);
-	noise_.Reshape(1,1,1,2);	
+	noise_.Reshape(bottom[0]->num(), bottom[0]->channels(), 
+								 bottom[0]->height(), bottom[0]->width());	
 }
 
 
@@ -33,13 +34,23 @@ void RandomNoiseLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   Dtype sigma = this->layer_param_.random_noise_param().sigma();
 	bool adaptive_sigma   = this->layer_param_.random_noise_param().adaptive_sigma();
 	Dtype adaptive_factor = this->layer_param_.random_noise_param().adaptive_factor();
-	Dtype noise = 0;	
+	Dtype noise  = 0;
+	Dtype posBot = 0;
+	Dtype avgVal = caffe_cpu_asum(count, bottom_data) / count;
 	//Add the noise to the inputs.  
   for (int i = 0; i < count; ++i) {
 		if (adaptive_sigma){
-			sigma = adaptive_factor * bottom_data[i];
+			if (bottom_data[i] < 0)
+				posBot = -bottom_data[i];
+			else
+				posBot = bottom_data[i];
+			sigma = adaptive_factor * posBot;
+			if (sigma==0){
+				sigma = adaptive_factor * avgVal;
+			}
 			mu    = 0; 
 		}
+		//LOG(INFO) << mu << ", " << sigma;
 		caffe::caffe_rng_gaussian(1, mu, sigma, &noise); 
     top_data[i] = bottom_data[i] + noise;
   }
