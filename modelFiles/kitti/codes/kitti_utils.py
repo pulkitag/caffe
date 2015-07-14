@@ -7,6 +7,7 @@ import scipy.misc as scm
 import rot_utils as ru
 import pdb
 import os
+import copy
 
 def get_paths(isNewExpDir=False):
 	dirName = '/data1/pulkitag/data_sets/kitti/'
@@ -45,7 +46,7 @@ def get_prms(poseType='euler', nrmlzType='zScoreScaleSeperate',
 						 imSz=256, concatLayer='fc6', maxFrameDiff=1,
 						 numTrainSamples=1e+06, numTestSamples=1e+04, isOld=False,
 						 lossType='classify', classificationType='independent',
-						 randomCrop=True, isNewExpDir=False):
+						 randomCrop=True, isNewExpDir=False, trnSeq=[]):
 	'''
 		poseType   : How pose is being used.
 		nrmlzType  : The way the pose data has been normalized.
@@ -54,6 +55,7 @@ def get_prms(poseType='euler', nrmlzType='zScoreScaleSeperate',
 		maxFrameDiff: The maximum range within which frames are considered. 
 		isOld       : Backward compatibility
 		randomCrop  : Whether to randomly crop the images or not. 	
+		trnSeq      : Manually specif train-sequences by hand
 	'''
 	if randomCrop:
 		assert imSz is None, "With Random crop imSz should be set to None"
@@ -68,6 +70,7 @@ def get_prms(poseType='euler', nrmlzType='zScoreScaleSeperate',
 	prms['lossType']     = lossType
 	prms['classType']    = classificationType
 	prms['randomCrop']   = randomCrop
+	prms['trnSeq']       = trnSeq
 
 	prms['numSamples'] = {}
 	prms['numSamples']['train'] = numTrainSamples
@@ -81,6 +84,10 @@ def get_prms(poseType='euler', nrmlzType='zScoreScaleSeperate',
 		prms['labelSz']  = 3
 		prms['numTrans'] = 2
 		prms['numRot']   = 1
+	elif poseType == 'slowness':
+		prms['labelSz']  = 1
+		prms['numTrans'] = 0
+		prms['numRot']   = 0
 	else:
 		raise Exception('PoseType %s not recognized' % poseType)
 
@@ -108,9 +115,17 @@ def get_prms(poseType='euler', nrmlzType='zScoreScaleSeperate',
 				raise Exception('classification type not recognized')
 		elif lossType=='regress':
 			pass
+		elif lossType == 'contrastive':
+			#contrastive loss - used for example with the slowness case. 
+			assert prms['pose'] == 'slowness', 'contrastive loss only works for slowness'
+			pass
 		else:
 			raise Exception('Loss Type not recognized')
 		
+		if not trnSeq==[]:
+			trnStr = ''.join('%d-' % ts for ts in trnSeq)
+			expStr.append('trnSeq-' + trnStr[:-1])
+	
 		expStr = ''.join(s + '_' for s in expStr)
 		expStr = expStr[:-1]
 		if len(expStr) > 0:
@@ -123,6 +138,8 @@ def get_prms(poseType='euler', nrmlzType='zScoreScaleSeperate',
 			assert randomCrop, 'imSz should be none only with random cropping'
 			imStr = 'randcrp'
 			paths['imRootDir'] = os.path.join(paths['imRootDir'], 'asJpg/')
+
+			
 
 		expName   = 'mxDiff-%d_pose-%s_nrmlz-%s_%s_concat-%s_nTr-%d'\
 								 % (maxFrameDiff, poseType, nrmlzType, imStr, concatLayer, numTrainSamples) 
@@ -173,7 +190,8 @@ def get_weight_proto_file(numIter=20000, imSz=256, poseType='euler', nrmlzType='
 
 '''
 ##
-# This for old code. 
+
+#This for old code. 
 def get_lmdb_names(expName, setName='train'):
 	paths   = get_paths()
 	if not setName in ['train', 'test']:
@@ -200,9 +218,15 @@ def get_num_images():
 	return allNum
 
 
-def get_train_test_seqnum(setName):
+def get_train_test_seqnum(prms, setName):
 	if setName=='train':
-		seq = [0,1,2,3,4,5,7,8,10]
+		defSeq = [0,1,2,3,4,5,7,8,10]
+		if prms['trnSeq'] == []:
+			seq = defSeq
+		else:
+			for s in prms['trnSeq']:
+				assert s in defSeq, 'Sequence %d is not a train sequence' % s
+			seq = copy.deepcopy(prms['trnSeq'])
 	elif setName=='test':
 		seq  = [6, 9]
 	else:
@@ -302,38 +326,6 @@ def plot_pose(prms, seqNum='all'):
 	plt.ion()
 	plt.show()
 	 
-'''
-def read_images(seqNum=0, cam='left', imSz=256):
-	##
-	#Read the required images
-	##
-	if cam=='left':
-		imStr = 'leftImFile'
-	elif cam=='right':
-		imStr = 'rightImFile'
-	else:
-		raise Exception('cam type not recognized')
-
-	paths    = get_paths()
-	fileName = paths[imStr] % (seqNum, 0)
-	dirName  = os.path.dirname(fileName)	
-	N        = len(os.listdir(dirName))
-	
-	ims = np.zeros((N, imSz, imSz, 3)).astype(np.uint8)
-	for i in range(N):
-		fileName = paths[imStr] % (seqNum, i)
-		im       = plt.imread(fileName)
-		im       = scm.imresize(im, (256, 256))
-		ims[i]   = im
-	return ims	
-'''
-
-'''
-def get_image_pose(prms, seqNum=0, cam='left', imSz=256):
-	poses  = read_poses(prms, seqNum)
-	ims    = read_images(seqNum, cam, imSz)
-	return ims, poses
-'''
 
 def get_pose_stats(prms):
 	'''
@@ -343,99 +335,25 @@ def get_pose_stats(prms):
 
 	allPose = np.zeros((100 * 11, lbLength))
 	count = 0
-	for seqNum in range(0,11):
-		poses = read_poses(prms, seqNum)
-		N     = poses.shape[0]
-		perm  = np.random.permutation(N-1)
-		perm  = perm[0:100]
-		for i in range(100):
-			p1, p2 =	poses[perm[i]], poses[perm[i]+1]
-			allPose[count]  = get_pose_label(p1, p2, prms['pose']).reshape(lbLength,)
-			count += 1
-			
-	muPose = np.mean(allPose,axis=0).reshape((lbLength,1,1))
-	sdPose = np.std(allPose, axis=0).reshape((lbLength,1,1))
-
-	maxSd       = np.max(sdPose)
-	scaleFactor = sdPose / maxSd 
-	return muPose, sdPose, scaleFactor
-
-'''
-def make_consequent_lmdb(prms, setName='train'):
-	#	Take left and right images from all the sequences, get the poses and make the lmdb.
-	#	Testing sequences are 6 and 9
-	poseType = prms['poseType']
-	imSz     = prms['imSz']
-	nrmlz    = prms['nrmlz']
-
-	expName = 'consequent_pose-%s_nrmlz-%s_imSz%d' % (poseType, nrmlz, imSz) 
-	imF, lbF = get_lmdb_names(expName, setName)
-	db       = mpio.DoubleDbSaver(imF, lbF)
-	seqCount = get_num_images()
-	seqNum   = get_train_test_seqnum(setName)
-	seqCount = [seqCount[s] for s in seqNum]
-	totalN   = 2 * sum(seqCount) - 2 * len(seqCount)	#2 times for left and right images
-	perm     = np.random.permutation(totalN)
-
-	if poseType == 'euler':
-		poseLength = 6
+	if prms['pose'] == 'slowness':
+		return None, None, None
 	else:
-		raise Exception('Pose Type Not Recognized')	
+		for seqNum in range(0,11):
+			poses = read_poses(prms, seqNum)
+			N     = poses.shape[0]
+			perm  = np.random.permutation(N-1)
+			perm  = perm[0:100]
+			for i in range(100):
+				p1, p2 =	poses[perm[i]], poses[perm[i]+1]
+				allPose[count]  = get_pose_label(p1, p2, prms['pose']).reshape(lbLength,)
+				count += 1
+				
+		muPose = np.mean(allPose,axis=0).reshape((lbLength,1,1))
+		sdPose = np.std(allPose, axis=0).reshape((lbLength,1,1))
+		maxSd       = np.max(sdPose)
+		scaleFactor = sdPose / maxSd 
+		return muPose, sdPose, scaleFactor
 
-	if nrmlz=='zScore':
-		muPose, sdPose,_ = get_pose_stats(prms)
-	elif nrmlz in ['zScoreScale']:
-		muPose, sdPose, scale = get_pose_stats(prms)
-	elif nrmlz in ['zScoreScaleSeperate']:
-		muPose, sdPose, scale = get_pose_stats(prms)
-		transMax = np.max(scale[0:3])
-		rotMax   = np.max(scale[3:])
-		transScale = scale[0:3] / transMax
-		rotScale   = scale[3:]  / rotMax
-		scale      = np.concatenate((transScale, rotScale), axis=0)
-	else:
-		raise Exception('Nrmlz Type Not Recognized')
-
-	count    = 0
-	for seq in seqNum:
-		print seq
-		for cam in ['left', 'right']:
-			ims, poses    = get_image_pose(seq, cam=cam, imSz=imSz)
-			N, nr, nc, ch = ims.shape
-			imBatch = np.zeros((N-1, 2*ch, nr, nc)) 
-			lbBatch = np.zeros((N-1, poseLength, 1, 1))
-			for i in range(0, N-1):
-				imBatch[i,0:ch,:,:] = ims[i].transpose((2,0,1))
-				imBatch[i,ch:,:,:]  = ims[i+1].transpose((2,0,1))
-				pose1, pose2        = poses[i], poses[i+1]
-				lbBatch[i] = get_pose_label(pose1, pose2, poseType)	
-	
-			if nrmlz == 'zScore':	
-				lbBatch = lbBatch - muPose
-				lbBatch = lbBatch / sdPose	
-			elif nrmlz == 'zScoreScale':
-	#				This is good because if a variable doesnot 
-	#				really changes, then there is going to 
-	#				negligible change in image because of that. 
-	#				So its not a good idea to just re-scale to
-	#			  the same scale on which other more important 
-	#				factors are changing. So first make everything 
-	#				sd = 1 and then scale accordingly. 
-				lbBatch = lbBatch - muPose
-				lbBatch = lbBatch / sdPose	
-				lbBatch = lbBatch * scale
-			elif nrmlz == 'zScoreScaleSeperate':
-	#				Same as zScorScale but scale the rotation and translations
-	#				seperately. 
-				lbBatch = lbBatch - muPose
-				lbBatch = lbBatch / sdPose	
-				lbBatch = lbBatch * scale
-			else:
-				raise Exception('Nrmlz Type Not Recognized')
-			db.add_batch((imBatch, lbBatch), svIdx=(perm[count:count+N-1],perm[count:count+N-1]),
-					 imAsFloat=(False, True))		
-			count = count + N-1
-'''
 
 def get_pose_label(pose1, pose2, poseType):
 	'''
@@ -536,3 +454,116 @@ def plot_triplets(data, fig=None, colors=['r','g','b'], labels=None, linewidth=2
 			plt.plot(range(N), data[:,c], colors[c], linewidth=linewidth, label=labels[c])
 		plt.legend(fontsize='large')
 	return fig
+
+
+'''
+def read_images(seqNum=0, cam='left', imSz=256):
+	##
+	#Read the required images
+	##
+	if cam=='left':
+		imStr = 'leftImFile'
+	elif cam=='right':
+		imStr = 'rightImFile'
+	else:
+		raise Exception('cam type not recognized')
+
+	paths    = get_paths()
+	fileName = paths[imStr] % (seqNum, 0)
+	dirName  = os.path.dirname(fileName)	
+	N        = len(os.listdir(dirName))
+	
+	ims = np.zeros((N, imSz, imSz, 3)).astype(np.uint8)
+	for i in range(N):
+		fileName = paths[imStr] % (seqNum, i)
+		im       = plt.imread(fileName)
+		im       = scm.imresize(im, (256, 256))
+		ims[i]   = im
+	return ims	
+'''
+
+'''
+def get_image_pose(prms, seqNum=0, cam='left', imSz=256):
+	poses  = read_poses(prms, seqNum)
+	ims    = read_images(seqNum, cam, imSz)
+	return ims, poses
+'''
+
+'''
+def make_consequent_lmdb(prms, setName='train'):
+	#	Take left and right images from all the sequences, get the poses and make the lmdb.
+	#	Testing sequences are 6 and 9
+	poseType = prms['poseType']
+	imSz     = prms['imSz']
+	nrmlz    = prms['nrmlz']
+
+	expName = 'consequent_pose-%s_nrmlz-%s_imSz%d' % (poseType, nrmlz, imSz) 
+	imF, lbF = get_lmdb_names(expName, setName)
+	db       = mpio.DoubleDbSaver(imF, lbF)
+	seqCount = get_num_images()
+	seqNum   = get_train_test_seqnum(prms, setName)
+	seqCount = [seqCount[s] for s in seqNum]
+	totalN   = 2 * sum(seqCount) - 2 * len(seqCount)	#2 times for left and right images
+	perm     = np.random.permutation(totalN)
+
+	if poseType == 'euler':
+		poseLength = 6
+	else:
+		raise Exception('Pose Type Not Recognized')	
+
+	if nrmlz=='zScore':
+		muPose, sdPose,_ = get_pose_stats(prms)
+	elif nrmlz in ['zScoreScale']:
+		muPose, sdPose, scale = get_pose_stats(prms)
+	elif nrmlz in ['zScoreScaleSeperate']:
+		muPose, sdPose, scale = get_pose_stats(prms)
+		transMax = np.max(scale[0:3])
+		rotMax   = np.max(scale[3:])
+		transScale = scale[0:3] / transMax
+		rotScale   = scale[3:]  / rotMax
+		scale      = np.concatenate((transScale, rotScale), axis=0)
+	else:
+		raise Exception('Nrmlz Type Not Recognized')
+
+	count    = 0
+	for seq in seqNum:
+		print seq
+		for cam in ['left', 'right']:
+			ims, poses    = get_image_pose(seq, cam=cam, imSz=imSz)
+			N, nr, nc, ch = ims.shape
+			imBatch = np.zeros((N-1, 2*ch, nr, nc)) 
+			lbBatch = np.zeros((N-1, poseLength, 1, 1))
+			for i in range(0, N-1):
+				imBatch[i,0:ch,:,:] = ims[i].transpose((2,0,1))
+				imBatch[i,ch:,:,:]  = ims[i+1].transpose((2,0,1))
+				pose1, pose2        = poses[i], poses[i+1]
+				lbBatch[i] = get_pose_label(pose1, pose2, poseType)	
+	
+			if nrmlz == 'zScore':	
+				lbBatch = lbBatch - muPose
+				lbBatch = lbBatch / sdPose	
+			elif nrmlz == 'zScoreScale':
+	#				This is good because if a variable doesnot 
+	#				really changes, then there is going to 
+	#				negligible change in image because of that. 
+	#				So its not a good idea to just re-scale to
+	#			  the same scale on which other more important 
+	#				factors are changing. So first make everything 
+	#				sd = 1 and then scale accordingly. 
+				lbBatch = lbBatch - muPose
+				lbBatch = lbBatch / sdPose	
+				lbBatch = lbBatch * scale
+			elif nrmlz == 'zScoreScaleSeperate':
+	#				Same as zScorScale but scale the rotation and translations
+	#				seperately. 
+				lbBatch = lbBatch - muPose
+				lbBatch = lbBatch / sdPose	
+				lbBatch = lbBatch * scale
+			else:
+				raise Exception('Nrmlz Type Not Recognized')
+			db.add_batch((imBatch, lbBatch), svIdx=(perm[count:count+N-1],perm[count:count+N-1]),
+					 imAsFloat=(False, True))		
+			count = count + N-1
+'''
+
+

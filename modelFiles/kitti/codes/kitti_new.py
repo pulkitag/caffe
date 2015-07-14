@@ -155,19 +155,40 @@ def get_camera_imnames_and_pose(prms, seqNum, camStr, numSamples, randState=None
 	psLbl    = []
 	for i in range(numSamples):
 		idx1 = sampleIdx[i]
-		diff = int(round(randState.rand() * (mxFrmDiff)))
 		sgnR = randState.rand()
-		if sgnR > 0.5:
-			diff = -diff
-		idx2 = max(0, min(idx1 + diff, N-1))	
+		if prms['pose'] == 'slowness':
+			#Uniformly sample frames that are close and far-away
+			randFlip = randState.rand()
+			if randFlip > 0.5:
+				#Need to push the features of these frames close to each other
+				psLbl.append([1])
+				diff = int(round(randState.rand() * (mxFrmDiff)))
+				if sgnR > 0.5:
+					diff = -diff
+				idx2 = max(0, min(idx1 + diff, N-1))	
+			else:
+				psLbl.append([0])
+				if sgnR > 0.5:
+					#Select a frame which is atleast mxFrmDiff in the future
+					diff = int(round(randState.rand() *(N - (idx1 + mxFrmDiff))))
+					idx2 = min(N-1, idx1 + mxFrmDiff + diff)
+				else:
+					#Select a frame which is atleast mxFrmDiff in the past
+					diff = int(round(randState.rand() * (idx1 - mxFrmDiff)))
+					idx2 = max(0, idx1 - mxFrmDiff - diff)
+		else:
+			diff = int(round(randState.rand() * (mxFrmDiff)))
+			if sgnR > 0.5:
+				diff = -diff
+			idx2 = max(0, min(idx1 + diff, N-1))	
+			#Get the labels
+			ps1, ps2 = poses[idx1], poses[idx2]
+			psLbl.append(get_pose_label_normalized(prms, ps1, ps2))	
 		#Add the images
 		im1.append(imNames[idx1])
 		im2.append(imNames[idx2])
 		imSz1.append(imSz[idx1])
 		imSz2.append(imSz[idx2])
-		#Get the labels
-		ps1, ps2 = poses[idx1], poses[idx2]
-		psLbl.append(get_pose_label_normalized(prms, ps1, ps2))	
 	return im1, im2, imSz1, imSz2, psLbl
 
 ##
@@ -191,16 +212,17 @@ def get_imnames_and_pose(prms, seqNum, numSamples, randState=None):
 
 ##
 # Make the window file.
-def make_window_file(prms):
+def make_window_file(prms, setNames=['test', 'train']):
 	oldState  =  np.random.get_state()
 	seqCounts =  ku.get_num_images()
-	for sNum, setName in enumerate(['test', 'train']):
-		seqNums     = ku.get_train_test_seqnum(setName)
+	for sNum, setName in enumerate(setNames):
+		seqNums     = ku.get_train_test_seqnum(prms, setName)
 		setSeqCount = np.array([seqCounts[se] for se in seqNums]).astype(np.float32)
 		sampleProb  = setSeqCount / sum(setSeqCount) 
 
 		im1, im2, ps = [], [], []
 		imSz1, imSz2 = [], []
+		totalSamples = 0
 		for ii,seq in enumerate(seqNums):
 			randSeed   = (101 * sNum) + 2 * seq + 1
 			numSamples = int(round(prms['numSamples'][setName] * sampleProb[ii]))
@@ -212,9 +234,10 @@ def make_window_file(prms):
 			imSz1 = imSz1 + imSzT1
 			imSz2 = imSz2 + imSzT2 
 			ps    = ps  + psT
-	
+			totalSamples = totalSamples + len(imT1)
+		
 		#Permute all the sequences togther
-		perm         = randState.permutation(int(prms['numSamples'][setName]))
+		perm         = randState.permutation(totalSamples)
 		im1          = [im1[p] for p in perm]
 		im2          = [im2[p] for p in perm]
 		imSz1        = [imSz1[p] for p in perm]
@@ -257,7 +280,7 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 									contextPad=24, imSz=227, convConcat=False,
 									imgntMean=False, 
 									isFineTune=False, sourceModelIter=150000,
-								  lrAbove=None,
+								  lrAbove=None, contrastiveMargin=None,
 									fine_base_lr=0.001, fineRunNum=1, fineNumData=1, 
 									fineMaxLayer=None, fineDataSet='sun',
 									fineMaxIter = 40000, addDrop=False, extraFc=False,
@@ -282,7 +305,8 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 	caffePrms['convConcat']  = convConcat
 	caffePrms['batchSz']     = batchSz
 	caffePrms['isMySimple']  = isMySimple
-	caffePrms['fine']        = {}
+	caffePrms['contrastiveMargin'] = contrastiveMargin
+	caffePrms['fine']              = {}
 	caffePrms['fine']['modelIter'] = sourceModelIter
 	caffePrms['fine']['lrAbove']   = lrAbove
 	caffePrms['fine']['base_lr']   = fine_base_lr
@@ -310,6 +334,9 @@ def get_caffe_prms(concatLayer='fc6', concatDrop=False, isScratch=True, deviceId
 	
 	if isMySimple:
 		expStr.append('mysimple')
+
+	if contrastiveMargin is not None:
+		expStr.append('ct-margin%d' % contrastiveMargin)
 
 	if isFineTune:
 		if fineDataSet=='sun':
@@ -495,6 +522,8 @@ def setup_experiment(prms, cPrms):
 	elif prms['pose'] == 'sigMotion':
 		rotSz = 1
 		trnSz = 2
+	elif prms['pose'] == 'slowness':
+		pass
 	else:
 		raise Exception('Unrecognized %s pose type' % prms['pose'])
 
@@ -506,6 +535,8 @@ def setup_experiment(prms, cPrms):
 			baseStr = baseStr + '_concat_conv'
 		if cPrms['isMySimple']:
 			baseStr = baseStr + '_mysimple'
+	elif prms['lossType'] in ['contrastive']:
+		baseStr =  '_%s' % prms['lossType']
 	else:
 		baseStr = ''
 	baseFile = os.path.join(baseFilePath, baseFileStr + baseStr + '.prototxt')
@@ -543,16 +574,23 @@ def setup_experiment(prms, cPrms):
 		for r in range(rotSz):
 			caffeExp.set_layer_property('rotation_fc_%d' % (r+1), ['inner_product_param', 'num_output'],
 									prms['binCount'], phase='TRAIN')
+	elif prms['lossType'] == 'contrastive':
+		caffeExp.set_layer_property('loss', ['contrastive_loss_param', 'margin'],
+								cPrms['contrastiveMargin'])
 	else:
+		#Regression loss basically
 		#Set the size of the rotation and translation layers
 		caffeExp.set_layer_property('translation_fc', ['inner_product_param', 'num_output'],
 								trnSz, phase='TRAIN')
 		caffeExp.set_layer_property('rotation_fc', ['inner_product_param', 'num_output'],
 								rotSz, phase='TRAIN')
 
-	#Decide the slice point for the label
-	#The slice point is decided by the translation labels.	
-	caffeExp.set_layer_property('slice_label', ['slice_param', 'slice_point'], trnSz)	
+	if prms['lossType'] in ['contrastive']:
+		pass
+	else:
+		#Decide the slice point for the label
+		#The slice point is decided by the translation labels.	
+		caffeExp.set_layer_property('slice_label', ['slice_param', 'slice_point'], trnSz)	
 	return caffeExp
 
 ##
@@ -663,7 +701,7 @@ def run_sun_layerwise_small(deviceId=0, runNum=1, fineNumData=10,
 								resumeIter=None, fine_base_lr=0.001, runType='run',
 								convConcat=False, 
 								prms=None, srcDefFile=None, srcModelFile=None,
-								isMySimple=False):
+								isMySimple=False, contrastiveMargin=None):
 
 	#Set the prms
 	if prms is None:
@@ -680,7 +718,8 @@ def run_sun_layerwise_small(deviceId=0, runNum=1, fineNumData=10,
 		maxLayers = ['relu1', 'relu2','relu3','relu4']
 	else:
 		#maxLayers = ['pool1', 'pool2','relu3','relu4','pool5', 'fc6']
-		maxLayers = ['pool5']		
+		maxLayers = ['pool2','relu3','relu4', 'pool5']
+		#maxLayers = ['pool5']		
 
 	if addFc:
 		lrAbove   = ['fc-extra'] * len(maxLayers)
@@ -695,7 +734,7 @@ def run_sun_layerwise_small(deviceId=0, runNum=1, fineNumData=10,
 						fineRunNum=runNum, fineNumData=fineNumData, 
 						deviceId=deviceId, imgntMean=imgntMean,
 						convConcat=convConcat, imSz=imSz,
-						isMySimple=isMySimple)
+						isMySimple=isMySimple, contrastiveMargin=contrastiveMargin)
 		if runType =='run':
 			isExist = find_experiment(prms, cPrms, srcDefFile=srcDefFile);
 			if isExist:
@@ -717,36 +756,46 @@ def run_sun_layerwise_small(deviceId=0, runNum=1, fineNumData=10,
 ##
 #
 def run_sun_layerwise_small_multiple(deviceId=0, runType='run', isMySimple=False,
-																		 scratch=False):
+																		 scratch=False, prms=None):
+	'''
+		prms: If None then default prms are used
+	'''
 	runNum      = [5]
-	fineNumData = [5,10,20,50]
+	#fineNumData = [5,10,20,50]
+	fineNumData = [5,20]
 	if scratch:
 		concatLayer = ['fc6']
 		convConcat  = [False]
 		sourceModelIter = None
 	else:
-		concatLayer     = ['fc6', 'conv5']
-		convConcat  = [False, True]
+		#concatLayer     = ['fc6', 'conv5']
+		#convConcat  = [False, True]
+		concatLayer = ['conv5']
+		convConcat  = [True]
+		contrastiveMargin = [1]
 		sourceModelIter = 60000
 	acc = {}
 	for r in runNum:
 		for num in fineNumData:
-			for cl,cc in zip(concatLayer, convConcat):
+			for cl,cc, cmg in zip(concatLayer, convConcat, contrastiveMargin):
 				if runType=='accuracy':
 					key = '%s_num%d_run%d' % (cl, num, r)
 					try:
 						acc[key],_ = run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False,
                           addDrop=True, sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
-                          deviceId=deviceId, runType='accuracy', isMySimple=isMySimple)
+                          deviceId=deviceId, runType='accuracy', isMySimple=isMySimple,
+													prms=prms, contrastiveMargin=cmg)
 					except IOError:
 						pass
 				else:
 					run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
 								sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
-								deviceId=deviceId, isMySimple=isMySimple)
+								deviceId=deviceId, isMySimple=isMySimple,
+							  prms=prms, contrastiveMargin=cmg)
 					run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
 								sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
-								runType='test', deviceId=deviceId, isMySimple=isMySimple)
+								runType='test', deviceId=deviceId, isMySimple=isMySimple,
+							  prms=prms, contrastiveMargin=cmg)
 	return acc
 
 ##
@@ -755,13 +804,13 @@ def run_sun_from_pascal(deviceId=0, preTrainStr='pascal_cls', runType='run'):
 	#runNum      = [1,2,3, 4, 5]
 	#fineNumData = [5,10,20,50]
 	runNum      = [1]
-	fineNumData = [20]
+	fineNumData = [5, 20]
 	concatLayer     = ['fc6']
 	convConcat      = [False]
 	modelFile, defFile = pc.get_pretrain_info(preTrainStr)
 
 	#naming info
-	if preTrainStr in ['alex', 'imagenet20K', 'kitti_sanity']:
+	if preTrainStr in ['alex', 'imagenet20K', 'imagenet10K', 'imagenet5K', 'kitti_sanity']:
 		imSz   = 256
 		cropSz = 227
 		pImSz  = None
@@ -785,6 +834,7 @@ def run_sun_from_pascal(deviceId=0, preTrainStr='pascal_cls', runType='run'):
 													deviceId=deviceId, prms=prms,
 													srcDefFile=defFile, srcModelFile=modelFile, runType='accuracy')
 					except IOError:
+						print ('%s not found' % key)
 						pass	
 				else:
 					run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
@@ -814,8 +864,6 @@ def run_sun_finetune(deviceId=1, runNum=2, addFc=True, addDrop=True,
 						deviceId=deviceId, imgntMean=imgntMean)
 	run_experiment(prms, cPrms, True, resumeIter)
 							
-
-
 ##
 # Run Sun from scratch
 def run_sun_scratch(deviceId=1, runNum=1, addDrop=True, addFc=True,
@@ -829,15 +877,38 @@ def run_sun_scratch(deviceId=1, runNum=1, addDrop=True, addFc=True,
 	run_experiment(prms, cPrms, True)
 
 
-def save_for_matconvnet():
-	modelIter = 150000
-	prms      = ku.get_prms(poseType='sigMotion', maxFrameDiff=7,
-						 imSz=None, isNewExpDir=True)
-	cPrms    = get_caffe_prms(concatLayer='fc6')
+##
+# Save from matconvnet - models for running alexnet with reduced #of examples
+def matconvnet_to_caffe():
+	outDir    = '/data1/pulkitag/others/'
+	inName    = os.path.join(outDir, 'imagenet%s.mat')
+	outName   = os.path.join(outDir, 'imagenet%s.caffemodel')
+	strs      = ['5K', '10K']
+	for s in strs:
+		inFile  = inName % s
+		outFile = outName % s
+		mpio.matconvnet_to_caffemodel(inFile, outFile)
+	
+##
+#
+def save_for_matconvnet(modelIter=60000, isSlowness=False, concatLayer='fc6'):
+	modelIter = modelIter
+	outDir    = '/data1/pulkitag/others/joao/'
+	if not isSlowness:
+		prms     = ku.get_prms(poseType='sigMotion', maxFrameDiff=7,
+							 imSz=None, isNewExpDir=True)
+		cPrms    = get_caffe_prms(concatLayer=concatLayer)
+		outName  = 'kitti-%d.mat' % modelIter
+	else:
+		prms     = ku.get_prms(poseType='slowness', maxFrameDiff=7,
+							 imSz=None, lossType='contrastive', nrmlzType='none')
+		cPrms    = get_caffe_prms(concatLayer=concatLayer, contrastiveMargin=1)
+		outName  = 'kitti_slowness_concat%s_ctMrgn%d-%d.mat' % (concatLayer, 
+									1, modelIter)
 	exp      = setup_experiment(prms, cPrms)
 	snapFile = exp.get_snapshot_name(modelIter)
 	defFile  = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/kitti/base_files/kitti_finetune_fc6_deploy_input.prototxt'
 	print snapFile
 	net      = mp.MyNet(defFile, snapFile)
-	outName  = os.path.join('/data1/pulkitag/others/joao/','kitti-%d.mat' % modelIter)
+	outName  = os.path.join(outDir, outName)
 	mpio.save_weights_for_matconvnet(net, outName) 

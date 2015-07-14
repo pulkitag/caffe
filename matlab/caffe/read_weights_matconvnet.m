@@ -1,6 +1,9 @@
 function [] = read_weights_matconvnet(inFile, outFile)
 
 net = load(inFile);
+if isfield(net, 'net')
+	net = net.net;
+end
 N = length(net.layers);
 weights = {};
 biases  = {};

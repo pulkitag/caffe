@@ -18,7 +18,8 @@ import pickle
 
 BASE_DIR = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/mnist/base_files/'
 
-def make_def_proto(nw, isSiamese=True, baseFileStr='split_im.prototxt'):
+def make_def_proto(nw, isSiamese=True, 
+					baseFileStr='split_im.prototxt', getStreamTopNames=False):
 	'''
 		If is siamese then wait for the Concat layers - and make all layers until then siamese.
 	'''
@@ -64,7 +65,15 @@ def make_def_proto(nw, isSiamese=True, baseFileStr='split_im.prototxt'):
 	for l in mainStream:
 		protoDef.add_layer(l['name'][1:-1], l)	
 
-	return protoDef
+	if getStreamTopNames:
+		if isSiamese:
+			top1Name = stream1[-1]['name'][1:-1]
+			top2Name = stream2[-1]['name'][1:-1]
+		else:
+			top1Name, top2Name = None, None
+		return protoDef, top1Name, top2Name
+	else:
+		return protoDef
 
 ##
 # Generates a string to represent the n/w name
@@ -152,7 +161,8 @@ def get_caffe_prms(nw, isSiamese=True, batchSize=128, isTest=False,
 						isFineTune=False, fineExp=None, fineModelIter=None,
 						max_iter=40000, stepsize=10000, snapshot=5000, gamma=0.5, base_lr=0.01,
 						test_iter=100, test_interval=500, lr_policy='"step"',
-						lrAbove=None, debug_info='false', maxLayer=None, numTrainSamples=None):
+						lrAbove=None, debug_info='false', maxLayer=None, numTrainSamples=None,
+						contrastiveMargin=None, newNaming=False):
 	'''
 		isFineTune: If the weights of an auxiliary experiment are to be used to start finetuning
 		fineExp   : Instance of CaffeExperiment from which finetuning needs to begin. 	
@@ -172,6 +182,7 @@ def get_caffe_prms(nw, isSiamese=True, batchSize=128, isTest=False,
 	cPrms['fineExp']    = fineExp
 	cPrms['fineModelIter'] = fineModelIter
 	cPrms['lrAbove']       = lrAbove
+	cPrms['contrastiveMargin'] = contrastiveMargin
 
 	if isFineTune and numTrainSamples is not None:
 		numEpochs = 50
@@ -187,7 +198,11 @@ def get_caffe_prms(nw, isSiamese=True, batchSize=128, isTest=False,
 	if isFineTune:
 		assert fineExp is not None
 		assert fineModelIter is not None
-		expStr.append('FROM-%s-TO' % fineExp.dataExpName_)
+		if newNaming:
+			#This is the right way - due to legacy.
+			expStr.append('FROM-%s-TO' % (fineExp.dataExpName_ + fineExp.caffeExpName_))
+		else:
+			expStr.append('FROM-%s-TO' % fineExp.dataExpName_)
 		cPrms['initModelFile'] = fineExp.get_snapshot_name(fineModelIter)
 
 	if isSiamese:
@@ -202,11 +217,16 @@ def get_caffe_prms(nw, isSiamese=True, batchSize=128, isTest=False,
 		else:
 			cPrms['lrAboveName'] = lrAbove
 		expStr.append('labv-%s' % cPrms['lrAboveName'])
-		print 'FineTune above: %s' % cPrms['lrAboveName']
+		#print 'FineTune above: %s' % cPrms['lrAboveName']
 
 	if maxLayer is not None:
 		expStr.append('mxl-%d' % maxLayer)
-	
+
+	if contrastiveMargin is not None:
+		#Due to legacy naming convention. 
+		if contrastiveMargin != 1:
+			expStr.append('ctMrgn-%d' % contrastiveMargin)
+			
 	expStr = ''.join(s + '_' for s in expStr)
 	cPrms['expName'] = expStr[0:-1]
 
@@ -246,11 +266,18 @@ def setup_experiment(prms, cPrms, deviceId=1):
 			raise Exception('loss type not recognized')
 	elif prms['transform'] == 'normal':
 		baseFile  = 'normal.prototxt'
-		labelName = 'label' 
+		labelName = 'label'
+	elif prms['transform'] == 'slowness':
+		if prms['lossType'] == 'contrastive':
+			baseFile    = 'mnist_contrastive_top.prototxt'
+			botBaseFile = 'mnist_contrastive_bot.prototxt'  
+			labelName = 'label'
 	else:
 		raise Exception('Transform type not recognized')
 
-	netdef = make_def_proto(cPrms['nw'], cPrms['isSiamese'], baseFileStr=baseFile) 
+	netdef, tpName1, tpName2 = make_def_proto(cPrms['nw'], 
+							cPrms['isSiamese'], baseFileStr=baseFile,
+							getStreamTopNames=True) 
 	caffeExp.init_from_external(cPrms['solver'], netdef)	
 
 	#Set the lmdbs
@@ -258,7 +285,7 @@ def setup_experiment(prms, cPrms, deviceId=1):
 	testImDb  = prms['paths']['lmdb']['test']['im']
 	trainLbDb = prms['paths']['lmdb']['train']['lb']
 	testLbDb  = prms['paths']['lmdb']['test']['lb']
-	if prms['transform'] == 'rotTrans':
+	if prms['transform'] in ['rotTrans', 'slowness']:
 		caffeExp.set_layer_property('pair_data', ['data_param','source'],
 																 '"%s"' % trainImDb, phase='TRAIN')
 		caffeExp.set_layer_property('pair_data', ['data_param','batch_size'],
@@ -279,6 +306,17 @@ def setup_experiment(prms, cPrms, deviceId=1):
 			for name,sz in zip(fcNames, fcSz):
 				caffeExp.set_layer_property(name, ['bottom'], '"%s"' % lastTop)
 				caffeExp.set_layer_property(name, ['inner_product_param', 'num_output'], sz)
+		elif prms['lossType'] == 'contrastive':
+			#This can be only contrastive loss
+			botDef = mpu.ProtoDef(os.path.join(BASE_DIR, botBaseFile))
+			for _,l in botDef.layers_['TRAIN'].iteritems():
+					caffeExp.add_layer(l['name'][1:-1], l, phase='TRAIN')	
+			fLayers  = ['data_flat_1', 'data_flat_2']
+			botNames = [tpName1, tpName2]
+			for fl, bot in zip(fLayers, botNames): 
+				caffeExp.set_layer_property(fl, ['bottom'], '"%s"' % bot)
+			caffeExp.set_layer_property('loss', ['contrastive_loss_param','margin'],
+																 cPrms['contrastiveMargin'])
 
 	elif prms['transform'] == 'normal':
 		caffeExp.set_layer_property('data', ['data_param','source'],
@@ -696,12 +734,13 @@ def run_finetune(max_iter=5000, stepsize=1000, lrAbove=None,
 
 ##
 #Convert a source n/w to a fine tune n/w
-def source2fine_network(nw):
-	#Remover the part after concatenation
-	concatLayer = nw[-4]
-	name,_ = concatLayer
-	assert name=='Concat'
-	nw = copy.deepcopy(nw[:-4])
+def source2fine_network(nw, isConcat=True):
+	if isConcat:
+		#Remover the part after concatenation
+		concatLayer = nw[-4]
+		name,_ = concatLayer
+		assert name=='Concat'
+		nw = copy.deepcopy(nw[:-4])
 
 	#Add the bit required for classification
 	botNw = [	('InnerProduct', {'num_output': 500, 'nameDiff': 'ft'}), ('ReLU',{}),
@@ -713,31 +752,32 @@ def source2fine_network(nw):
 	return nw	
 
 
-def get_final_source_networks():
+def get_final_source_networks(getNonPool=False):
 	nw = []
-	nw.append([('Convolution',  {'num_output': 96,  'kernel_size': 7, 'stride': 2}), ('ReLU',{}),
-						('Concat', {'concat_dim': 1}),
-						('InnerProduct', {'num_output': 500}), ('ReLU',{}), 
-						('Dropout', {'dropout_ratio': 0.5}),
-						])			 
-	nw.append([('Convolution',  {'num_output': 96,  'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
-						('Concat', {'concat_dim': 1}),
-						('InnerProduct', {'num_output': 500}), ('ReLU',{}), 
-						('Dropout', {'dropout_ratio': 0.5}),
-						])			 
-	nw.append([('Convolution',  {'num_output': 96,  'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
-						('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
-						('Concat', {'concat_dim': 1}),
-						('InnerProduct', {'num_output': 1000}), ('ReLU',{}), 
-						('Dropout', {'dropout_ratio': 0.5}),
-						])			 
-	nw.append([('Convolution',  {'num_output': 96,  'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
-						('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
-						('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
-						('Concat', {'concat_dim': 1}),
-						('InnerProduct', {'num_output': 1000}), ('ReLU',{}), 
-						('Dropout', {'dropout_ratio': 0.5}),
-						])
+	if getNonPool:
+		nw.append([('Convolution',  {'num_output': 96,  'kernel_size': 7, 'stride': 2}), ('ReLU',{}),
+							('Concat', {'concat_dim': 1}),
+							('InnerProduct', {'num_output': 500}), ('ReLU',{}), 
+							('Dropout', {'dropout_ratio': 0.5}),
+							])			 
+		nw.append([('Convolution',  {'num_output': 96,  'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+							('Concat', {'concat_dim': 1}),
+							('InnerProduct', {'num_output': 500}), ('ReLU',{}), 
+							('Dropout', {'dropout_ratio': 0.5}),
+							])			 
+		nw.append([('Convolution',  {'num_output': 96,  'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+							('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+							('Concat', {'concat_dim': 1}),
+							('InnerProduct', {'num_output': 1000}), ('ReLU',{}), 
+							('Dropout', {'dropout_ratio': 0.5}),
+							])			 
+		nw.append([('Convolution',  {'num_output': 96,  'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+							('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+							('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 2}), ('ReLU',{}),
+							('Concat', {'concat_dim': 1}),
+							('InnerProduct', {'num_output': 1000}), ('ReLU',{}), 
+							('Dropout', {'dropout_ratio': 0.5}),
+							])
 	#Pooling networks			 
 	nw.append([('Convolution',  {'num_output': 96,  'kernel_size': 7, 'stride': 1}), ('ReLU',{}),
 						 ('Pooling', {'kernel_size': 3, 'stride': 2}),
@@ -771,13 +811,75 @@ def get_final_source_networks():
 						])			 
 	return nw
 
-def run_final_pretrain(deviceId=1):
-	nw = get_final_source_networks()
+
+def get_final_source_networks_slowness():
+	nw = []
+	#Pooling networks			 
+	nw.append([('Convolution',  {'num_output': 96,  'kernel_size': 7, 'stride': 1}), ('ReLU',{}),
+						 ('Pooling', {'kernel_size': 3, 'stride': 2}),
+						])			
+	nw.append([('Convolution',  {'num_output': 96,  'kernel_size': 3, 'stride': 1}), ('ReLU',{}),
+						 ('Pooling', {'kernel_size': 3, 'stride': 2}),
+						])			
+	nw.append([('Convolution',  {'num_output': 96,  'kernel_size': 3, 'stride': 1}), ('ReLU',{}),
+						('Pooling', {'kernel_size': 3, 'stride': 2}),
+						('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 1}), ('ReLU',{}),
+						('Pooling', {'kernel_size': 3, 'stride': 2}),
+						])			 
+	nw.append([('Convolution',  {'num_output': 96,  'kernel_size': 3, 'stride': 1}), ('ReLU',{}),
+						('Pooling', {'kernel_size': 3, 'stride': 2}),
+						('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 1}), ('ReLU',{}),
+						('Pooling', {'kernel_size': 3, 'stride': 2}),
+						('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 1}), ('ReLU',{}),
+						('Pooling', {'kernel_size': 3, 'stride': 2}),
+						])			 
+	return nw
+
+
+def run_final_pretrain(deviceId=1, transform='rotTrans', contrastiveMargin=None):
+	if transform=='slowness':
+		nw = get_final_source_networks_slowness()
+	else:
+		nw = get_final_source_networks()
 	numEx = 1e+7
-	prms  = mr.get_prms(maxRot=10, maxDeltaRot=30, lossType='classify', numTrainEx=numEx)
+	if transform=='rotTrans':
+		prms  = mr.get_prms(maxRot=10, maxDeltaRot=30, lossType='classify', numTrainEx=numEx)
+	elif transform=='slowness':
+		prms = mr.get_prms(transform=transform, maxDeltaRot=30,
+					numTrainEx=numEx, lossType='contrastive', maxRot=10)
 	for nn in nw:
 		name = nw2name(nn)
 		cPrms = get_caffe_prms(nn, isSiamese=True, base_lr=0.01,
+													debug_info='false', contrastiveMargin=contrastiveMargin)
+		isExist = find_experiment(prms, cPrms, cPrms['max_iter'])
+		if isExist:
+			print '%s: EXISTS' % name
+		else:
+			run_experiment(prms, cPrms, deviceId=deviceId)
+
+
+##
+#Experiment for seeing the effect of amount of pre-training data on MNIST
+def run_vary_pretrain_data(deviceId=1, isSlowness=False, clsOnly=None):
+	#Take the best performing n/w
+	nw = []
+	nw.append([('Convolution',  {'num_output': 96,  'kernel_size': 3, 'stride': 1}), ('ReLU',{}),
+						('Pooling', {'kernel_size': 3, 'stride': 2}),
+						('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 1}), ('ReLU',{}),
+						('Pooling', {'kernel_size': 3, 'stride': 2}),
+						('Concat', {'concat_dim': 1}),
+						('InnerProduct', {'num_output': 1000}), ('ReLU',{}), 
+						('Dropout', {'dropout_ratio': 0.5}),
+						])			 
+	numEx = [1e+3, 1e+4, 1e+5, 1e+6, 1e+7]
+	for N in numEx:
+		if isSlowness:
+			prms = mr.get_prms(maxRot=10, maxDeltaRot=30, lossType='contrastive', numTrainEx=N,
+							transform='slowness', clsOnly=clsOnly)
+		else:
+			prms  = mr.get_prms(maxRot=10, maxDeltaRot=30, lossType='classify', numTrainEx=N, 
+													clsOnly=clsOnly)
+		cPrms = get_caffe_prms(nw[0], isSiamese=True, base_lr=0.01,
 														debug_info='false')
 		isExist = find_experiment(prms, cPrms, cPrms['max_iter'])
 		if isExist:
@@ -786,68 +888,87 @@ def run_final_pretrain(deviceId=1):
 			run_experiment(prms, cPrms, deviceId=deviceId)
 
 
-def run_final_finetune(deviceId=1, runTypes=['run','test'], runNum=[0,1,2]):
-	nw       = get_final_source_networks()
-	#runNum   = [0, 1, 2]
+def run_final_finetune(deviceId=1, runTypes=['run','test'],
+							 runNum=[0,1,2], isSlowness=False, clsOnly=None,
+							 numTrainEx=[1e+7], nw=None, contrastiveMargin=None):
 	max_iter = 4000
 	stepsize = 4000
 	numEx    = [100, 300, 1000, 10000]
+	#numTrainEx = [1e+3, 1e+4, 1e+5, 1e+6, 1e+7] 
+	#numTrainEx = [1e+7] 
 	
 	acc = {}
 	acc['numExamples'] = numEx
-
-	srcPrms = mr.get_prms(maxRot=10, maxDeltaRot=30,
-					 lossType='classify', numTrainEx=1e+7)
-
-	sourceNw = nw
-	targetNw = [source2fine_network(nn) for nn in nw]
-	fineAll  = [False, True]
-	for ff in fineAll:
-		if ff:
-			ffKey = 'all'
+	newNaming = False	
+	for trnEx in numTrainEx:
+		if isSlowness:
+			srcPrms = mr.get_prms(maxRot=10, maxDeltaRot=30, lossType='contrastive',
+							numTrainEx=trnEx, transform='slowness')
+			if contrastiveMargin != 1:
+				newNaming = True
+			if nw is None:
+				nw = get_final_source_networks_slowness()
+			isSiamese, isConcat = True, False
 		else:
-			ffKey = 'top'
-		acc[ffKey] = {}
-		for runType in runTypes:	
-			for ex in numEx:
-				exKey = 'n%d' % ex
-				acc[ffKey][exKey] = {}
-				for snn,tnn in zip(sourceNw, targetNw):	
-					name = nw2name(snn)
-					acc[ffKey][exKey][name] = np.zeros((3,))
-					for r in runNum:
-						#Source Experiment
-						srcCaffePrms = get_caffe_prms(snn, isSiamese=True)
-						srcExp = setup_experiment(srcPrms, srcCaffePrms)
-						#Target Experiment
-						if ff:
-							lrAbove = None
-						else:
-						 	numLayers = len(tnn)
-							idx  = numLayers - 6
-							lType, ll   = tnn[idx]
-							#Just some sanity checks
-							assert lType == 'InnerProduct'
-							assert ll['num_output'] == 500							
-							lrAbove = idx
-						tgtPrms = mr.get_prms(transform='normal', numTrainEx=ex, runNum=r)
-						tgtCaffePrms = get_caffe_prms(tnn, isSiamese=False, isFineTune=True, fineExp=srcExp,
-																fineModelIter=40000, max_iter=max_iter, stepsize=stepsize,
-																lrAbove=lrAbove)
-						if runType == 'run':
-							isExist = find_experiment(tgtPrms, tgtCaffePrms, max_iter)
-							print 'EXPERIMENT EXISTS - SKIPPING'
-							if not isExist:
-								run_experiment(tgtPrms, tgtCaffePrms, deviceId=deviceId)
-						elif runType == 'test':
-							run_test(tgtPrms, tgtCaffePrms)
-						elif runType == 'accuracy':
-							try:
-								acc[ffKey][exKey][name][r] = read_accuracy(tgtPrms, tgtCaffePrms)
-							except IOError:
-								return acc
-						else:
-							raise Exception('Unrecognized run type %s' % runType)
+			srcPrms = mr.get_prms(maxRot=10, maxDeltaRot=30,
+						 lossType='classify', numTrainEx=trnEx, clsOnly=clsOnly)
+			if nw is None:
+				nw       = get_final_source_networks()
+			isSiamese, isConcat = True, True
+
+		trnExKey = 'nTrn%.01e' % trnEx
+		acc[trnExKey] = {}
+		sourceNw = nw
+		targetNw = [source2fine_network(nn, isConcat=isConcat) for nn in nw]
+		fineAll  = [False, True]
+		for ff in fineAll:
+			if ff:
+				ffKey = 'all'
+			else:
+				ffKey = 'top'
+			acc[trnExKey][ffKey] = {}
+			for runType in runTypes:	
+				for ex in numEx:
+					exKey = 'n%d' % ex
+					acc[trnExKey][ffKey][exKey] = {}
+					for snn,tnn in zip(sourceNw, targetNw):	
+						name = nw2name(snn)
+						acc[trnExKey][ffKey][exKey][name] = np.zeros((len(runNum),))
+						for r in runNum:
+							#Source Experiment
+							srcCaffePrms = get_caffe_prms(snn, isSiamese=isSiamese,
+															contrastiveMargin=contrastiveMargin)
+							srcExp = setup_experiment(srcPrms, srcCaffePrms)
+							#Target Experiment
+							if ff:
+								lrAbove = None
+							else:
+								numLayers = len(tnn)
+								idx  = numLayers - 6
+								lType, ll   = tnn[idx]
+								#Just some sanity checks
+								assert lType == 'InnerProduct'
+								assert ll['num_output'] == 500							
+								lrAbove = idx
+							tgtPrms = mr.get_prms(transform='normal', numTrainEx=ex, runNum=r)
+							tgtCaffePrms = get_caffe_prms(tnn, isSiamese=False, isFineTune=True, fineExp=srcExp,
+																	fineModelIter=40000, max_iter=max_iter, stepsize=stepsize,
+																	lrAbove=lrAbove, newNaming=newNaming)
+							if runType == 'run':
+								isExist = find_experiment(tgtPrms, tgtCaffePrms, max_iter)
+								print 'EXPERIMENT EXISTS - SKIPPING'
+								if not isExist:
+									run_experiment(tgtPrms, tgtCaffePrms, deviceId=deviceId)
+							elif runType == 'test':
+								run_test(tgtPrms, tgtCaffePrms)
+							elif runType == 'accuracy':
+								try:
+									acc[trnExKey][ffKey][exKey][name][r] = read_accuracy(tgtPrms, tgtCaffePrms)
+								except IOError:
+									print 'All accuracy numbers not found'
+									return acc
+							else:
+								raise Exception('Unrecognized run type %s' % runType)
 	return acc	
 
 
@@ -893,7 +1014,8 @@ def run_final_scratch(deviceId=1, runTypes=['run','test'], runNum=[0,1,2]):
 							lrAbove = idx
 						tgtPrms = mr.get_prms(transform='normal', numTrainEx=ex, runNum=r)
 						tgtCaffePrms = get_caffe_prms(tnn, isSiamese=False, isFineTune=False, 
-														max_iter=max_iter, stepsize=stepsize, lrAbove=lrAbove)
+														max_iter=max_iter, stepsize=stepsize, lrAbove=lrAbove,
+														contrastiveMargin=contrastiveMargin)
 						if runType == 'run':
 							isExist = find_experiment(tgtPrms, tgtCaffePrms, max_iter)
 							print 'EXPERIMENT EXISTS - SKIPPING'
@@ -909,6 +1031,12 @@ def run_final_scratch(deviceId=1, runTypes=['run','test'], runNum=[0,1,2]):
 						else:
 							raise Exception('Unrecognized run type %s' % runType)
 	return acc	
+
+
+def analyse_accuracy(acc, fields):
+	return ou.conditional_select(acc, fields)
+		
+
 
 def compile_mnist_results(isScratch=False):
 	outDir = '/data1/pulkitag/mnist/results/compiled'

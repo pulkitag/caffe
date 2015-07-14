@@ -35,6 +35,7 @@ void ContrastiveLossLayer<Dtype>::Forward_gpu(
   Dtype loss(0.0);
   for (int i = 0; i < bottom[0]->num(); ++i) {
     if (static_cast<int>(bottom[2]->cpu_data()[i])) {  // similar pairs
+			//LOG(INFO) << "Similar pairs have label: " << static_cast<int>(bottom[2]->cpu_data()[i]);
       loss += dist_sq_.cpu_data()[i];
     } else {  // dissimilar pairs
       loss += std::max(margin-dist_sq_.cpu_data()[i], Dtype(0.0));

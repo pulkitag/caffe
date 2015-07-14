@@ -6,6 +6,8 @@ import scipy.misc as scm
 import matplotlib.pyplot as plt
 import copy
 import os
+import collections as co
+import pdb
 ##
 # Verify if all the keys are present recursively in the dict
 def verify_recursive_key(data, keyNames):
@@ -213,6 +215,37 @@ def make_table_rows(**kwargs):
 	for l in lines:
 		print l
 
+##
+# In a recursive dictionary - subselect a few fields
+# while vary others. For eg d['vr1']['a1']['b1'], d['vr2']['a1']['b2'], d['vr3']['a2']['b3']
+# Now I might be interested only in values such that the second field is fixed to 'a1'
+# So that I get the output as d['vr1']['b1'], d['vr2']['b2']
+def conditional_select(data, fields, reduceFn=None):
+	'''
+		data       : dict
+		fields     : fields (a list)
+			           [None,'a1',None] means that keep the second field fixed to 'a1',
+			           but consider all values of other fields.
+		reduceFn   : Typically the dict would store an array
+								 reductionFn can be any function to reduce this array to
+								 a quantity of interset like mean etc. 
+	'''
+	newData = co.OrderedDict()
+	for key in data.keys():
+		if fields[0] is None:
+			#Chose all the keys
+			newData[key] = conditional_select(data[key], fields[1:], reduceFn=reduceFn) 
+		else:
+			if key == fields[0]:	
+				if len(fields) > 1:
+					newData = conditional_select(data[key], fields[1:], reduceFn=reduceFn)
+				else:
+					if reduceFn is None:
+						newData = copy.deepcopy(data[key])
+					else:
+						newData = copy.deepcopy(reduceFn(data[key]))
+					return newData
+	return newData
 
 ##
 # Count the things.
@@ -227,7 +260,6 @@ def count_unique(arr, maxVal=None):
 
 	return count
 	 
-
 ##
 # Create dir
 def create_dir(dirName):

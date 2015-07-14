@@ -51,11 +51,14 @@ def get_paths(isOld=False):
 
 def get_prms(transform='rotTrans', maxRot=10, maxDeltaRot=10, maxDeltaTrans=3, 
 						isOld=False, baseLineMode=False, runNum=0, numTrainEx=1e+06, numTestEx=1e+04,
-						lossType='regress'):
+						lossType='regress', 
+						slowMaxDeltaRot=3, slowMaxDeltaTrans=1,
+						clsOnly=None):
 	'''
 		Ideally I should finetune both for classification + rotation training
 		But, I don't think I have time to try to make that work. 
-		First what I will try is to learn good filters using just unsupervised training.  
+		First what I will try is to learn good filters using just unsupervised training. 
+		clsOnly: If data from only a few classes should be considered. 
 	'''
 	paths = get_paths(isOld)
 	prms  = {}
@@ -63,7 +66,10 @@ def get_prms(transform='rotTrans', maxRot=10, maxDeltaRot=10, maxDeltaTrans=3,
 	prms['maxRot']        = maxRot
 	prms['maxDeltaRot']   = maxDeltaRot
 	prms['maxDeltaTrans'] = maxDeltaTrans
+	prms['slowMaxDeltaRot']   = slowMaxDeltaRot
+	prms['slowMaxDeltaTrans'] = slowMaxDeltaTrans
 	prms['isOld']         = isOld
+	prms['clsOnly']       = clsOnly
 	prms['baseLineMode']  = baseLineMode
 	prms['repNum']        = runNum
 	prms['numEx']          = {}
@@ -96,16 +102,30 @@ def get_prms(transform='rotTrans', maxRot=10, maxDeltaRot=10, maxDeltaTrans=3,
 		expName = 'tf-%s' % prms['transform']
 		if lossType=='classify':
 			expName = expName + '_' + 'cls'
+		elif lossType == 'contrastive':
+			expName = expName + '_' + 'ctrstv'
+
+		if transform=='normal':
+			expName = 'normal'		
+			assert numTestEx==1e+04, 'There should be 10K test examples for normal exp'
+
+		if prms['clsOnly'] is not None:
+			clsStr  = 'digitCls-'+ ''.join(['%d-' % cl for cl in clsOnly])
+			expName = expName + '_%s' % clsStr[0:-1]	
+
 		if transform=='rotTrans':
 			expName = expName + '_dRot%d_dTrn%d_mxRot%d_tr%.0e_run%d' %\
 							 (maxDeltaRot, maxDeltaTrans, maxRot, numTrainEx, runNum)
 			teExpName = expName + '_dRot%d_dTrn%d_mxRot%d_te%.0e_run%d' %\
 							 (maxDeltaRot, maxDeltaTrans, maxRot, numTestEx, runNum)
 		elif transform=='normal':
-			expStr    = 'normal'
-			assert numTestEx==1e+04, 'There should be 10K test examples for normal exp'
-			expName   = expStr + 'tr%.0e_run%d' % (numTrainEx, runNum)
-			teExpName = expStr + 'te%.0e_run%d' % (numTestEx, runNum)
+			teExpName = expName + 'te%.0e_run%d' % (numTestEx, runNum)
+			expName   = expName + 'tr%.0e_run%d' % (numTrainEx, runNum)
+		elif transform == 'slowness':
+			expName   = expName + '_dRot%d_dTrn%d_mxRot%d_slowdRot%d_slowdTrn%d_tr%.0e_run%d' %\
+							(maxDeltaRot, maxDeltaTrans, maxRot, slowMaxDeltaRot, slowMaxDeltaTrans, numTrainEx, runNum)
+			teExpName = expName + '_dRot%d_dTrn%d_mxRot%d_slowdRot%d_slowdTrn%d_te%.0e_run%d' %\
+							(maxDeltaRot, maxDeltaTrans, maxRot, slowMaxDeltaRot, slowMaxDeltaTrans, numTrainEx, runNum)
 		else:
 			raise Exception('Unrecognized transform type')		
 	prms['expName'] = expName
@@ -275,32 +295,38 @@ def transform_im(im, deltaX, deltaY, theta):
 		tileIm = np.tile(col, (1, deltaX))
 		im[:, 0:-deltaX]  = im[:, deltaX:]
 		im[:, -deltaX:]   = tileIm
-
 	return im
 
 
-def sample_transform(maxVal, randState = None):
+def sample_transform(maxVal, randState = None, minVal=0, isFloat=False):
+	assert maxVal >= minVal
 	if randState is None:
-		val = int(round(np.random.random() * maxVal))
+		val = minVal + np.random.random() * (maxVal - minVal)
 		rnd = np.random.random()
 	else:
-		val = int(round(randState.rand() * maxVal))
+		val = minVal + randState.rand() * (maxVal - minVal)
 		rnd = randState.rand()
 	if rnd > 0.5:
 		sgn = 1
 	else:
 		sgn = -1
+	if not isFloat:
+		val = int(round(val))
 	return sgn * val
 
 
-def make_transform_db(prms):
-	for sNum,s in enumerate(SET_NAMES):
+def make_transform_db(prms, setNames=SET_NAMES):
+	for sNum,s in enumerate(setNames):
 		numEx  = prms['numEx'][s]
 		repNum = prms['repNum']
 		imFile, lbFile = prms['paths']['lmdb'][s]['im'], prms['paths']['lmdb'][s]['lb'] 	
 		db     = mpio.DoubleDbSaver(imFile, lbFile)
 		#Image and label data	
 		ims, clLbs  = load_images(setName=s)
+		if prms['clsOnly'] is not None:
+			clIdx  = [i for (i,cl) in enumerate(clLbs) if cl in prms['clsOnly']]
+			ims    = ims[clIdx]
+			clLbs  = clLbs[clIdx] 
 		N, nr, nc = ims.shape
 	
 		oldState  = np.random.get_state()
@@ -353,7 +379,7 @@ def make_transform_db(prms):
 				imBatch = np.zeros((batchSz, 2, nr, nc)).astype(np.uint8)
 				lbBatch = np.zeros((batchSz, 3, 1, 1)).astype(np.float)
 		np.random.set_state(oldState)
-		
+		db.close()	
 		## Verify that all examples have been stored.
 		#im-db
 		dbRead = mpio.DbReader(imFile)
@@ -366,9 +392,85 @@ def make_transform_db(prms):
 		assert saveCount == numEx, 'All examples have not been stored'
 		dbRead.close()
 
+##
+#Implement slow feature learning. 
+def make_slowness_db(prms, setNames=SET_NAMES):
+	for sNum, s in enumerate(setNames):
+		numEx  = prms['numEx'][s]
+		repNum = prms['repNum']
+		imFile, lbFile = prms['paths']['lmdb'][s]['im'], prms['paths']['lmdb'][s]['lb'] 	
+		db     = mpio.DoubleDbSaver(imFile, lbFile)
+		#Image and label data	
+		ims, clLbs  = load_images(setName=s)
+		if prms['clsOnly'] is not None:
+			clIdx  = [i for (i,cl) in enumerate(clLbls) if cl in prms['clsOnly']]
+			ims    = ims[clIdx]
+			clLbls = clLbls[clIdx] 
+		N, nr, nc = ims.shape
 
+		oldState  = np.random.get_state()
+		randSeed  = np.random.seed(3 * (2 * sNum * 100 + 1) + (repNum + 1) * 2)
+		randState = np.random.RandomState(randSeed)
+		idxs = randState.random_integers(0, N-1, numEx)
 
+		#Start Writing the data
+		count   = 0
+		batchSz = 10000
+		imBatch = np.zeros((batchSz, 2, nr, nc)).astype(np.uint8)
+		lbBatch = np.zeros((batchSz, 1, 1, 1)).astype(np.float)
 
+		maxDeltaTrans, maxDeltaRot, maxRot = prms['maxDeltaTrans'],\
+														 prms['maxDeltaRot'], prms['maxRot'] 
+		assert prms['lossType'] == 'contrastive', 'Only contrastive loss with slowness'
+		for (i,idx) in enumerate(idxs):
+			im = ims[idx]
+			#lb = lbs[idx]	
+			#Get the Transformation
+			x1, y1, r1 = sample_transform(maxDeltaTrans, randState),\
+									 sample_transform(maxDeltaTrans, randState), sample_transform(maxRot, randState)
+			if randState.rand() > 0.5:
+				#These features will be forced to be the same
+				lb = np.float(1)
+				delx, dely, delr = sample_transform(prms['slowMaxDeltaTrans'], randState),\
+										 sample_transform(prms['slowMaxDeltaTrans'], randState),\
+										 sample_transform(prms['slowMaxDeltaRot'], randState)
+			else:
+				lb = np.float(0)
+				delx, dely, delr = (sample_transform(maxDeltaTrans, randState, minVal=prms['slowMaxDeltaTrans'] + 1),
+										 sample_transform(maxDeltaTrans, randState, minVal=prms['slowMaxDeltaTrans'] + 1),
+										 sample_transform(maxDeltaRot, randState, minVal=prms['slowMaxDeltaRot'] + 1))
+			x2, y2, r2 = x1 + delx, y1 + dely, r1 + delr
+		
+			#Transform the image
+			imBatch[count,0,:,:]  = transform_im(im, x1, y1, r1)
+			imBatch[count,1,:,:]  = transform_im(im, x2, y2, r2)
+			lbBatch[count,:,:,:]  = lb 
+			count += 1
+			#Save to db
+			if count==batchSz or i == len(idxs)-1:
+				print 'Processed %d files' % (i+1)
+				imBatch = imBatch[0:count]
+				lbBatch = lbBatch[0:count]
+				db.add_batch((imBatch, lbBatch), imAsFloat=(False, True))
+				count = 0
+				imBatch = np.zeros((batchSz, 2, nr, nc)).astype(np.uint8)
+				lbBatch = np.zeros((batchSz, 1, 1, 1)).astype(np.float)
+		np.random.set_state(oldState)
+		db.close()	
+		## Verify that all examples have been stored.
+		#im-db
+		dbRead = mpio.DbReader(imFile)
+		saveCount = dbRead.get_count()
+		assert saveCount == numEx, 'All examples have not been stored'
+		dbRead.close()
+		#Label-db
+		dbRead = mpio.DbReader(lbFile)
+		saveCount = dbRead.get_count()
+		assert saveCount == numEx, 'All examples have not been stored'
+		dbRead.close()
+ 
+##
+# Make transformation db with the class-labels. 
 def make_transform_label_db(setName='train',numLabels=1000, 
 														maxDeltaRot=5, maxDeltaTrans=3, maxRot=5, 
 														numEx=None, baseLineMode=False, repNum=None):
@@ -481,6 +583,15 @@ def make_rep_dbs():
 		for nl in numLabels:
 				make_transform_label_db(numLabels=nl, numEx=numEx, maxDeltaRot=10, 
 																maxRot=10, repNum=r, setName='train') 
+
+##
+# Make dbs with different number of training examples.
+def make_dbs_vary_ntrain(dbFun, **kwargs):
+	numTrainEx = [1e+3, 1e+4, 1e+5, 1e+6, 1e+7]
+	for nt in numTrainEx:
+		prms = get_prms(maxRot=10, maxDeltaRot=30, lossType='classify', numTrainEx=nt,
+						clsOnly=[1])
+		dbFun(prms)
 
 
 def run_transform_experiment_repeats(numLabels=1000, deviceId=0,

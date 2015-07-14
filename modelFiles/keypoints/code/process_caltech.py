@@ -247,8 +247,8 @@ def get_pretrain_info(preTrainStr):
 		netFile = '/data1/pulkitag/caffe_models/caffe_imagenet_train_iter_310000'
 		#defFile = '/data1/pulkitag/caffe_models/bvlc_reference/caffenet_full.prototxt'
 		defFile = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/kitti/base_files/alexnet_finetune_fc6_deploy.prototxt'
-	elif preTrainStr == 'imagenet20K':
-		netFile = '/data1/pulkitag/others/imagenet20K.caffemodel'
+	elif preTrainStr in ['imagenet5K', 'imagenet10K', 'imagenet20K']:
+		netFile = '/data1/pulkitag/others/%s.caffemodel' % preTrainStr
 		defFile = '/work4/pulkitag-code/pkgs/caffe-v2-2/modelFiles/kitti/base_files/alexnet_finetune_fc6_deploy.prototxt'
 	#KMedoid rotation
 	elif preTrainStr in  ['rotObjs_kmedoids30_20_iter60K', 'rotObjs_kmedoids30_20_nodrop_iter120K']:

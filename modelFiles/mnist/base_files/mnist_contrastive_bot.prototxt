@@ -1,0 +1,25 @@
+layer {
+  name: "data_flat_1"
+  type: "Flatten"
+  bottom: "rot_fc"
+  top: "data_flat_1"
+}
+layer {
+  name: "data_flat_2"
+  type: "Flatten"
+  bottom: "rot_fc"
+  top: "data_flat_2"
+}
+
+layer {
+  name: "loss"
+  type: "ContrastiveLoss"
+  bottom: "data_flat_1"
+  bottom: "data_flat_2"
+	bottom: "label"
+  top: "loss"
+	contrastive_loss_param{
+		margin: 1
+	}
+}
+

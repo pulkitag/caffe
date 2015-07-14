@@ -424,11 +424,9 @@ def get_siamese_layerdef_for_proto(layerType, layerName, bottom, numOutput=1, **
 	def2 = get_layerdef_for_proto(layerType, layerName, bottom, numOutput=numOutput, **kwargs)
 	return def1, def2
 
-
+##
+#Helper fucntion for process_debug_log - helps find specific things in the line
 def find_in_line(l, findType):
-	'''
-		Helper fucntion for process_debug_log - helps find specific things in the line
-	'''
 	if findType == 'iterNum':
 		assert 'Iteration' in l, 'Iteration word must be present in the line'
 		ss  = l.split()
@@ -443,10 +441,11 @@ def find_in_line(l, findType):
 	else:
 		raise Exception('Unrecognized findType')
 
-
+##
+# Debug log that contatins how the parameters and features are changing during
+# forward, backward and update stages.  
 def process_debug_log(logFile, setName='train'):
 	'''
-		A debug log contains information about the Forward, Backward and Update Stages
 		The debug file contains infromation in the following format
 		Forward Pass
 		Backward Pass
@@ -548,11 +547,11 @@ def process_debug_log(logFile, setName='train'):
 	# and K is the number of blobs. 
 	return allBlobOp, allBlobParam, allBlobDiff, allBlobUpdate, layerNames, iters
 
-
+##
+# Helper function for plot_debug_log
 def plot_debug_subplots_(data, subPlotNum, label, col, fig, 
 					numPlots=3):
 	'''
-		Helper function for plot_debug_log
 		data: N * K where N is the number of points and K 
 					is the number of outputs
 		subPlotNum: The subplot Number
@@ -643,7 +642,6 @@ def test_log2acc(logFile):
 
 ##
 # Get useful caffe paths
-#
 # Set the paths over here for using the utils code. 
 def get_caffe_paths():
 	paths  = {}
@@ -770,10 +768,9 @@ def write_proto_param_layer(fid, protoData):
 		fid.write('} \n')
 
 
+##
+# Reads the architecture definition file and converts it into a nice, programmable format. 		
 class ProtoDef():
-	'''
-		Reads the architecture definition file and converts it into a nice, programmable format. 		
-	'''
 	ProtoPhases = ['TRAIN', 'TEST'] 
 	def __init__(self, defFile):
 		self.layers_ = {}
@@ -1142,10 +1139,9 @@ def make_solver(**kwargs):
 	return sol
 
 	
+##
+# Programatically write Caffe Experiment Files. 
 class ExperimentFiles:
-	'''
-		Used for writing experiment files in an easy manner. 
-	'''
 	def __init__(self, modelDir, defFile='caffenet.prototxt', 
 							 solverFile='solver.prototxt',
 							 logFileTrain='log_train.txt', logFileTest='log_test.txt', 
@@ -1294,6 +1290,8 @@ class ExperimentFiles:
 		self.runTrain_       = self.runTrain_[:-3] + resumeStr + '.sh'
 
 
+##
+# Programatically make a Caffe Experiment. 
 class CaffeExperiment:
 	def __init__(self, dataExpName, caffeExpName, expDirPrefix, snapDirPrefix,
 							 defPrefix = 'caffenet', solverPrefix = 'solver',
@@ -1468,6 +1466,8 @@ class CaffeExperiment:
 		return test_log2acc(self.files_['logTest'])
 
 
+##
+# Test a Caffe Made using a lmdb
 class CaffeTest:
 	##
 	# Intialize using an instance of CaffeExperiment and a lmdb that needs
