@@ -1158,12 +1158,12 @@ class ExperimentFiles:
 		self.modelDir_ = modelDir
 		if not os.path.exists(self.modelDir_):
 			os.makedirs(self.modelDir_)
-		self.solver_   = os.path.join(self.modelDir_, solverFile)
-		self.logTrain_ = os.path.join(self.modelDir_, logFileTrain)
-		self.logTest_  = os.path.join(self.modelDir_, logFileTest)
-		self.def_      = os.path.join(self.modelDir_, defFile)
-		self.runTrain_ = os.path.join(self.modelDir_, runFileTrain)
-		self.runTest_  = os.path.join(self.modelDir_, runFileTest)
+		self.solver_   = ou.chunk_filename(os.path.join(self.modelDir_, solverFile))
+		self.logTrain_ = ou.chunk_filename(os.path.join(self.modelDir_, logFileTrain))
+		self.logTest_  = ou.chunk_filename(os.path.join(self.modelDir_, logFileTest))
+		self.def_      = ou.chunk_filename(os.path.join(self.modelDir_, defFile))
+		self.runTrain_ = ou.chunk_filename(os.path.join(self.modelDir_, runFileTrain))
+		self.runTest_  = ou.chunk_filename(os.path.join(self.modelDir_, runFileTest))
 		self.paths_    = get_caffe_paths()
 		self.deviceId_ = deviceId
 		self.repNum_   = repNum
@@ -1173,8 +1173,8 @@ class ExperimentFiles:
 		self.resultDir_ = os.path.join(self.modelDir_,'result_store')
 		if not os.path.exists(self.resultDir_):
 			os.makedirs(self.resultDir_)
-		self.resultLogTrain_ = os.path.join(self.resultDir_, logFileTrain)
-		self.resultLogTest_  = os.path.join(self.resultDir_, logFileTest)
+		self.resultLogTrain_ = ou.chunk_filename(os.path.join(self.resultDir_, logFileTrain))
+		self.resultLogTest_  = ou.chunk_filename(os.path.join(self.resultDir_, logFileTest))
 		self.isResume_       = False
 
 
@@ -1205,6 +1205,7 @@ class ExperimentFiles:
 			testIterations:  Number of iterations to use for testing.   
 		'''
 		snapshot = self.extract_snapshot_name() % modelIterations
+		snapshot = ou.chunk_filename(snapshot)
 		with open(self.runTest_,'w') as f:
 			f.write('#!/usr/bin/env sh \n \n')
 			f.write('TOOLS=%s \n \n' % self.paths_['tools'])
@@ -1245,6 +1246,7 @@ class ExperimentFiles:
 			#Modify snapshot name
 			snapName   = self.solDef_.get_property('snapshot_prefix')
 			snapName   = snapName[:-1] + '_rep%d"' % repNum
+			snapName   = ou.chunk_filename(snapshot)
 			self.solDef_.set_property('snapshot_prefix', snapName)
 		
 		self.solDef_.write(self.solver_)	
@@ -1257,6 +1259,7 @@ class ExperimentFiles:
 		snapshot   = self.solDef_.get_property('snapshot_prefix')
 		#_iter_%d.caffemodel is added by caffe while snapshotting. 
 		snapshot = snapshot[1:-1] + '_iter_%d.caffemodel'
+		snapshot = ou.chunk_filename(snapshot)
 		return snapshot
 
 	##
@@ -1332,6 +1335,11 @@ class CaffeExperiment:
 		self.files_['snap'] = os.path.join(snapDirPrefix, dataExpName,
 													snapPrefix + '_iter_%d.caffemodel')  
 		self.snapPrefix_    = '"%s"' % os.path.join(snapDirPrefix, dataExpName, snapPrefix)		
+		self.snapPrefix_    = ou.chunk_filename(self.snapPrefix_, maxLen=242)
+
+		#Chunk all the filnames if needed
+		for key in self.files_.keys():
+			self.files_[key] = ou.chunk_filename(self.files_[key])
 
 		#Setup the experiment files.
 		self.expFile_ = ExperimentFiles(self.dirs_['exp'], defFile = defFile,
@@ -1383,6 +1391,7 @@ class CaffeExperiment:
 	##
 	def get_snapshot_name(self, numIter=10000):
 		snapName = self.expFile_.extract_snapshot_name() % numIter
+		snapName = ou.chunk_filename(snapName)
 		return snapName
 
 	## Only finetune the layers that are above ( and including) layerName

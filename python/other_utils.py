@@ -265,3 +265,39 @@ def count_unique(arr, maxVal=None):
 def create_dir(dirName):
 	if not os.path.exists(dirName):
 		os.makedirs(dirName)
+
+##
+#Private function for chunking a path
+def _chunk_path(fName, N):
+	assert '/' not in fName
+	L = len(fName)
+	if L <= N:
+		return fName
+	else:
+		slices=[]
+		for i in range(0,L,N):
+			slices.append(fName[i:min(L, i+N)])
+	newName = ''.join('%s/' % s for s in slices)
+	newName = newName[0:-1]
+	return newName
+		
+##
+# chunk filenames
+def chunk_filename(fName, maxLen=255):
+	'''
+		if any of the names is larger than 256 then
+		the file cannot be stored so some chunking needs
+		to be done
+	'''
+	splitNames = fName.split('/')
+	newSplits  = []
+	for s in splitNames:
+		if len(s)>=maxLen:
+			newSplits.append(_chunk_path(s, maxLen-1))
+		else:
+			newSplits.append(s)
+	newName = ''.join('%s/' % s for s in newSplits)
+	newName = newName[0:-1]
+	dirName = os.path.dirname(newName)
+	create_dir(dirName)
+	return newName	

@@ -701,7 +701,8 @@ def run_sun_layerwise_small(deviceId=0, runNum=1, fineNumData=10,
 								resumeIter=None, fine_base_lr=0.001, runType='run',
 								convConcat=False, 
 								prms=None, srcDefFile=None, srcModelFile=None,
-								isMySimple=False, contrastiveMargin=None):
+								isMySimple=False, contrastiveMargin=None,
+								maxLayers=None):
 
 	#Set the prms
 	if prms is None:
@@ -714,12 +715,15 @@ def run_sun_layerwise_small(deviceId=0, runNum=1, fineNumData=10,
 		imSz, testImSz, testCrpSz = 128, 128, 112
 
 	acc = {}
-	if isMySimple:
-		maxLayers = ['relu1', 'relu2','relu3','relu4']
+	if maxLayers is None:
+		if isMySimple:
+			maxLayers = ['relu1', 'relu2','relu3','relu4']
+		else:
+			#maxLayers = ['pool1', 'pool2','relu3','relu4','pool5', 'fc6']
+			#maxLayers = ['pool2','relu3','relu4', 'pool5']
+			maxLayers = ['pool1']		
 	else:
-		#maxLayers = ['pool1', 'pool2','relu3','relu4','pool5', 'fc6']
-		maxLayers = ['pool2','relu3','relu4', 'pool5']
-		#maxLayers = ['pool5']		
+		assert type(maxLayers) == list
 
 	if addFc:
 		lrAbove   = ['fc-extra'] * len(maxLayers)
@@ -755,14 +759,15 @@ def run_sun_layerwise_small(deviceId=0, runNum=1, fineNumData=10,
 
 ##
 #
-def run_sun_layerwise_small_multiple(deviceId=0, runType='run', isMySimple=False,
-																		 scratch=False, prms=None):
+def run_sun_layerwise_small_multiple(deviceId=0, runType='run', 
+										isMySimple=False, scratch=False, prms=None,
+										maxLayers=None):
 	'''
 		prms: If None then default prms are used
 	'''
 	runNum      = [5]
-	#fineNumData = [5,10,20,50]
-	fineNumData = [5,20]
+	fineNumData = [5,10,20,50]
+	#fineNumData = [5,20]
 	if scratch:
 		concatLayer = ['fc6']
 		convConcat  = [False]
@@ -772,7 +777,7 @@ def run_sun_layerwise_small_multiple(deviceId=0, runType='run', isMySimple=False
 		#convConcat  = [False, True]
 		concatLayer = ['conv5']
 		convConcat  = [True]
-		contrastiveMargin = [1]
+		contrastiveMargin = [None]
 		sourceModelIter = 60000
 	acc = {}
 	for r in runNum:
@@ -781,20 +786,27 @@ def run_sun_layerwise_small_multiple(deviceId=0, runType='run', isMySimple=False
 				if runType=='accuracy':
 					key = '%s_num%d_run%d' % (cl, num, r)
 					try:
-						acc[key],_ = run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False,
-                          addDrop=True, sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
-                          deviceId=deviceId, runType='accuracy', isMySimple=isMySimple,
+						acc[key],_ = run_sun_layerwise_small(runNum=r,
+													fineNumData=num, addFc=False, addDrop=True,
+													sourceModelIter=sourceModelIter, 
+													concatLayer=cl, convConcat=cc,
+                          deviceId=deviceId, runType='accuracy', 
+													isMySimple=isMySimple, maxLayers=maxLayers,
 													prms=prms, contrastiveMargin=cmg)
 					except IOError:
 						pass
 				else:
-					run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
-								sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
+					run_sun_layerwise_small(runNum=r, fineNumData=num, 
+								addFc=False, addDrop=True, maxLayers=maxLayers,
+								sourceModelIter=sourceModelIter, 
+								concatLayer=cl, convConcat=cc,
 								deviceId=deviceId, isMySimple=isMySimple,
 							  prms=prms, contrastiveMargin=cmg)
-					run_sun_layerwise_small(runNum=r, fineNumData=num, addFc=False, addDrop=True,
-								sourceModelIter=sourceModelIter, concatLayer=cl, convConcat=cc,
-								runType='test', deviceId=deviceId, isMySimple=isMySimple,
+					run_sun_layerwise_small(runNum=r, fineNumData=num,
+							  addFc=False, addDrop=True, maxLayers=maxLayers,
+								sourceModelIter=sourceModelIter, concatLayer=cl,
+							  convConcat=cc, runType='test', deviceId=deviceId, 
+								isMySimple=isMySimple,
 							  prms=prms, contrastiveMargin=cmg)
 	return acc
 

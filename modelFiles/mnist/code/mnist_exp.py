@@ -279,6 +279,7 @@ def setup_experiment(prms, cPrms, deviceId=1):
 							cPrms['isSiamese'], baseFileStr=baseFile,
 							getStreamTopNames=True) 
 	caffeExp.init_from_external(cPrms['solver'], netdef)	
+	#pdb.set_trace()
 
 	#Set the lmdbs
 	trainImDb = prms['paths']['lmdb']['train']['im']
@@ -778,7 +779,7 @@ def get_final_source_networks(getNonPool=False):
 							('InnerProduct', {'num_output': 1000}), ('ReLU',{}), 
 							('Dropout', {'dropout_ratio': 0.5}),
 							])
-	#Pooling networks			 
+	#Pooling networks	
 	nw.append([('Convolution',  {'num_output': 96,  'kernel_size': 7, 'stride': 1}), ('ReLU',{}),
 						 ('Pooling', {'kernel_size': 3, 'stride': 2}),
 						 ('Concat', {'concat_dim': 1}),
@@ -814,7 +815,7 @@ def get_final_source_networks(getNonPool=False):
 
 def get_final_source_networks_slowness():
 	nw = []
-	#Pooling networks			 
+	#Pooling networks
 	nw.append([('Convolution',  {'num_output': 96,  'kernel_size': 7, 'stride': 1}), ('ReLU',{}),
 						 ('Pooling', {'kernel_size': 3, 'stride': 2}),
 						])			
@@ -826,6 +827,7 @@ def get_final_source_networks_slowness():
 						('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 1}), ('ReLU',{}),
 						('Pooling', {'kernel_size': 3, 'stride': 2}),
 						])			 
+	'''
 	nw.append([('Convolution',  {'num_output': 96,  'kernel_size': 3, 'stride': 1}), ('ReLU',{}),
 						('Pooling', {'kernel_size': 3, 'stride': 2}),
 						('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 1}), ('ReLU',{}),
@@ -833,24 +835,27 @@ def get_final_source_networks_slowness():
 						('Convolution',  {'num_output': 256, 'kernel_size': 3, 'stride': 1}), ('ReLU',{}),
 						('Pooling', {'kernel_size': 3, 'stride': 2}),
 						])			 
+	'''
 	return nw
 
 
-def run_final_pretrain(deviceId=1, transform='rotTrans', contrastiveMargin=None):
+def run_final_pretrain(deviceId=1, transform='rotTrans', 
+											contrastiveMargin=None):
 	if transform=='slowness':
 		nw = get_final_source_networks_slowness()
 	else:
 		nw = get_final_source_networks()
 	numEx = 1e+7
 	if transform=='rotTrans':
-		prms  = mr.get_prms(maxRot=10, maxDeltaRot=30, lossType='classify', numTrainEx=numEx)
+		prms  = mr.get_prms(maxRot=10, maxDeltaRot=30, 
+							lossType='classify', numTrainEx=numEx)
 	elif transform=='slowness':
 		prms = mr.get_prms(transform=transform, maxDeltaRot=30,
-					numTrainEx=numEx, lossType='contrastive', maxRot=10)
+						numTrainEx=numEx, lossType='contrastive', maxRot=10)
 	for nn in nw:
 		name = nw2name(nn)
 		cPrms = get_caffe_prms(nn, isSiamese=True, base_lr=0.01,
-													debug_info='false', contrastiveMargin=contrastiveMargin)
+						 debug_info='false', contrastiveMargin=contrastiveMargin)
 		isExist = find_experiment(prms, cPrms, cPrms['max_iter'])
 		if isExist:
 			print '%s: EXISTS' % name
@@ -954,6 +959,7 @@ def run_final_finetune(deviceId=1, runTypes=['run','test'],
 							tgtCaffePrms = get_caffe_prms(tnn, isSiamese=False, isFineTune=True, fineExp=srcExp,
 																	fineModelIter=40000, max_iter=max_iter, stepsize=stepsize,
 																	lrAbove=lrAbove, newNaming=newNaming)
+							#pdb.set_trace()	
 							if runType == 'run':
 								isExist = find_experiment(tgtPrms, tgtCaffePrms, max_iter)
 								print 'EXPERIMENT EXISTS - SKIPPING'

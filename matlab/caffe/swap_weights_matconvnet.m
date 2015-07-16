@@ -17,7 +17,7 @@ normalization = srcData.normalization;
 %The target weights that need to be used. 
 tgtData = load(targetFile);
 refFile = tgtData.refFile;
-assert (strcmp(sourceFile,refFile), 'File Names mismatch');
+%assert (strcmp(sourceFile,refFile), 'File Names mismatch');
 
 count = 1;
 for i=1:1:length(srcData.layers)
@@ -34,6 +34,7 @@ for i=1:1:length(srcData.layers)
 		bData = tgtData.(bName);
 		disp(wName);
 		disp(size(lData.filters));
+		%keyboard;
 		if strcmp(wName,'fc6_w')
 			disp('HACKING fc6');
 			layers{count}.filters = reshape(wData,6,6,256,2048);
