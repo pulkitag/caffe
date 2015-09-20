@@ -598,7 +598,8 @@ def matconvnet_to_caffemodel(inFile, outFile):
 		into an approrpriate format. 
 	'''
 	#Right now the code is hacked to work with the BVLC reference model definition. 
-	defFile = '/data1/pulkitag/caffe_models/bvlc_reference/caffenet_deploy.prototxt'
+	#defFile = '/data1/pulkitag/caffe_models/bvlc_reference/caffenet_deploy.prototxt'
+	defFile = '/work4/pulkitag-code/code/ief/models/vgg_16_base.prototxt'
 	net     = caffe.Net(defFile, caffe.TEST)
 
 	#Load the weights
@@ -608,9 +609,9 @@ def matconvnet_to_caffemodel(inFile, outFile):
 	names = dat['names']
 	
 	#Hack the names
-	names[5] = 'fc6'
-	names[6] = 'fc7'
-	names[7] = 'fc8'
+	#names[5] = 'fc6'
+	#names[6] = 'fc7'
+	#names[7] = 'fc8'
 
 	count = 0
 	for n,weight,bias in zip(names, w, b):
@@ -629,7 +630,7 @@ def matconvnet_to_caffemodel(inFile, outFile):
 		bias   = bias.reshape((1,1,1,len(bias)))
 		if count == 0:
 			#RGB to BGR flip for the first layer channels
-			weight = weight[:,[2,1,0],:,:]	
+			weight[:,0:3,:,:] = weight[:,[2,1,0],:,:]	
 		net.params[n][0].data[...] = weight
 		net.params[n][1].data[...] = bias
 		count+=1		
