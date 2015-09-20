@@ -17,20 +17,23 @@ When updating Caffe, it's best to `make clean` before re-compiling.
 
 ## Prerequisites
 
-Caffe has several dependencies.
+Caffe has several dependencies:
 
 * [CUDA](https://developer.nvidia.com/cuda-zone) is required for GPU mode.
     * library version 7.0 and the latest driver version are recommended, but 6.* is fine too
     * 5.5, and 5.0 are compatible but considered legacy
 * [BLAS](http://en.wikipedia.org/wiki/Basic_Linear_Algebra_Subprograms) via ATLAS, MKL, or OpenBLAS.
 * [Boost](http://www.boost.org/) >= 1.55
+* `protobuf`, `glog`, `gflags`, `hdf5`
+
+Optional dependencies:
+
 * [OpenCV](http://opencv.org/) >= 2.4 including 3.0
-* `protobuf`, `glog`, `gflags`
-* IO libraries `hdf5`, `leveldb`, `snappy`, `lmdb`
+* IO libraries: `lmdb`, `leveldb` (note: leveldb requires `snappy`)
 
 Pycaffe and Matcaffe interfaces have their own natural needs.
 
-* For Python Caffe:  `Python 2.7`, `numpy (>= 1.7)`, boost-provided `boost.python`
+* For Python Caffe:  `Python 2.7` or `Python 3.3+`, `numpy (>= 1.7)`, boost-provided `boost.python`
 * For MATLAB Caffe: MATLAB with the `mex` compiler.
 
 **cuDNN Caffe**: for fastest operation Caffe is accelerated by drop-in integration of [NVIDIA cuDNN](https://developer.nvidia.com/cudnn). To speed up your Caffe models, install cuDNN then uncomment the `USE_CUDNN := 1` flag in `Makefile.config` when installing Caffe. Acceleration is automatic. For now cuDNN v1 is integrated but see [PR #1731](https://github.com/BVLC/caffe/pull/1731) for v2.
@@ -69,13 +72,13 @@ but we suggest first installing the [Anaconda](https://store.continuum.io/cshop/
 
 To import the `caffe` Python module after completing the installation, add the module directory to your `$PYTHONPATH` by `export PYTHONPATH=/path/to/caffe/python:$PYTHONPATH` or the like. You should not import the module in the `caffe/python/caffe` directory!
 
-*Caffe's Python interface works with Python 2.7. Python 3 or earlier Pythons are your own adventure.*
+*Caffe's Python interface works with Python 2.7. Python 3.3+ should work out of the box without protobuf support. For protobuf support please install protobuf 3.0 alpha (https://developers.google.com/protocol-buffers/). Earlier Pythons are your own adventure.*
 
 #### MATLAB
 
 Install MATLAB, and make sure that its `mex` is in your `$PATH`.
 
-*Caffe's MATLAB interface works with versions 2014a/b, 2013a/b, and 2012b.*
+*Caffe's MATLAB interface works with versions 2015a, 2014a/b, 2013a/b, and 2012b.*
 
 #### Windows
 

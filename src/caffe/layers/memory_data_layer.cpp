@@ -1,4 +1,6 @@
+#ifdef USE_OPENCV
 #include <opencv2/core/core.hpp>
+#endif  // USE_OPENCV
 
 #include <vector>
 
@@ -19,10 +21,11 @@ void MemoryDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
   CHECK_GT(batch_size_ * size_, 0) <<
       "batch_size, channels, height, and width must be specified and"
       " positive in memory_data_param";
+  vector<int> label_shape(1, batch_size_);
   top[0]->Reshape(batch_size_, channels_, height_, width_);
-  top[1]->Reshape(batch_size_, 1, 1, 1);
+  top[1]->Reshape(label_shape);
   added_data_.Reshape(batch_size_, channels_, height_, width_);
-  added_label_.Reshape(batch_size_, 1, 1, 1);
+  added_label_.Reshape(label_shape);
   data_ = NULL;
   labels_ = NULL;
   added_data_.cpu_data();
@@ -52,6 +55,7 @@ void MemoryDataLayer<Dtype>::AddDatumVector(const vector<Datum>& datum_vector) {
   has_new_data_ = true;
 }
 
+#ifdef USE_OPENCV
 template <typename Dtype>
 void MemoryDataLayer<Dtype>::AddMatVector(const vector<cv::Mat>& mat_vector,
     const vector<int>& labels) {
@@ -75,6 +79,7 @@ void MemoryDataLayer<Dtype>::AddMatVector(const vector<cv::Mat>& mat_vector,
   Reset(top_data, top_label, num);
   has_new_data_ = true;
 }
+#endif  // USE_OPENCV
 
 template <typename Dtype>
 void MemoryDataLayer<Dtype>::Reset(Dtype* data, Dtype* labels, int n) {
