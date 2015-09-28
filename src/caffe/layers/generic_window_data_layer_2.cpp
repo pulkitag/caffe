@@ -26,12 +26,12 @@
 namespace caffe {
 
 template <typename Dtype>
-GenericWindowDataLayer2<Dtype>::~GenericWindowDataLayer2<Dtype>() {
+GenericWindowData2Layer<Dtype>::~GenericWindowData2Layer<Dtype>() {
   this->StopInternalThread();
 }
 
 template <typename Dtype>
-void GenericWindowDataLayer2<Dtype>::ReadMean(){
+void GenericWindowData2Layer<Dtype>::ReadMean(){
 	// data mean
   has_mean_file_   = this->transform_param_.has_mean_file();
   has_mean_values_ = this->transform_param_.mean_value_size() > 0;
@@ -49,11 +49,11 @@ void GenericWindowDataLayer2<Dtype>::ReadMean(){
     for (int c = 0; c < this->transform_param_.mean_value_size(); ++c) {
       mean_values_.push_back(this->transform_param_.mean_value(c));
     }
-    CHECK(mean_values_.size() == 1 || mean_values_.size() == channels) <<
-     "Specify either 1 mean_value or as many as channels: " << channels;
-    if (channels > 1 && mean_values_.size() == 1) {
+    CHECK(mean_values_.size() == 1 || mean_values_.size() == channels_) <<
+     "Specify either 1 mean_value or as many as channels: " << channels_;
+    if (channels_ > 1 && mean_values_.size() == 1) {
       // Replicate the mean_value for simplicity
-      for (int c = 1; c < channels; ++c) {
+      for (int c = 1; c < channels_; ++c) {
         mean_values_.push_back(mean_values_[0]);
       }
     }
@@ -61,7 +61,8 @@ void GenericWindowDataLayer2<Dtype>::ReadMean(){
 }
 
 template <typename Dtype>
-void GenericWindowDataLayer2<Dtype>::ReadWindowFile(){
+void GenericWindowData2Layer<Dtype>::ReadWindowFile(){
+  string root_folder = this->layer_param_.generic_window_data_param().root_folder();
 	std::ifstream infile(this->layer_param_.generic_window_data_param().source().c_str());
   CHECK(infile.good()) << "Failed to open window file "
       << this->layer_param_.generic_window_data_param().source() << std::endl;
@@ -77,6 +78,14 @@ void GenericWindowDataLayer2<Dtype>::ReadWindowFile(){
 	LOG(INFO) << "num examples: "   << num_examples_ << ","
 						<< "img_group_size: " << img_group_size_ << ","
 						<< "label_size: "     << label_size_;
+
+	//Initialize the windows
+	all_windows_.clear();
+	all_windows_.resize(img_group_size_);
+
+	//Initialize the database
+	all_image_database_.clear();
+	all_image_database_.resize(img_group_size_);
 
 	LOG(INFO) << "Processing Image and labels";
 	Dtype* label_data = labels_->mutable_cpu_data(); 
@@ -105,7 +114,7 @@ void GenericWindowDataLayer2<Dtype>::ReadWindowFile(){
 					LOG(ERROR) << "Could not open or find file " << image_path;
 					return;
 				}
-				all_image_database_[i]->image_database_cache_.push_back(datum);
+				all_image_database_cache_[i].push_back(datum);
 			}
     
 			//Read the window. 
@@ -155,7 +164,7 @@ void GenericWindowDataLayer2<Dtype>::ReadWindowFile(){
 }
 
 template <typename Dtype>
-void GenericWindowDataLayer2<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
+void GenericWindowData2Layer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
       const vector<Blob<Dtype>*>& top) {
   // LayerSetUp runs through the window_file and creates structures
   // which store the filenames. 
@@ -179,13 +188,8 @@ void GenericWindowDataLayer2<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& 
       << this->layer_param_.generic_window_data_param().root_folder();
 
 	cache_images_      = this->layer_param_.generic_window_data_param().cache_images();
-  string root_folder = this->layer_param_.generic_window_data_param().root_folder();
 	is_random_crop_    = this->layer_param_.generic_window_data_param().random_crop();
-	if (is_random_crop_){
-    prefetch_rng_.reset(new Caffe::RNG(rand_seed_));
-	}else{
-		prefetch_rng_.reset();
-	}
+
 	LOG(INFO) << "Random cropping: " << is_random_crop_;
 	LOG(INFO) << "Crop Size: " 
       << this->layer_param_.generic_window_data_param().crop_size();
@@ -207,7 +211,20 @@ void GenericWindowDataLayer2<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& 
 	}
 	else{
 		channels_ = 3;
-	} 
+	}
+	
+	ReadWindowFile();	
+	ReadMean();
+	prefetch_rng_.clear();
+	prefetch_rng_.resize(img_group_size_);
+	for (int ii=0; ii < img_group_size_; ii++){ 
+		if (is_random_crop_){
+			prefetch_rng_[ii].reset(new Caffe::RNG(rand_seed_));
+		}else{
+			prefetch_rng_[ii].reset();
+		} 
+	}
+
 	//Data
 	top[0]->Reshape(batch_size_, img_group_size_ * channels_, crop_size, crop_size);
  	//Labels
@@ -228,23 +245,25 @@ void GenericWindowDataLayer2<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& 
 	
 	//Initialize the read_count to zero. 
 	read_count_ = 0;
-
-	ReadMean();
-	ReadWindowFiles();	
+	stream_data_.clear();
+	for (int ii=0; ii<img_group_size_; ii++){
+		Blob<Dtype>* dummy = new Blob<Dtype>(batch_size_, channels_, crop_size, crop_size);
+		stream_data_.push_back(dummy);
+	} 
 }
 
 
 template <typename Dtype>
-unsigned int GenericWindowDataLayer2<Dtype>::PrefetchRand() {
-  CHECK(prefetch_rng_);
+unsigned int GenericWindowData2Layer<Dtype>::PrefetchRand(int streamNum) {
+  CHECK(prefetch_rng_[streamNum]);
   caffe::rng_t* prefetch_rng =
-      static_cast<caffe::rng_t*>(prefetch_rng_->generator());
+      static_cast<caffe::rng_t*>(prefetch_rng_[streamNum]->generator());
   return (*prefetch_rng)();
 }
 
 // Thread fetching the data
 template <typename Dtype>
-void GenericWindowDataLayer2<Dtype>::ReadData() {
+void GenericWindowData2Layer<Dtype>::ReadData(int streamNum, Dtype* top_data) {
 	CPUTimer batch_timer;
   batch_timer.Start();
   double read_time = 0;
@@ -272,10 +291,12 @@ void GenericWindowDataLayer2<Dtype>::ReadData() {
 
   bool use_square = (crop_mode == "square") ? true : false;
 
-  // zero out batch
-  caffe_set(batch->data_.count(), Dtype(0), top_data);
   const int num_samples = static_cast<int>(static_cast<float>(batch_size));
-
+	//Get the data for this stream
+	vector<Datum> image_database_cache_ = all_image_database_cache_[streamNum];
+	vector<vector<float> > windows_     = all_windows_[streamNum];
+	vector<std::pair<std::string, vector<int> > >image_database_ 
+                                      = all_image_database_[streamNum]; 	
 	if (windows_.size() < num_examples_){
 		LOG(INFO) << "###### CRASHING: WINDOWS ARE NOT INITALIZED ######";
 	}	
@@ -290,7 +311,7 @@ void GenericWindowDataLayer2<Dtype>::ReadData() {
 		//					<< " Read Count: " << read_count_;
 		vector<float> window = windows_[read_count_];
 
-		bool do_mirror = mirror && PrefetchRand() % 2;
+		bool do_mirror = mirror && PrefetchRand(streamNum) % 2;
 
 		//Get the image
 		cv::Mat cv_img;
@@ -325,8 +346,8 @@ void GenericWindowDataLayer2<Dtype>::ReadData() {
 		if (is_random_crop_){
 			int maxHeightSt = std::max(0, imHeight - crop_size);
 			int maxWidthSt  = std::max(0, imWidth - crop_size);
-			const unsigned int rand_index_h = PrefetchRand();
-			const unsigned int rand_index_w = PrefetchRand();
+			const unsigned int rand_index_h = PrefetchRand(streamNum);
+			const unsigned int rand_index_w = PrefetchRand(streamNum);
 			x1 = rand_index_w % maxWidthSt;
 			y1 = rand_index_h % maxHeightSt;
 			x2 = x1 + crop_size - 1;
@@ -520,7 +541,7 @@ void GenericWindowDataLayer2<Dtype>::ReadData() {
 
 // Thread fetching the data
 template <typename Dtype>
-void GenericWindowDataLayer2<Dtype>::load_batch(Batch<Dtype>* batch) {
+void GenericWindowData2Layer<Dtype>::load_batch(Batch<Dtype>* batch) {
   // At each iteration, sample N windows where N*p are foreground (object)
   // windows and N*(1-p) are background (non-object) windows
   CPUTimer batch_timer;
@@ -539,13 +560,6 @@ void GenericWindowDataLayer2<Dtype>::load_batch(Batch<Dtype>* batch) {
 	dummy_bottom.clear();
   caffe_set(batch->data_.count(), Dtype(0), top_data);
 
-	//First make sure that threads of CropDataLayer have done some work.
-	for (int i = 0; i < img_group_size_; i++){
-		Batch<Dtype>* tmpBatch;
-		bool isData = crop_data_layers_[i]->prefetch_full_.try_peek(&tmpBatch);
-		LOG(INFO) << "PEEKING" << isData;
-	} 	 
-
 	// Copy the labels
 	for (int n=0; n < batch_size_; n++){
 		for (int l=0; l < label_size_; l++){
@@ -561,15 +575,14 @@ void GenericWindowDataLayer2<Dtype>::load_batch(Batch<Dtype>* batch) {
 	
 	//Do a forward pass on the CropData layers
 	for (int i=0; i<img_group_size_; i++){
-		crop_data_layers_[i]->Forward(dummy_bottom, crop_tops_vec_[i]);
-		CHECK_EQ(read_count_, crop_data_layers_[i]->read_count_);
+		ReadData(i, stream_data_[i]->mutable_cpu_data());
 	}
 
 	// Copy and interleave the data appropriately.
 	const int imSz = channels_ *  crop_size_ * crop_size_;
 	for (int n=0; n < batch_size_; n++){
 		for (int i=0; i < img_group_size_; i++){
-			caffe_copy(imSz, crop_tops_vec_[i][0]->cpu_data() + n * imSz,
+			caffe_copy(imSz, stream_data_[i]->cpu_data() + n * imSz,
 									top_data);
 			top_data += imSz;
 		}	
@@ -586,7 +599,7 @@ void GenericWindowDataLayer2<Dtype>::load_batch(Batch<Dtype>* batch) {
   DLOG(INFO) << "Transform time: " << trans_time / 1000 << " ms.";
 }
 
-INSTANTIATE_CLASS(GenericWindowDataLayer2);
+INSTANTIATE_CLASS(GenericWindowData2Layer);
 REGISTER_LAYER_CLASS(GenericWindowData2);
 
 }  // namespace caffe
