@@ -27,7 +27,7 @@ namespace caffe {
 
 template <typename Dtype>
 GenericWindowDataLayer<Dtype>::~GenericWindowDataLayer<Dtype>() {
-  this->JoinPrefetchThread();
+  this->StopInternalThread();
 }
 
 template <typename Dtype>
@@ -93,14 +93,18 @@ void GenericWindowDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& b
 		channels_ = 3;
 	} 
 	top[0]->Reshape(batch_size_, img_group_size_ * channels_, crop_size, crop_size);
-	this->prefetch_data_.Reshape(batch_size_, img_group_size_ * channels_, crop_size, crop_size);
-  LOG(INFO) << "output data size: " << top[0]->num() << ", "
+  for (int i = 0; i < this->PREFETCH_COUNT; ++i) {
+		this->prefetch_[i].data_.Reshape(batch_size_, img_group_size_ * channels_, crop_size, crop_size);
+	} 
+ LOG(INFO) << "output data size: " << top[0]->num() << ", "
       << top[0]->channels() << "," << top[0]->height() << ", "
       << top[0]->width();
  
 	// label
   top[1]->Reshape(batch_size_, label_size_, 1, 1);
-  this->prefetch_label_.Reshape(batch_size_, label_size_, 1, 1);
+  for (int i = 0; i < this->PREFETCH_COUNT; ++i) {
+		this->prefetch_[i].label_.Reshape(batch_size_, label_size_, 1, 1);
+  }
 
 	//Initialize the read_count to zero. 
 	read_count_ = 0;	
@@ -207,7 +211,7 @@ void GenericWindowDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& b
 		LOG(INFO) << "Number of windows: "
 			        << crop_data_layers_[i]->windows_.size();
 		crop_data_layers_[i]->is_ready_ = true;
-		crop_data_layers_[i]->CreatePrefetchThread();
+		//crop_data_layers_[i]->CreatePrefetchThread();
 	}
 }
 
@@ -221,7 +225,7 @@ unsigned int GenericWindowDataLayer<Dtype>::PrefetchRand() {
 
 // Thread fetching the data
 template <typename Dtype>
-void GenericWindowDataLayer<Dtype>::InternalThreadEntry() {
+void GenericWindowDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
   // At each iteration, sample N windows where N*p are foreground (object)
   // windows and N*(1-p) are background (non-object) windows
   CPUTimer batch_timer;
@@ -231,18 +235,20 @@ void GenericWindowDataLayer<Dtype>::InternalThreadEntry() {
   CPUTimer timer;
 
 	//Intialize the variables. 	
-	Dtype* top_data    = this->prefetch_data_.mutable_cpu_data();
-  Dtype* top_label   = this->prefetch_label_.mutable_cpu_data();
+	Dtype* top_data    = batch->data_.mutable_cpu_data();
+  Dtype* top_label   = batch->label_.mutable_cpu_data();
 	const Dtype* label = labels_->cpu_data();	
 
 	// zero out batch
 	std::vector<Blob<Dtype>*> dummy_bottom;
 	dummy_bottom.clear();
-  caffe_set(this->prefetch_data_.count(), Dtype(0), top_data);
+  caffe_set(batch->data_.count(), Dtype(0), top_data);
 
-	//First make sure that threads of CropDataLayer have ended.
+	//First make sure that threads of CropDataLayer have done some work.
 	for (int i = 0; i < img_group_size_; i++){
-		crop_data_layers_[i]->JoinPrefetchThread();
+		Batch<Dtype>* tmpBatch;
+		bool isData = crop_data_layers_[i]->prefetch_full_.try_peek(&tmpBatch);
+		LOG(INFO) << "PEEKING" << isData;
 	} 	 
 
 	// Copy the labels
@@ -260,8 +266,8 @@ void GenericWindowDataLayer<Dtype>::InternalThreadEntry() {
 	
 	//Do a forward pass on the CropData layers
 	for (int i=0; i<img_group_size_; i++){
-		CHECK_EQ(read_count_, crop_data_layers_[i]->read_count_);
 		crop_data_layers_[i]->Forward(dummy_bottom, crop_tops_vec_[i]);
+		CHECK_EQ(read_count_, crop_data_layers_[i]->read_count_);
 	}
 
 	// Copy and interleave the data appropriately.
@@ -275,9 +281,9 @@ void GenericWindowDataLayer<Dtype>::InternalThreadEntry() {
 	}
 	
 	//Start Threads for CropData layers.
-	for (int i = 0; i < img_group_size_; i++){
-		crop_data_layers_[i]->CreatePrefetchThread();
-	}
+	//for (int i = 0; i < img_group_size_; i++){
+	//	crop_data_layers_[i]->CreatePrefetchThread();
+	//}
 	
   batch_timer.Stop();
   DLOG(INFO) << "Generic Window Prefetch batch: " << batch_timer.MilliSeconds() << " ms.";

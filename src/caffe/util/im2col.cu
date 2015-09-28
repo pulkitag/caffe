@@ -413,6 +413,7 @@ void filtercol2im_gpu(const Dtype* data_col, const int channels,
       num_kernels, data_col, height, width, channels, patch_h, patch_w,
       pad_h, pad_w, stride_h, stride_w,
       height_col, width_col, data_im);
+}
 
 template <typename Dtype, int num_axes>
 __global__ void col2im_nd_gpu_kernel(const int n, const Dtype* data_col,

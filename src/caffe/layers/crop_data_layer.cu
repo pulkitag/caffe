@@ -6,20 +6,26 @@ namespace caffe {
 template <typename Dtype>
 void CropDataLayer<Dtype>::Forward_gpu(
     const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top) {
+	LOG(INFO) << "I AM AT WORK ####################### GPU ###################";
   //The thread joining will be taked care by GenericWindowData Layer
 	// Check that thread has already ended. 
   CHECK(!this->is_started());
+	Batch<Dtype>* batch = this->prefetch_full_.pop("Data layer prefetch queue empty");
   // Reshape to loaded data.
-  top[0]->Reshape(this->prefetch_data_.num(), this->prefetch_data_.channels(),
-      this->prefetch_data_.height(), this->prefetch_data_.width());
+  top[0]->ReshapeLike(batch->data_);
   // Copy the data
-  caffe_copy(this->prefetch_data_.count(), this->prefetch_data_.cpu_data(),
-      top[0]->mutable_gpu_data());
+  caffe_copy(batch->data_.count(), batch->data_.gpu_data(),
+             top[0]->mutable_gpu_data());
+  DLOG(INFO) << "Prefetch copied";
   if (this->output_labels_) {
-    caffe_copy(this->prefetch_label_.count(), this->prefetch_label_.cpu_data(),
+    // Reshape to loaded labels.
+    top[1]->ReshapeLike(batch->label_);
+    caffe_copy(batch->label_.count(), batch->label_.gpu_data(),
         top[1]->mutable_gpu_data());
   }
-  //New prefetch thread will be started by GenericWindowData layer.
+	//New thread will be created by GenericWindowData Layer
+  CUDA_CHECK(cudaStreamSynchronize(cudaStreamDefault));
+  this->prefetch_free_.push(batch);
 }
 
 INSTANTIATE_LAYER_GPU_FORWARD(CropDataLayer);

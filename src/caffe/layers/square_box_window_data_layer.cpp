@@ -27,7 +27,7 @@ namespace caffe {
 
 template <typename Dtype>
 SquareBoxDataLayer<Dtype>::~SquareBoxDataLayer<Dtype>() {
-  this->JoinPrefetchThread();
+  this->StopInternalThread();
 }
 
 template <typename Dtype>
@@ -119,14 +119,18 @@ void SquareBoxDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& botto
   CHECK_GT(crop_size, 0);
   const int batch_size = this->layer_param_.square_box_data_param().batch_size();
   top[0]->Reshape(batch_size, channels, crop_size, crop_size);
-  this->prefetch_data_.Reshape(batch_size, channels, crop_size, crop_size);
 
+  for (int i = 0; i < this->PREFETCH_COUNT; ++i) {
+		this->prefetch_[i].data_.Reshape(batch_size, channels, crop_size, crop_size);
+	}
   LOG(INFO) << "output data size: " << top[0]->num() << ","
       << top[0]->channels() << "," << top[0]->height() << ","
       << top[0]->width();
   // label
   top[1]->Reshape(batch_size, 1, 1, 1);
-  this->prefetch_label_.Reshape(batch_size, 1, 1, 1);
+  for (int i = 0; i < this->PREFETCH_COUNT; ++i) {
+    this->prefetch_[i].label_.Reshape(batch_size, 1, 1, 1);
+  }
 
   // data mean
   has_mean_file_ = this->transform_param_.has_mean_file();
@@ -166,7 +170,7 @@ unsigned int SquareBoxDataLayer<Dtype>::PrefetchRand() {
 
 // Thread fetching the data
 template <typename Dtype>
-void SquareBoxDataLayer<Dtype>::InternalThreadEntry() {
+void SquareBoxDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
   // At each iteration, sample N windows where N*p are foreground (object)
   // windows and N*(1-p) are background (non-object) windows
   CPUTimer batch_timer;
@@ -174,8 +178,8 @@ void SquareBoxDataLayer<Dtype>::InternalThreadEntry() {
   double read_time = 0;
   double trans_time = 0;
   CPUTimer timer;
-  Dtype* top_data = this->prefetch_data_.mutable_cpu_data();
-  Dtype* top_label = this->prefetch_label_.mutable_cpu_data();
+  Dtype* top_data  = batch->data_.mutable_cpu_data();
+  Dtype* top_label = batch->label_.mutable_cpu_data();
   const int batch_size = this->layer_param_.square_box_data_param().batch_size();
  	const Dtype mn_bxsz_by_imsz = this->layer_param_.square_box_data_param().mn_bxsz_by_imsz();
  	const Dtype mx_bxsz_by_imsz = this->layer_param_.square_box_data_param().mx_bxsz_by_imsz();
@@ -196,7 +200,7 @@ void SquareBoxDataLayer<Dtype>::InternalThreadEntry() {
 
 	LOG(INFO) << "LOC 0";
   // zero out batch
-  caffe_set(this->prefetch_data_.count(), Dtype(0), top_data);
+  caffe_set(batch->data_.count(), Dtype(0), top_data);
 
   int item_id = 0;
 	for (int dummy = 0; dummy < batch_size; ++dummy) {

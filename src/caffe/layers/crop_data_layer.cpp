@@ -27,7 +27,7 @@ namespace caffe {
 
 template <typename Dtype>
 CropDataLayer<Dtype>::~CropDataLayer<Dtype>() {
-  this->JoinPrefetchThread();
+  this->StopInternalThread();
 }
 
 template <typename Dtype>
@@ -77,7 +77,9 @@ void CropDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
   const int batch_size = this->layer_param_.generic_window_data_param().batch_size();
   const int channels = top[0]->channels();
 	channels_ = channels;
-  this->prefetch_data_.Reshape(batch_size, channels, crop_size, crop_size);
+	for (int i = 0; i < this->PREFETCH_COUNT; ++i){
+		this->prefetch_[i].data_.Reshape(batch_size, channels, crop_size, crop_size);
+	}
   LOG(INFO) << "output data size: " << top[0]->num() << ","
       << top[0]->channels() << "," << top[0]->height() << ","
       << top[0]->width();
@@ -125,7 +127,7 @@ unsigned int CropDataLayer<Dtype>::PrefetchRand() {
 
 // Thread fetching the data
 template <typename Dtype>
-void CropDataLayer<Dtype>::InternalThreadEntry() {
+void CropDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
   // At each iteration, sample N windows where N*p are foreground (object)
   // windows and N*(1-p) are background (non-object) windows
   
@@ -139,7 +141,8 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
   double read_time = 0;
   double trans_time = 0;
   CPUTimer timer;
-  Dtype* top_data       = this->prefetch_data_.mutable_cpu_data();
+  Dtype* top_data       = batch->data_.mutable_cpu_data();
+  //Dtype* top_label      = batch->label_.mutable_cpu_data();
   const Dtype scale     = this->layer_param_.generic_window_data_param().scale();
   const int batch_size  = this->layer_param_.generic_window_data_param().batch_size();
   const int context_pad = this->layer_param_.generic_window_data_param().context_pad();
@@ -163,7 +166,7 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
   bool use_square = (crop_mode == "square") ? true : false;
 
   // zero out batch
-  caffe_set(this->prefetch_data_.count(), Dtype(0), top_data);
+  caffe_set(batch->data_.count(), Dtype(0), top_data);
   const int num_samples = static_cast<int>(static_cast<float>(batch_size));
 
 	if (windows_.size() < num_examples_){
@@ -296,38 +299,6 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
 			cv_crop_size.width  = std::min(cv_crop_size.width, crop_size);
 			cv_crop_size.height = std::min(cv_crop_size.height, crop_size);
 			//##### End No Padding Change #####
-
-			/*
-			// REMOVING PADDING - I DON't LIKE IT.
-			// RCNN PADS. 
-			// size to warp the clipped expanded region to
-			cv_crop_size.width =
-					static_cast<int>(round(static_cast<Dtype>(clipped_width)*scale_x));
-			cv_crop_size.height =
-					static_cast<int>(round(static_cast<Dtype>(clipped_height)*scale_y));
-			
-			pad_x1 = static_cast<int>(round(static_cast<Dtype>(pad_x1)*scale_x));
-			pad_x2 = static_cast<int>(round(static_cast<Dtype>(pad_x2)*scale_x));
-			pad_y1 = static_cast<int>(round(static_cast<Dtype>(pad_y1)*scale_y));
-			pad_y2 = static_cast<int>(round(static_cast<Dtype>(pad_y2)*scale_y));
-			pad_h = pad_y1;
-			// if we're mirroring, we mirror the padding too (to be pedantic)
-			if (do_mirror) {
-				pad_w = pad_x2;
-			} else {
-				pad_w = pad_x1;
-			}
-
-			// ensure that the warped, clipped region plus the padding fits in the
-			// crop_size x crop_size image (it might not due to rounding)
-			if (pad_h + cv_crop_size.height > crop_size) {
-				cv_crop_size.height = crop_size - pad_h;
-			}
-			if (pad_w + cv_crop_size.width > crop_size) {
-				cv_crop_size.width = crop_size - pad_w;
-			}
-			*/
-
 		}
 
 		//Clip the image
@@ -432,6 +403,7 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
 
 		item_id++;
 		read_count_++;
+		//If the end of the window file is reached. 
 		if (read_count_ == num_examples_){
 			read_count_ = 0;
 			LOG(INFO) << "Resetting read_count";
@@ -446,22 +418,23 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
 template <typename Dtype>
 void CropDataLayer<Dtype>::Forward_cpu(
     const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top) {
-
-  //The thread joining will be taked care by GenericWindowData Layer
-	// Check that thread has already ended. 
-  CHECK(!this->is_started());
+	
+	LOG(INFO) << "I AM AT WORK";
+  Batch<Dtype>* batch = this->prefetch_full_.pop("Data layer prefetch queue empty");
   // Reshape to loaded data.
-  top[0]->Reshape(this->prefetch_data_.num(), this->prefetch_data_.channels(),
-      this->prefetch_data_.height(), this->prefetch_data_.width());
+  top[0]->ReshapeLike(batch->data_);
   // Copy the data
-  caffe_copy(this->prefetch_data_.count(), this->prefetch_data_.cpu_data(),
+  caffe_copy(batch->data_.count(), batch->data_.cpu_data(),
              top[0]->mutable_cpu_data());
   DLOG(INFO) << "Prefetch copied";
   if (this->output_labels_) {
-    caffe_copy(this->prefetch_label_.count(), this->prefetch_label_.cpu_data(),
-               top[1]->mutable_cpu_data());
+    // Reshape to loaded labels.
+    top[1]->ReshapeLike(batch->label_);
+    caffe_copy(batch->label_.count(), batch->label_.cpu_data(),
+        top[1]->mutable_cpu_data());
   }
 	//New thread will be created by GenericWindowData Layer
+  this->prefetch_free_.push(batch);
 }
 
 

@@ -363,7 +363,6 @@ message LayerParameter {
   optional DummyDataParameter dummy_data_param = 109;
   optional EltwiseParameter eltwise_param = 110;
 	optional EuclideanLossParameter euclideanloss_param = 1001;
-  optional ExpParameter exp_param = 111;
 	optional GenericWindowDataParameter generic_window_data_param = 1003;
   optional EmbedParameter embed_param = 137;
   optional ExpParameter exp_param = 111;
@@ -609,6 +608,7 @@ message EuclideanLossParameter {
 	optional bool   is_normalized = 1 [default = false];
 	//Whether to use the first or the second input to normalize. 
 	optional uint32 normalize_choice = 2 [default = 0];
+}
 
 // Message that stores parameters used by EmbedLayer
 message EmbedParameter {
