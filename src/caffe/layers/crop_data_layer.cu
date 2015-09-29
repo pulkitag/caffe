@@ -6,10 +6,7 @@ namespace caffe {
 template <typename Dtype>
 void CropDataLayer<Dtype>::Forward_gpu(
     const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top) {
-	LOG(INFO) << "I AM AT WORK ####################### GPU ###################";
-  //The thread joining will be taked care by GenericWindowData Layer
-	// Check that thread has already ended. 
-  CHECK(!this->is_started());
+	//LOG(INFO) << "I AM AT WORK ####################### GPU ###################";
 	Batch<Dtype>* batch = this->prefetch_full_.pop("Data layer prefetch queue empty");
   // Reshape to loaded data.
   top[0]->ReshapeLike(batch->data_);

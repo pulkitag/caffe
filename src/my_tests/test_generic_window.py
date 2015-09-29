@@ -6,14 +6,16 @@ import caffe
 import os
 import scipy.misc as scm
 
-sFile =  "/data0/pulkitag/kitti/window-files/test_mxDiff-7_pose-sigMotion_nrmlz-zScoreScaleSeperate_imSz256_concat-fc6_nTe-10000.txt"
-rootFolder = "/data0/pulkitag/data_sets/kitti/odometry/dataset/sequences/imSz256/" 
+sFile =  "/data1/pulkitag/kitti/window-files/test_mxDiff-7_pose-sigMotion_nrmlz-zScoreScaleSeperate_imSz256_concat-fc6_nTe-10000.txt"
+#rootFolder = "/data1/pulkitag/data_sets/kitti/odometry/dataset/sequences/imSz256/" 
+rootFolder = "/data1/pulkitag/data_sets/kitti/odometry/dataset/sequences/asJpg/" 
 
 #rootFolder = "/data1/pulkitag/data_sets/pascal_3d/PASCAL3D+_release1.1/Images/"
 #sFile       = '/data1/pulkitag/data_sets/pascal_3d/my/window_file_val.txt'
 
 def get_protofile(isGray=False, isSF=False):
-	protoDir = '/work4/pulkitag-code/pkgs/caffe-v2-3/src/my_tests/'
+	protoDir = '/home/ubuntu/caffe-v2-3/src/my_tests/' 
+	#protoDir   = '/work4/pulkitag-code/pkgs/caffe-v2-3/src/my_tests/'
 	if isGray:
 		protoFile = os.path.join(protoDir, 'generic_window_gray.prototxt')
 	else:

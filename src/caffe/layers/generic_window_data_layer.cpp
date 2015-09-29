@@ -257,12 +257,12 @@ void GenericWindowDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
 
 	//First make sure that threads of CropDataLayer have done some work.
 	for (int i = 0; i < img_group_size_; i++){
-		LOG(INFO) << "WAITING";
+		//LOG(INFO) << "WAITING";
 		Batch<Dtype>* batch = crop_data_layers_[i]->prefetch_full_.pop("STUCK :( ");
 		crop_data_layers_[i]->prefetch_full_.push(batch);
 		//Batch<Dtype>* tmpBatch;
 		//bool isData = crop_data_layers_[i]->prefetch_full_.try_peek(&tmpBatch);
-		LOG(INFO) << "PEEKING";
+		//LOG(INFO) << "PEEKING";
 	} 	 
 
 	// Copy the labels
@@ -272,7 +272,7 @@ void GenericWindowDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
 			top_label += 1;
 		}
 		read_count_ += 1;
-		LOG(INFO) << "READ COUNT " << read_count_; 
+		//LOG(INFO) << "READ COUNT " << read_count_; 
 		if (read_count_ >= num_examples_){
 			read_count_ = 0;
 			LOG(INFO) << "Resetting read_count";

@@ -135,7 +135,7 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
   }
 #endif
 	while (!is_ready_){
-		LOG_EVERY_N(INFO, 1000) << "RESCUE ME";
+		LOG_EVERY_N(INFO, 1000000) << "RESCUE ME";
 		//Do Nothing
 	}
 
@@ -170,7 +170,7 @@ void CropDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
   // At each iteration, sample N windows where N*p are foreground (object)
   // windows and N*(1-p) are background (non-object) windows
   
-	LOG(INFO) << "###### READY AT ENTRY ##### " << is_ready_;
+	//LOG(INFO) << "###### READY AT ENTRY ##### " << is_ready_;
 
 	if (!is_ready_){
 		LOG(INFO) << "###### CropDataLayer is not ready ######";
@@ -463,7 +463,7 @@ template <typename Dtype>
 void CropDataLayer<Dtype>::Forward_cpu(
     const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top) {
 	
-	LOG(INFO) << "I AM AT WORK";
+	//LOG(INFO) << "I AM AT WORK";
   Batch<Dtype>* batch = this->prefetch_full_.pop("Data layer prefetch queue empty");
   // Reshape to loaded data.
   top[0]->ReshapeLike(batch->data_);
