@@ -86,7 +86,12 @@ void GenericWindowData2Layer<Dtype>::ReadWindowFile(){
 	//Initialize the database
 	all_image_database_.clear();
 	all_image_database_.resize(img_group_size_);
+	all_image_database_cache_.clear();
+	all_image_database_cache_.resize(img_group_size_);
 
+	//Intialize the store for labels
+	labels_.reset(new Blob<Dtype>(num_examples_, label_size_,1,1));
+	
 	LOG(INFO) << "Processing Image and labels";
 	Dtype* label_data = labels_->mutable_cpu_data(); 
 	string tmp_hash;
@@ -229,7 +234,6 @@ void GenericWindowData2Layer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& 
 	top[0]->Reshape(batch_size_, img_group_size_ * channels_, crop_size, crop_size);
  	//Labels
   top[1]->Reshape(batch_size_, label_size_, 1, 1);
-	labels_.reset(new Blob<Dtype>(num_examples_, label_size_,1,1));
   
 	for (int i = 0; i < this->PREFETCH_COUNT; ++i) {
 		this->prefetch_[i].data_.Reshape(batch_size_, 
@@ -269,6 +273,8 @@ void GenericWindowData2Layer<Dtype>::ReadData(int streamNum, Dtype* top_data) {
   double read_time = 0;
   double trans_time = 0;
   CPUTimer timer;
+	LOG(INFO) << "READ 1";
+
   const Dtype scale     = this->layer_param_.generic_window_data_param().scale();
   const int batch_size  = this->layer_param_.generic_window_data_param().batch_size();
   const int context_pad = this->layer_param_.generic_window_data_param().context_pad();
@@ -291,18 +297,24 @@ void GenericWindowData2Layer<Dtype>::ReadData(int streamNum, Dtype* top_data) {
 
   bool use_square = (crop_mode == "square") ? true : false;
 
+	LOG(INFO) << "READ 2";
   const int num_samples = static_cast<int>(static_cast<float>(batch_size));
 	//Get the data for this stream
+	LOG(INFO) << "L1";
 	vector<Datum> image_database_cache_ = all_image_database_cache_[streamNum];
+	LOG(INFO) << "L2";
 	vector<vector<float> > windows_     = all_windows_[streamNum];
+	LOG(INFO) << "L3";
 	vector<std::pair<std::string, vector<int> > >image_database_ 
                                       = all_image_database_[streamNum]; 	
+	LOG(INFO) << "L4";
 	if (windows_.size() < num_examples_){
 		LOG(INFO) << "###### CRASHING: WINDOWS ARE NOT INITALIZED ######";
 	}	
 	//Assert windows_ are not empty
 	CHECK_EQ(windows_.size(), num_examples_);
 
+	LOG(INFO) << "READ 3";
   int item_id = 0;
 	for (int dummy = 0; dummy < num_samples; ++dummy) {
 		// sample a window
@@ -448,9 +460,10 @@ void GenericWindowData2Layer<Dtype>::ReadData(int streamNum, Dtype* top_data) {
 		for (int h = 0; h < cv_cropped_img.rows; ++h) {
 			const uchar* ptr = cv_cropped_img.ptr<uchar>(h);
 			int img_index = 0;
+			int top_index;
 			for (int w = 0; w < cv_cropped_img.cols; ++w) {
 				for (int c = 0; c < channels; ++c) {
-					int top_index = ((item_id * channels + c) * crop_size + h)
+					top_index = ((item_id * channels + c) * crop_size + h)
 									 * crop_size + w ;
 					Dtype pixel = static_cast<Dtype>(ptr[img_index++]);
 					if (this->has_mean_file_) {
@@ -466,6 +479,7 @@ void GenericWindowData2Layer<Dtype>::ReadData(int streamNum, Dtype* top_data) {
 					}
 				}
 			}
+			LOG(INFO) << top_data[top_index];
 		}
 	//END WITHOUT PADDING
 		/*
@@ -536,6 +550,7 @@ void GenericWindowData2Layer<Dtype>::ReadData(int streamNum, Dtype* top_data) {
 			LOG(INFO) << "Resetting read_count";
 		}
 	}
+	LOG(INFO) << "IMAGES READ!!";
 }
 
 
@@ -550,6 +565,7 @@ void GenericWindowData2Layer<Dtype>::load_batch(Batch<Dtype>* batch) {
   double trans_time = 0;
   CPUTimer timer;
 
+	LOG(INFO) << "CHECK 1";
 	//Intialize the variables. 	
 	Dtype* top_data    = batch->data_.mutable_cpu_data();
   Dtype* top_label   = batch->label_.mutable_cpu_data();
@@ -560,6 +576,7 @@ void GenericWindowData2Layer<Dtype>::load_batch(Batch<Dtype>* batch) {
 	dummy_bottom.clear();
   caffe_set(batch->data_.count(), Dtype(0), top_data);
 
+	LOG(INFO) << "CHECK 2";
 	// Copy the labels
 	for (int n=0; n < batch_size_; n++){
 		for (int l=0; l < label_size_; l++){
@@ -573,6 +590,7 @@ void GenericWindowData2Layer<Dtype>::load_batch(Batch<Dtype>* batch) {
 		}
 	}
 	
+	LOG(INFO) << "CHECK 3";
 	//Do a forward pass on the CropData layers
 	for (int i=0; i<img_group_size_; i++){
 		ReadData(i, stream_data_[i]->mutable_cpu_data());

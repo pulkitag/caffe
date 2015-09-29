@@ -211,7 +211,18 @@ void GenericWindowDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& b
 		LOG(INFO) << "Number of windows: "
 			        << crop_data_layers_[i]->windows_.size();
 		crop_data_layers_[i]->is_ready_ = true;
-		//crop_data_layers_[i]->CreatePrefetchThread();
+	
+	/*
+		LOG(INFO) << "Popping " << "Size: " << 
+			crop_data_layers_[i]->prefetch_free_.size() << 
+			"READINESS " << crop_data_layers_[i]->is_ready_;
+		Batch<Dtype>* batch = crop_data_layers_[i]->prefetch_free_.pop();
+		LOG(INFO) << "Loading batch";
+		crop_data_layers_[i]->load_batch(batch);
+		LOG(INFO) << "Pushing";
+		crop_data_layers_[i]->prefetch_full_.push(batch);
+		LOG(INFO) << "This is done";
+	*/
 	}
 }
 
@@ -246,9 +257,12 @@ void GenericWindowDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
 
 	//First make sure that threads of CropDataLayer have done some work.
 	for (int i = 0; i < img_group_size_; i++){
-		Batch<Dtype>* tmpBatch;
-		bool isData = crop_data_layers_[i]->prefetch_full_.try_peek(&tmpBatch);
-		LOG(INFO) << "PEEKING" << isData;
+		LOG(INFO) << "WAITING";
+		Batch<Dtype>* batch = crop_data_layers_[i]->prefetch_full_.pop("STUCK :( ");
+		crop_data_layers_[i]->prefetch_full_.push(batch);
+		//Batch<Dtype>* tmpBatch;
+		//bool isData = crop_data_layers_[i]->prefetch_full_.try_peek(&tmpBatch);
+		LOG(INFO) << "PEEKING";
 	} 	 
 
 	// Copy the labels
@@ -258,6 +272,7 @@ void GenericWindowDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
 			top_label += 1;
 		}
 		read_count_ += 1;
+		LOG(INFO) << "READ COUNT " << read_count_; 
 		if (read_count_ >= num_examples_){
 			read_count_ = 0;
 			LOG(INFO) << "Resetting read_count";

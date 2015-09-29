@@ -1,5 +1,6 @@
 #include <opencv2/highgui/highgui_c.h>
 #include <stdint.h>
+#include <boost/thread.hpp>
 
 #include <algorithm>
 #include <map>
@@ -125,14 +126,56 @@ unsigned int CropDataLayer<Dtype>::PrefetchRand() {
   return (*prefetch_rng)();
 }
 
+template <typename Dtype>
+void CropDataLayer<Dtype>::InternalThreadEntry() {
+#ifndef CPU_ONLY
+  cudaStream_t stream;
+  if (Caffe::mode() == Caffe::GPU) {
+    CUDA_CHECK(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
+  }
+#endif
+	while (!is_ready_){
+		LOG_EVERY_N(INFO, 1000) << "RESCUE ME";
+		//Do Nothing
+	}
+
+	LOG(INFO) << "I AM STARTING >>> YEAH";
+  try {
+    while (!this->must_stop()) {
+      Batch<Dtype>* batch = this->prefetch_free_.pop();
+  		LOG(INFO) << "BATCH LOADING ROUTINE";
+	    load_batch(batch);
+#ifndef CPU_ONLY
+      if (Caffe::mode() == Caffe::GPU) {
+        batch->data_.data().get()->async_gpu_push(stream);
+        CUDA_CHECK(cudaStreamSynchronize(stream));
+      }
+#endif
+      this->prefetch_full_.push(batch);
+    }
+  } catch (boost::thread_interrupted&) {
+    // Interrupted exception is expected on shutdown
+  }
+#ifndef CPU_ONLY
+  if (Caffe::mode() == Caffe::GPU) {
+    CUDA_CHECK(cudaStreamDestroy(stream));
+  }
+#endif
+}
+
+
 // Thread fetching the data
 template <typename Dtype>
 void CropDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
   // At each iteration, sample N windows where N*p are foreground (object)
   // windows and N*(1-p) are background (non-object) windows
   
+	LOG(INFO) << "###### READY AT ENTRY ##### " << is_ready_;
+
 	if (!is_ready_){
 		LOG(INFO) << "###### CropDataLayer is not ready ######";
+		//THis is necessary as otherwise the layer will stall. 
+		//this->prefetch_free_.push(batch);
 		return;
 	}
 
@@ -171,6 +214,7 @@ void CropDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
 
 	if (windows_.size() < num_examples_){
 		LOG(INFO) << "###### CRASHING: WINDOWS ARE NOT INITALIZED ######";
+		LOG(INFO) << windows_.size() << " " << num_examples_;
 	}	
 	//Assert windows_ are not empty
 	CHECK_EQ(windows_.size(), num_examples_);
@@ -433,7 +477,6 @@ void CropDataLayer<Dtype>::Forward_cpu(
     caffe_copy(batch->label_.count(), batch->label_.cpu_data(),
         top[1]->mutable_cpu_data());
   }
-	//New thread will be created by GenericWindowData Layer
   this->prefetch_free_.push(batch);
 }
 

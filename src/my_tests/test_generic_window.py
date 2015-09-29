@@ -13,7 +13,7 @@ rootFolder = "/data0/pulkitag/data_sets/kitti/odometry/dataset/sequences/imSz256
 #sFile       = '/data1/pulkitag/data_sets/pascal_3d/my/window_file_val.txt'
 
 def get_protofile(isGray=False, isSF=False):
-	protoDir = '/work4/pulkitag-code/pkgs/caffe-v2-2/src/my_tests/'
+	protoDir = '/work4/pulkitag-code/pkgs/caffe-v2-3/src/my_tests/'
 	if isGray:
 		protoFile = os.path.join(protoDir, 'generic_window_gray.prototxt')
 	else:
@@ -174,3 +174,7 @@ def save_pairs():
 			plt.savefig(sName1)
 			ax.imshow(im2)
 			plt.savefig(sName2)	
+
+
+if __name__ == '__main__':
+	compare_windows()	

@@ -36,6 +36,7 @@ BasePrefetchingDataLayer<Dtype>::BasePrefetchingDataLayer(
       prefetch_free_(), prefetch_full_() {
   for (int i = 0; i < PREFETCH_COUNT; ++i) {
     prefetch_free_.push(&prefetch_[i]);
+		LOG(INFO) << "CREATED PREFETCH_FREE " << prefetch_free_.size();
   }
 }
 
@@ -81,7 +82,8 @@ void BasePrefetchingDataLayer<Dtype>::InternalThreadEntry() {
   try {
     while (!must_stop()) {
       Batch<Dtype>* batch = prefetch_free_.pop();
-      load_batch(batch);
+  		LOG(INFO) << "BATCH LOADING ROUTINE";
+	    load_batch(batch);
 #ifndef CPU_ONLY
       if (Caffe::mode() == Caffe::GPU) {
         batch->data_.data().get()->async_gpu_push(stream);

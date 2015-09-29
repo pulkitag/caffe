@@ -75,7 +75,7 @@ class BasePrefetchingDataLayer :
       const vector<Blob<Dtype>*>& top);
 
   // Prefetches batches (asynchronously if to GPU memory)
-  static const int PREFETCH_COUNT = 3;
+  static const int PREFETCH_COUNT = 1;
 
  protected:
   virtual void InternalThreadEntry();
@@ -357,12 +357,12 @@ class GenericWindowData2Layer : public BasePrefetchingDataLayer<Dtype> {
 
   virtual inline const char* type() const { return "GenericWindowData2"; }
   virtual inline int ExactNumBottomBlobs() const { return 0; }
-  virtual inline int ExactNumTopBlobs() const { return 1; }
+  virtual inline int ExactNumTopBlobs() const { return 2; }
 
-	virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
-      const vector<Blob<Dtype>*>& top);
-  virtual void Forward_gpu(const vector<Blob<Dtype>*>& bottom,
-      const vector<Blob<Dtype>*>& top);
+	//virtual void Forward_cpu(const vector<Blob<Dtype>*>& bottom,
+  //    const vector<Blob<Dtype>*>& top);
+  //virtual void Forward_gpu(const vector<Blob<Dtype>*>& bottom,
+  //    const vector<Blob<Dtype>*>& top);
  
 	protected:
   virtual unsigned int PrefetchRand(int streamNum);
@@ -428,6 +428,7 @@ class CropDataLayer : public BasePrefetchingDataLayer<Dtype> {
       const vector<Blob<Dtype>*>& top);
  
 	protected:
+  virtual void InternalThreadEntry();
   virtual unsigned int PrefetchRand();
   virtual void load_batch(Batch<Dtype>* batch);
 
