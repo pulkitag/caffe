@@ -1,0 +1,642 @@
+#include <opencv2/highgui/highgui_c.h>
+#include <stdint.h>
+
+#include <algorithm>
+#include <map>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "opencv2/core/core.hpp"
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/imgproc/imgproc.hpp"
+
+#include "caffe/common.hpp"
+#include "caffe/data_layers.hpp"
+#include "caffe/layer.hpp"
+#include "caffe/util/benchmark.hpp"
+#include "caffe/util/io.hpp"
+#include "caffe/util/math_functions.hpp"
+#include "caffe/util/rng.hpp"
+
+
+
+
+
+namespace caffe {
+
+template <typename Dtype>
+NvideoframesDataLayer<Dtype>::~NvideoframesDataLayer<Dtype>() {
+  this->JoinPrefetchThread();
+}
+
+template <typename Dtype>
+void NvideoframesDataLayer<Dtype>::LayerSetUp(const vector<Blob<Dtype>*>& bottom,
+      const vector<Blob<Dtype>*>& top) {
+  //float NORMFORCE=0.0001;
+  //id_index=-1;
+  const bool prefetch_needs_rand = 1;
+  LOG(INFO) << "prefetch_needs_rand:" << prefetch_needs_rand;
+
+  if (prefetch_needs_rand) {
+    const unsigned int prefetch_rng_seed = caffe_rng_rand();
+    prefetch_rng_.reset(new Caffe::RNG(prefetch_rng_seed));
+  } else {
+    prefetch_rng_.reset();
+  }
+
+// tube file format
+// num video images
+// # imageindex imagepath imagesize
+// numboxes
+// imageindex xmin ymin xmax ymax id 
+
+  string hashtag;
+  int image_index, channels;
+  int prediction_horizon =this->layer_param_.window_data_param().prediction_horizon();
+  int nframes =this->layer_param_.nvideoframes_data_param().nframes();
+  LOG(INFO)<<"nframes:"<<nframes;
+  int useforce =this->layer_param_.window_data_param().useforce();
+  float NORMFORCE =this->layer_param_.window_data_param().normforce();
+  LOG(INFO)<<"NORMFORCE:"<<NORMFORCE;
+   const int NORMVEL = this->layer_param_.window_data_param().normvel();
+LOG(INFO)<<"NORMVEL:"<<NORMVEL;
+  LOG(INFO) <<"prediction_horizon:"<<prediction_horizon;
+    std::ifstream infile(this->layer_param_.window_data_param().source().c_str());
+    CHECK(infile.good()) << "Failed to open window file " 
+	<< this->layer_param_.window_data_param().source() << std::endl;
+	LOG(INFO)<<"READING FROM FILE:"<<this->layer_param_.window_data_param().source();
+	
+  // first read all the images
+   int num_video_images;
+  infile >> num_video_images;
+  for (int dummy=0;dummy <num_video_images; ++dummy) {
+     infile >> hashtag >> image_index;
+      CHECK_EQ(hashtag, "#");
+      // read image path
+  // LOG(INFO) << "image index" <<image_index;
+  string image_path;
+
+    vector<int> image_size(3);
+
+    infile >> image_path;
+    // read image dimensions
+
+    infile >> image_size[0] >> image_size[1] >> image_size[2];
+    channels = image_size[0]*nframes;
+    videoimage_database_.push_back(std::make_pair(image_path, image_size));
+
+
+
+     if (image_index % 10000 == 0) {
+      LOG(INFO) << "num: " << image_index << " "
+          << image_path << " "
+          << image_size[0] << " "
+          << image_size[1] << " "
+          << image_size[2] << " ";
+    }
+}
+
+    LOG(INFO) << "Number of video images: " << image_index+1;
+
+
+  // read the tracks
+      int num_boxes, num_ids;
+      infile >> num_boxes >> num_ids; 
+      tracks_.resize(num_ids);
+      // USE ONE TRACK FOR NOW
+      //tracks_.resize(1);
+    LOG(INFO) << "******Number of tracklet ids: " << num_ids;
+    LOG(INFO) << "******Number of boxes: " << num_boxes;
+      for (int i = 0; i < num_boxes; ++i) {
+        //LOG(INFO) << "box: " << i;
+	int image_index, id;
+	float forcex, forcey;
+	forcex=0;
+	forcey=0;
+	float x, y;
+	if (useforce)
+	{
+	  infile >>image_index  >> forcex >> forcey>> x >> y >> id;
+	// if (forcex!=0)
+	  //LOG(INFO)<<"using force!"<<" x:"<<forcex<<" y:"<<forcey;
+	}
+	else
+	infile >>image_index  >> x >> y  >> id;
+    
+	//LOG(INFO)<<" x1"<< x1<<"y1:" << y1<<"x2:" << x2<<"y2:" << y2 << "track_id:"<<id;
+	//SSSSSSSSSSSSOOOOOOOOOOOOOOSSSSSSSSSSSSSS
+	//if (id>0) break;
+        TargetBoxXY box;
+	box.image_index = image_index;
+	box.x = x;
+	box.y = y;
+
+	
+	  box.forcex=forcex*NORMFORCE;
+	  box.forcey=forcey*NORMFORCE;
+	
+	tracks_[id].push_back(box);
+    
+      }
+
+  LOG(INFO) << "read boxes...";
+ int crop_size = this->layer_param_.transform_param().crop_size();
+ CHECK_GT(crop_size, 0);
+
+ const int batch_size = this->layer_param_.window_data_param().batch_size();
+
+
+
+ LOG(INFO) << "reshaping...";
+
+ top[0]->Reshape(batch_size, channels, crop_size, crop_size);
+  this->prefetch_data_.Reshape(batch_size, channels, crop_size, crop_size);
+
+ top[1]->Reshape(batch_size, 1, 1, 1);
+  this->prefetch_cont_.Reshape(batch_size, 1, 1, 1);
+      // I want to predict velocities for each frame in the horizon
+ top[2]->Reshape(batch_size, 2*prediction_horizon, 1, 1);
+  this->prefetch_target_.Reshape(batch_size, 2*prediction_horizon, 1, 1);
+
+
+
+     
+
+  top[3]->Reshape(batch_size, 2*prediction_horizon, 1, 1);
+  this->prefetch_lossweights_.Reshape(batch_size, 2*prediction_horizon, 1, 1);
+//  LOG(INFO) << "loss weights size: " << top[7]->num() << ","
+//       << top[7]->channels() << "," << top[7]->height() << ","
+//       << top[7]->width(); 
+      
+        top[4]->Reshape(batch_size, 1, 1, 1);
+  this->prefetch_idtracks_.Reshape(batch_size, 1, 1, 1);
+//  LOG(INFO) << "id tracks size: " << top[8]->num() << ","
+//       << top[8]->channels() << "," << top[8]->height() << ","
+//       << top[8]->width(); 
+      
+      
+              top[5]->Reshape(batch_size, 1, 1, 1);
+  this->prefetch_iminds_.Reshape(batch_size, 1, 1, 1);
+/* LOG(INFO) << "iminds size: " << top[9]->num() << ","
+      << top[9]->channels() << "," << top[9]->height() << ","
+      << top[9]->width();*/ 
+      
+          top[6]->Reshape(batch_size, 2, 1, 1);
+  this->prefetch_force_.Reshape(batch_size, 2, 1, 1);
+//  LOG(INFO) << "force size: " << top[10]->num() << ","
+//       << top[10]->channels() << "," << top[10]->height() << ","
+//       << top[10]->width(); 
+
+  // check if we want to have mean
+  if (this->layer_param_.window_data_param().has_mean_file()) {
+    BlobProto blob_proto;
+    LOG(INFO) << "Loading mean file from" << this->layer_param_.window_data_param().mean_file();
+    ReadProtoFromBinaryFile(this->layer_param_.window_data_param().mean_file().c_str(), &blob_proto);
+    data_mean_.FromProto(blob_proto);
+    CHECK_EQ(data_mean_.num(), 1);
+    CHECK_EQ(data_mean_.width(), data_mean_.height());
+    CHECK_EQ(data_mean_.channels(), channels);
+  } else {
+    // Simply initialize an all-empty mean.
+    data_mean_.Reshape(1, channels, crop_size, crop_size);
+  }
+
+    this->data_transformer_.reset(
+      new DataTransformer<Dtype>(this->transform_param_, this->phase_));
+  this->data_transformer_->InitRand();
+  
+  
+  LOG(INFO) << "Initializing prefetch";
+  this->CreatePrefetchThread();
+  LOG(INFO) << "Prefetch initialized.";
+
+
+ LOG(INFO) << "$$$$$$$$$$$$END OF SETUP$$$$$$$$$";
+
+ id_index=0;
+ b_=-1;
+
+}// END OF SETUP FUNCTION
+
+template <typename Dtype>
+unsigned int NvideoframesDataLayer<Dtype>::PrefetchRand() {
+  CHECK(prefetch_rng_);
+  caffe::rng_t* prefetch_rng =
+      static_cast<caffe::rng_t*>(prefetch_rng_->generator());
+  return (*prefetch_rng)();
+}
+
+// Thread fetching the data
+/*
+template <typename Dtype>
+  void* NvideoframesDataLayerPrefetch(void* layer_pointer) {
+    NvideoframesDataLayer<Dtype>* layer = 
+	reinterpret_cast<NvideoframesDataLayer<Dtype>*>(layer_pointer);
+*/
+// Thread fetching the data
+template <typename Dtype>
+void NvideoframesDataLayer<Dtype>::load_batch(Batch<Dtype>* batch_sup) {
+   float NORM=0.1;
+	 BatchNvideo<Dtype>* batch = dynamic_cast<BatchNvideo<Dtype>* > (batch_sup);
+   Dtype* top_data = this->prefetch_data_.mutable_cpu_data();
+    Dtype* top_cont = this->prefetch_cont_.mutable_cpu_data();
+    Dtype* top_target = this->prefetch_target_.mutable_cpu_data();
+    Dtype* top_lossweights = this->prefetch_lossweights_.mutable_cpu_data();
+    Dtype* top_idtracks = this->prefetch_idtracks_.mutable_cpu_data();
+    Dtype* top_iminds = this->prefetch_iminds_.mutable_cpu_data();
+    Dtype* top_force = this->prefetch_force_.mutable_cpu_data();
+    const int useforce =this->layer_param_.window_data_param().useforce();
+    const  int nframes =this->layer_param_.nvideoframes_data_param().nframes();
+    const int prediction_horizon =this->layer_param_.window_data_param().prediction_horizon();
+    const Dtype scale = this->layer_param_.window_data_param().scale();
+    const int batch_size = this->layer_param_.window_data_param().batch_size();
+    const int crop_size = this->layer_param_.transform_param().crop_size();
+    const int context_pad = this->layer_param_.window_data_param().context_pad();
+    const int MARGIN = this->layer_param_.window_data_param().margin();
+    const int NORMVEL = this->layer_param_.window_data_param().normvel();
+    const int RANDOMIZE = this->layer_param_.window_data_param().randomize();
+  
+    cv::Size cv_crop_size(crop_size, crop_size);
+    const string& crop_mode = this->layer_param_.window_data_param().crop_mode();
+
+    bool use_square = (crop_mode == "square") ? true : false;
+   // const int deadzone=4;
+    //const int negzone=5;
+ 
+    // zero out batch
+
+  caffe_set(this->prefetch_data_.count(), Dtype(165), top_data);
+  caffe_set(this->prefetch_cont_.count(), Dtype(0), top_cont);
+  caffe_set(this->prefetch_target_.count(), Dtype(0), top_target);
+  caffe_set(this->prefetch_lossweights_.count(), Dtype(0), top_lossweights);
+  caffe_set(this->prefetch_idtracks_.count(), Dtype(0), top_idtracks);
+  caffe_set(this->prefetch_iminds_.count(), Dtype(0), top_iminds);
+  caffe_set(this->prefetch_force_.count(), Dtype(0), top_force);
+  
+
+ 
+  pair<std::string, vector<int> > imageshow;
+
+ 
+  TargetBoxXY box_next;
+  vector<TargetBoxXY> boxes;
+  int item_id=0;
+  const int channels_per_im=3;
+  const int channels = channels_per_im*nframes;
+
+
+  while  (item_id < batch_size)
+  {
+ 
+	if (RANDOMIZE==1)
+	{
+		  id_index=PrefetchRand() % tracks_.size();
+	          boxes=tracks_[id_index];
+		   b_=PrefetchRand() % (boxes.size()-2);
+	}
+	else
+	{
+	 
+	  boxes=tracks_[id_index];
+	  b_=b_+1;
+	  
+	  if (b_==boxes.size()-1)
+	  {
+	    id_index=id_index+1;
+	  if (id_index== tracks_.size()-1)
+	    id_index=0;
+	  boxes=tracks_[id_index];
+	  b_=0;
+	  }
+	   //LOG(INFO)<<"RANDOMIZE:"<<RANDOMIZE<<"b:"<<b_<<"id index"<<id_index;
+	}
+	  
+		 
+		   
+	 	//   LOG(INFO)<<"id index: "<<id_index<<" tracks_.size():"<<tracks_.size()<<" randomize:"<<randomize;
+		//  LOG(INFO)<<"id_index:"<<id_index<<" tracks_.size():"<<tracks_.size();
+
+
+
+  	
+	
+		   
+	int blockCounter=-1;
+        for (int frame_index=b_-nframes+1;frame_index<=b_;frame_index++)
+        {
+	  TargetBoxXY box;
+        blockCounter++;
+	//LOG(INFO)<<"blockCounter:"<<blockCounter<<" frame_index:"<<frame_index;
+        if (frame_index<0) 
+         box=boxes[0];
+	else
+	 box=boxes[frame_index];  
+        int img_index=box.image_index;
+	// load the image containing the window
+	pair<std::string, vector<int> > image =
+	    videoimage_database_[img_index];
+ 
+      //  LOG(INFO) <<"loading image" << image.first;
+	float x_cur = box.x;
+	float y_cur = box.y;
+
+
+	int x1=static_cast<int>(x_cur-MARGIN);
+        int y1=static_cast<int>(y_cur-MARGIN);
+        int x2=static_cast<int>(x_cur+MARGIN);
+        int y2=static_cast<int>(y_cur+MARGIN);
+	//LOG(INFO) <<
+        // LOG(INFO)<<"  ROI x1:"<<x1<<"x2:"<<x2<<"y1:"<<y1<<"y2:"<<y2;
+
+
+  
+	cv::Mat cv_img = cv::imread(image.first, CV_LOAD_IMAGE_COLOR);
+	if (!cv_img.data) {
+	  LOG(ERROR) << "Could not open or find file " << image.first;
+	  return;
+	}
+	
+
+      int pad_w = 0;
+      int pad_h = 0;
+      if (context_pad > 0 || use_square) {
+        // scale factor by which to expand the original region
+        // such that after warping the expanded region to crop_size x crop_size
+        // there's exactly context_pad amount of padding on each side
+        Dtype context_scale = static_cast<Dtype>(crop_size) /
+            static_cast<Dtype>(crop_size - 2*context_pad);
+
+        // compute the expanded region
+        Dtype half_height = static_cast<Dtype>(y2-y1+1)/2.0;
+        Dtype half_width = static_cast<Dtype>(x2-x1+1)/2.0;
+        Dtype center_x = static_cast<Dtype>(x1) + half_width;
+        Dtype center_y = static_cast<Dtype>(y1) + half_height;
+        if (use_square) {
+          if (half_height > half_width) {
+            half_width = half_height;
+          } else {
+            half_height = half_width;
+          }
+        }
+        x1 = static_cast<int>(round(center_x - half_width*context_scale));
+        x2 = static_cast<int>(round(center_x + half_width*context_scale));
+        y1 = static_cast<int>(round(center_y - half_height*context_scale));
+        y2 = static_cast<int>(round(center_y + half_height*context_scale));
+
+        // the expanded region may go outside of the image
+        // so we compute the clipped (expanded) region and keep track of
+        // the extent beyond the image
+        int unclipped_height = y2-y1+1;
+        int unclipped_width = x2-x1+1;
+        int pad_x1 = std::max(0, -x1);
+        int pad_y1 = std::max(0, -y1);
+        int pad_x2 = std::max(0, x2 - cv_img.cols + 1);
+        int pad_y2 = std::max(0, y2 - cv_img.rows + 1);
+        // clip bounds
+        x1 = x1 + pad_x1;
+        x2 = x2 - pad_x2;
+        y1 = y1 + pad_y1;
+        y2 = y2 - pad_y2;
+        CHECK_GT(x1, -1);
+        CHECK_GT(y1, -1);
+        CHECK_LT(x2, cv_img.cols);
+        CHECK_LT(y2, cv_img.rows);
+
+        int clipped_height = y2-y1+1;
+        int clipped_width = x2-x1+1;
+
+        // scale factors that would be used to warp the unclipped
+        // expanded region
+        Dtype scale_x =
+            static_cast<Dtype>(crop_size)/static_cast<Dtype>(unclipped_width);
+        Dtype scale_y =
+            static_cast<Dtype>(crop_size)/static_cast<Dtype>(unclipped_height);
+
+        // size to warp the clipped expanded region to
+        cv_crop_size.width =
+            static_cast<int>(round(static_cast<Dtype>(clipped_width)*scale_x));
+        cv_crop_size.height =
+            static_cast<int>(round(static_cast<Dtype>(clipped_height)*scale_y));
+        pad_x1 = static_cast<int>(round(static_cast<Dtype>(pad_x1)*scale_x));
+        pad_x2 = static_cast<int>(round(static_cast<Dtype>(pad_x2)*scale_x));
+        pad_y1 = static_cast<int>(round(static_cast<Dtype>(pad_y1)*scale_y));
+        pad_y2 = static_cast<int>(round(static_cast<Dtype>(pad_y2)*scale_y));
+
+        pad_h = pad_y1;
+        // if we're mirroring, we mirror the padding too (to be pedantic)
+        
+        pad_w = pad_x1;
+        
+
+        // ensure that the warped, clipped region plus the padding fits in the
+        // crop_size x crop_size image (it might not due to rounding)
+        if (pad_h + cv_crop_size.height > crop_size) {
+          cv_crop_size.height = crop_size - pad_h;
+        }
+        if (pad_w + cv_crop_size.width > crop_size) {
+          cv_crop_size.width = crop_size - pad_w;
+        }
+      }
+
+      cv::Rect roi(x1, y1, x2-x1+1, y2-y1+1);
+      cv::Mat cv_cropped_img = cv_img(roi);
+      cv::resize(cv_cropped_img, cv_cropped_img,
+          cv_crop_size, 0, 0, cv::INTER_LINEAR);
+/*
+      
+       std::string fileName1 = std::string("./debugDump/img_roi_tubetrack");
+       std::stringstream tmpi;
+       tmpi<<item_id;
+	   fileName1 += tmpi.str();
+		      	  fileName1 += ".png";
+      imwrite(fileName1.c_str(), cv_cropped_img);
+      // horizontal flip at random*/
+    
+
+      // copy the warped window into top_data
+      for (int c = 0; c < channels_per_im; ++c) {
+        for (int h = 0; h < cv_cropped_img.rows; ++h) {
+          for (int w = 0; w < cv_cropped_img.cols; ++w) {
+            Dtype pixel =
+                static_cast<Dtype>(cv_cropped_img.at<cv::Vec3b>(h, w)[c]);
+
+            top_data[((item_id * channels +blockCounter*channels_per_im+ c) * crop_size + h + pad_h)
+                     * crop_size + w + pad_w]
+                = (pixel
+                    - 90)
+                  * scale;
+          }
+        }
+      }
+
+      
+      
+      
+
+
+// 		// VISUALIZATION CODE!	
+// 		//LOG(INFO)<<"visualize!";
+// 		std::string baseName = (image.first).substr((image.first).find_last_of("/")+1, (image.first).length()-4);
+// 		  baseName = (baseName).substr(0, baseName.length()-5);
+// 			  std::stringstream tmp,tmp2,tmp3,tmp4,tmp5;
+// 
+// 			  tmp2 << 10000+b_;
+// 			  tmp3 << id_index;
+// 			tmp<<pad_w;
+// 			tmp4<<pad_h;
+// 			tmp5<<blockCounter;
+// //if tmp2.length()==2 tmp2="0"+tmp2
+//  // elseif tmp2.length()==1 tmp2="0"
+// 		      	  std::string fileName = std::string("./debugDump/") + "trackid" + tmp3.str() + "b_"+tmp2.str()+"block"+tmp5.str()+".png";//+"HN:"+tmp3.str();
+// 		      	 // string fileName = printf("./debugDump/trackid%03db_%03d.png",id_index,b_);
+// 		      	 // if (entry.do_mirror) fileName += "_mirror";
+// 		      	  //fileName += ".png";
+// 			  cv::Mat debugImage(crop_size, crop_size, CV_8UC3, cv::Scalar(0));
+// 				  for (int c = 0; c < channels_per_im; ++c) 
+// 				    for (int h = 0; h < crop_size; ++h) 
+// 				      for (int w = 0; w < crop_size; ++w) 
+// 					if ((abs(h-ceil(crop_size/2))<5)&&(abs(w-ceil(crop_size/2))<5))
+// 					{
+// 					  if ((c==1)||(c==2))
+// 					    debugImage.at<cv::Vec3b>(h, w)[c] =255;
+// 					  else
+// 					     debugImage.at<cv::Vec3b>(h, w)[c] =0;
+// 					}
+// 					else
+// 					  debugImage.at<cv::Vec3b>(h, w)[c] =  top_data[((item_id * channels +blockCounter*channels_per_im + c) * crop_size + h) * crop_size + w ] + Dtype(90.0);
+// 		
+// 					//debugImage.at<cv::Vec3b>(h, w)[c] =  top_data[((item_id * channels + c) * crop_size + h + pad_h) * crop_size + w + pad_w] + Dtype(90.0);
+// 				  imwrite(fileName.c_str(), debugImage);
+// 					//debugImage.at<cv::Vec3b>(h, w)[c] =  top_data[((item_id * channels + c) * crop_size + h) * crop_size + w] + Dtype(90.0);
+// 				//LOG(INFO)<<"WRITING IMAGE"<<"f:"<<fileName.c_str();
+// 			
+// 
+// 				      
+// 				   
+// 
+// 		//LOG(INFO)<<"done visualize!";
+		
+		
+      
+      }
+
+	   
+	// force in current frame
+	float forcex;
+	float forcey;
+        TargetBoxXY box=boxes[b_];
+	forcex=box.forcex;
+	forcey=box.forcey;
+
+      // LOG(INFO)<<"cont:"<<cont<<"si:"<<stage_indicator;
+        top_force[2*item_id+0]=box.forcex;
+	top_force[2*item_id+1]=box.forcey;
+		int cont;
+        if (b_==0) cont=0; else cont=1;
+        top_cont[item_id]=cont;
+	//if ((box.forcey>0)|(box.forcex>0))
+	//LOG(INFO)<<"force!:"<<box.forcey<<" "<<box.forcex;
+	//top_target[item_id*2+1]=(0.5*(x1_next+x2_next)-center_x)/(cv_img.rows-1);
+	//top_target[item_id*2+2]=(0.5*(y1_next+y2_next)-center_y)/(cv_img.cols-1);
+	top_iminds[item_id]=box.image_index;
+	top_idtracks[item_id]=id_index;
+	//  LOG(INFO)<<" img_index:"<<box.image_index;
+	for (int h=0; h<prediction_horizon; h++)
+	{  
+	  if (b_+h+1<= boxes.size()-1)
+	    {
+		    box=boxes[b_+h];
+		   // LOG(INFO)<<"box:"<<<box<<"box_next:"<<box_next
+		    box_next=boxes[b_+h+1];
+		    float x = box.x;
+		    float y = box.y;
+		    float x_next = box_next.x;
+		    float y_next = box_next.y;
+		    float velx= (x_next-x);
+		    float vely= (y_next-y);
+		    //LOG(INFO)<<"track_id"<<id_index<<"b:"<<b_<<"velx:"<<velx<<"vely"<<vely<<"H:"<<h<<"cxn:"<<0.5*(x1_next+x2_next)<<"cx:"<<0.5*(x1+x2);
+		    top_target[item_id*(2*prediction_horizon)+h*2+0]=velx*NORM;
+		    top_target[item_id*(2*prediction_horizon)+h*2+1]=vely*NORM;
+		    if (NORMVEL==0)
+		    {
+		    top_lossweights[item_id*(2*prediction_horizon)+h*2+0]=1*exp(-pow(double(h),0.25));
+		    top_lossweights[item_id*(2*prediction_horizon)+h*2+1]=1*exp(-pow(double(h),0.25));
+		    }
+		    else
+		    {
+		    //  LOG(INFO)<<"normalize with vel magnitude! norm="<<(1.0/(pow(velx*NORM,2)+pow(vely*NORM,2)));
+		     // LOG(FATAL)<<"stop";
+		    top_lossweights[item_id*(2*prediction_horizon)+h*2+0]=1*exp(-pow(double(h),0.25))*(1.0/(pow(velx*NORM,2)+pow(vely*NORM,2)));
+		    top_lossweights[item_id*(2*prediction_horizon)+h*2+1]=1*exp(-pow(double(h),0.25))*(1.0/(pow(velx*NORM,2)+pow(vely*NORM,2)));  
+		    }
+	 	  //  LOG(INFO)<<"index:"<<item_id*(2*prediction_horizon)+h*2+0<<"velx:"<<velx <<" vely:"<<vely<<"weight:"<<top_lossweights[item_id*(2*prediction_horizon)+h*2+1];
+		  //   LOG(INFO)<<"velx:"<<velx <<" vely:"<<vely<<"weight:"<<top_lossweights[item_id*(2*prediction_horizon)+h*2+1];
+	    }
+	  else
+	    {
+	   //  LOG(INFO)<<"ELSEindex:"<<item_id*(2*prediction_horizon)+h*2+0<<"velx:"<<top_target[item_id*(2*prediction_horizon)+h*2+0] <<"weight:"<<top_lossweights[item_id*(2*prediction_horizon)+h*2+0];
+	      ;
+	   // top_lossweights[item_id*(2*prediction_horizon)+h*2+1]=0;
+	   // top_lossweights[item_id*(2*prediction_horizon)+h*2+2]=0; 
+	    }
+	}
+	
+	
+	
+	
+	
+        
+	
+   	
+  	item_id++;
+//LOG(INFO)<<"end inner while loop, item_id:"<<item_id;
+    }
+    
+
+
+    
+
+
+}
+
+template <typename Dtype>
+void NvideoframesDataLayer<Dtype>::Forward_cpu(
+    const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top) {
+  // First, join the thread
+//LOG(INFO) << "$$$$$$$$$$$$$$$$$$$I'm in forward cpu$$$$$$$$$$$$$$$$$$$$$";
+	//this->JoinPrefetchThread();
+	// Copy the data
+	caffe_copy(prefetch_data_.count(), prefetch_data_.cpu_data(),
+	top[0]->mutable_cpu_data());
+	caffe_copy(prefetch_cont_.count(), prefetch_cont_.cpu_data(),
+	top[1]->mutable_cpu_data());
+	caffe_copy(prefetch_target_.count(), prefetch_target_.cpu_data(),
+	top[2]->mutable_cpu_data());
+
+	caffe_copy(prefetch_lossweights_.count(), prefetch_lossweights_.cpu_data(),
+	top[3]->mutable_cpu_data());
+
+	caffe_copy(prefetch_idtracks_.count(), prefetch_idtracks_.cpu_data(),
+	top[4]->mutable_cpu_data());
+
+	caffe_copy(prefetch_iminds_.count(), prefetch_iminds_.cpu_data(),
+	top[5]->mutable_cpu_data());
+
+	caffe_copy(prefetch_force_.count(), prefetch_force_.cpu_data(),
+	top[6]->mutable_cpu_data());
+
+	// Start a new prefetch thread
+	//this->CreatePrefetchThread();
+}
+
+
+#ifdef CPU_ONLY
+STUB_GPU_FORWARD(NvideoframesDataLayer, Forward);
+#endif
+
+
+INSTANTIATE_CLASS(NvideoframesDataLayer);
+REGISTER_LAYER_CLASS(NvideoframesData);
+
+}  // namespace caffe
