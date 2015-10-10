@@ -143,7 +143,7 @@ void CropDataLayer<Dtype>::InternalThreadEntry() {
   try {
     while (!this->must_stop()) {
       Batch<Dtype>* batch = this->prefetch_free_.pop();
-  		LOG(INFO) << "BATCH LOADING ROUTINE";
+  		//LOG(INFO) << "BATCH LOADING ROUTINE";
 	    load_batch(batch);
 #ifndef CPU_ONLY
       if (Caffe::mode() == Caffe::GPU) {
@@ -179,6 +179,7 @@ void CropDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
 		return;
 	}
 
+	// /*
 	CPUTimer batch_timer;
   batch_timer.Start();
   double read_time = 0;
@@ -218,9 +219,9 @@ void CropDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
 	}	
 	//Assert windows_ are not empty
 	CHECK_EQ(windows_.size(), num_examples_);
-
   int item_id = 0;
 	for (int dummy = 0; dummy < num_samples; ++dummy) {
+	
 		// sample a window
 		timer.Start();
 		//LOG(INFO) << "Size of windows: " <<  windows_.size() 
@@ -384,79 +385,21 @@ void CropDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
 			}
 		}
 	//END WITHOUT PADDING
-
-		/*
-		// COPY WITH PADDING 
-		// copy the warped window into top_data
-		for (int h = 0; h < cv_cropped_img.rows; ++h) {
-			const uchar* ptr = cv_cropped_img.ptr<uchar>(h);
-			int img_index = 0;
-			for (int w = 0; w < cv_cropped_img.cols; ++w) {
-				for (int c = 0; c < channels; ++c) {
-					int top_index = ((item_id * channels + c) * crop_size + h + pad_h)
-									 * crop_size + w + pad_w;
-					// int top_index = (c * height + h) * width + w;
-					Dtype pixel = static_cast<Dtype>(ptr[img_index++]);
-					if (this->has_mean_file_) {
-						int mean_index = (c * mean_height + h + mean_off + pad_h)
-												 * mean_width + w + mean_off + pad_w;
-						top_data[top_index] = (pixel - mean[mean_index]) * scale;
-					} else {
-						if (this->has_mean_values_) {
-							top_data[top_index] = (pixel - this->mean_values_[c]) * scale;
-						} else {
-							top_data[top_index] = pixel * scale;
-						}
-					}
-				}
-			}
-		}
-	  */
+		
 		trans_time += timer.MicroSeconds();
-
-		#if 0
-		// useful debugging code for dumping transformed windows to disk
-		string file_id;
-		std::stringstream ss;
-		ss << PrefetchRand();
-		ss >> file_id;
-		std::ofstream inf((string("dump/") + file_id +
-				string("_info.txt")).c_str(), std::ofstream::out);
-		inf << image.first << std::endl
-				<< window[CropDataLayer<Dtype>::X1]+1 << std::endl
-				<< window[CropDataLayer<Dtype>::Y1]+1 << std::endl
-				<< window[CropDataLayer<Dtype>::X2]+1 << std::endl
-				<< window[CropDataLayer<Dtype>::Y2]+1 << std::endl
-				<< do_mirror << std::endl
-		inf.close();
-		std::ofstream top_data_file((string("dump/") + file_id +
-				string("_data.txt")).c_str(),
-				std::ofstream::out | std::ofstream::binary);
-		for (int c = 0; c < channels; ++c) {
-			for (int h = 0; h < crop_size; ++h) {
-				for (int w = 0; w < crop_size; ++w) {
-					top_data_file.write(reinterpret_cast<char*>(
-							&top_data[((item_id * channels + c) * crop_size + h)
-												* crop_size + w]),
-							sizeof(Dtype));
-				}
-			}
-		}
-		top_data_file.close();
-		#endif
-
 		item_id++;
 		read_count_++;
 		//If the end of the window file is reached. 
 		if (read_count_ == num_examples_){
 			read_count_ = 0;
-			LOG(INFO) << "Resetting read_count";
+			//LOG(INFO) << "Resetting read_count";
 		}
 	}
   batch_timer.Stop();
   DLOG(INFO) << "CropDataLayer Prefetch batch: " << batch_timer.MilliSeconds() << " ms.";
   //DLOG(INFO) << "     Read time: " << read_time / 1000 << " ms.";
   //DLOG(INFO) << "Transform time: " << trans_time / 1000 << " ms.";
+
 }
 
 template <typename Dtype>

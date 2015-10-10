@@ -275,7 +275,7 @@ void GenericWindowDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
 		//LOG(INFO) << "READ COUNT " << read_count_; 
 		if (read_count_ >= num_examples_){
 			read_count_ = 0;
-			LOG(INFO) << "Resetting read_count";
+			//LOG(INFO) << "Resetting read_count";
 		}
 	}
 	
