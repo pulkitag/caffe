@@ -421,6 +421,7 @@ void CropDataLayer<Dtype>::Forward_cpu(
         top[1]->mutable_cpu_data());
   }
   this->prefetch_free_.push(batch);
+	//fwdCount_ += top[0]->num()
 }
 
 
