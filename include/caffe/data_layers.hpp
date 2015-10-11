@@ -460,6 +460,8 @@ class CropDataLayer : public BasePrefetchingDataLayer<Dtype> {
 	//Useful for debugging the layer as it tells what is the layer number. 
 	int layer_num_;
 	int channels_;
+	//Maximum Jitter while loading images
+	int max_jitter_;
 };
 
 struct TargetBoxXY{

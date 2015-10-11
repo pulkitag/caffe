@@ -667,6 +667,8 @@ message GenericWindowDataParameter {
 	optional bool random_crop = 15 [default = false];
 	//If we want grayscale images
 	optional bool is_gray = 16 [default=false];
+	//If we want to randomly jitter the image
+	optional uint32 max_jitter = 17 [default=0];
 }
 
 /// Message that stores parameters used by FlattenLayer
