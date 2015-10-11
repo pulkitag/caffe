@@ -57,8 +57,9 @@ void CropDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
   cache_images_      = this->layer_param_.generic_window_data_param().cache_images();
   string root_folder = this->layer_param_.generic_window_data_param().root_folder();
 	is_random_crop_    = this->layer_param_.generic_window_data_param().random_crop();
+	max_jitter_        = this->layer_param_.generic_window_data_param().max_jitter();
 
-	if (is_random_crop_){
+	if (is_random_crop_ || max_jitter_ > 0){
     prefetch_rng_.reset(new Caffe::RNG(rand_seed_));
 	}else{
 		prefetch_rng_.reset();
@@ -71,7 +72,8 @@ void CropDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
       << this->layer_param_.generic_window_data_param().context_pad();
   LOG(INFO) << "Crop mode: "
       << this->layer_param_.generic_window_data_param().crop_mode();
-
+	LOG(INFO) << "Maximum Jitter: "
+      << this->layer_param_.generic_window_data_param().max_jitter();
   // image
   const int crop_size = this->layer_param_.generic_window_data_param().crop_size();
   CHECK_GT(crop_size, 0);
@@ -276,7 +278,29 @@ void CropDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
 			y1 = window[CropDataLayer<Dtype>::Y1];
 			x2 = window[CropDataLayer<Dtype>::X2];
 			y2 = window[CropDataLayer<Dtype>::Y2];
-		}
+			if (this->phase_ == TRAIN && max_jitter_ > 0){
+				const unsigned int rand_index_h = PrefetchRand();
+				const unsigned int rand_index_w = PrefetchRand();
+				const unsigned int pos_index_h = PrefetchRand();
+				const unsigned int pos_index_w = PrefetchRand();
+				int x_jit = rand_index_w % max_jitter_;
+				int y_jit = rand_index_h % max_jitter_;
+				int x_sgn = pos_index_w  % 2;
+				int y_sgn = pos_index_h % 2;			
+				if (x_sgn==0)
+					x_jit = -x_jit;
+				if (y_sgn==0)
+					y_jit = -y_jit;
+				x1 += x_jit;
+				x2 += x_jit;
+				y1 += y_jit;
+				y2 += y_jit;
+				x1  = std::max(0, x1);
+				y1  = std::max(0, y1);
+				x2  = std::min(imWidth-1,  x2);
+				y2  = std::max(imHeight-1, y2);
+		}	
+	}
 		
 		int pad_w = 0;
 		int pad_h = 0;

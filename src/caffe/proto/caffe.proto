@@ -306,7 +306,7 @@ message ParamSpec {
 // Update the next available ID when you add a new LayerParameter field.
 //
 // LayerParameter next available layer-specific ID: 139 (last added: tile_param)
-// My Parameters start 1000, Next available 1006 (last added: square_box_data_param)
+// My Parameters start 1000, Next available 1007 (last added: nvideo_frames_data_param)
 message LayerParameter {
   optional string name = 1; // the layer name
   optional string type = 2; // the layer type
@@ -378,6 +378,7 @@ message LayerParameter {
   optional MemoryDataParameter memory_data_param = 119;
   optional MVNParameter mvn_param = 120;
   optional NormalizeParameter normalize_param = 1002;
+	optional NvideoframesDataParameter nvideoframes_data_param = 1006; 
   optional PoolingParameter pooling_param = 121;
   optional PowerParameter power_param = 122;
   optional PReLUParameter prelu_param = 131;
@@ -666,6 +667,8 @@ message GenericWindowDataParameter {
 	optional bool random_crop = 15 [default = false];
 	//If we want grayscale images
 	optional bool is_gray = 16 [default=false];
+	//If we want to randomly jitter the image
+	optional uint32 max_jitter = 17 [default=0];
 }
 
 /// Message that stores parameters used by FlattenLayer
@@ -804,6 +807,12 @@ message NormalizeParameter {
   }
 	optional NormalizeOp normalize_op = 1 [default = DEMEAN];
 } 
+
+message NvideoframesDataParameter {
+  optional uint32 nframes = 1;
+}
+
+
 
 // Message that stores parameters used by PoolingLayer
 
