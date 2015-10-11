@@ -59,7 +59,7 @@ void CropDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
 	is_random_crop_    = this->layer_param_.generic_window_data_param().random_crop();
 	max_jitter_        = this->layer_param_.generic_window_data_param().max_jitter();
 
-	if (is_random_crop_){
+	if (is_random_crop_ || max_jitter_ > 0){
     prefetch_rng_.reset(new Caffe::RNG(rand_seed_));
 	}else{
 		prefetch_rng_.reset();
@@ -278,7 +278,7 @@ void CropDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
 			y1 = window[CropDataLayer<Dtype>::Y1];
 			x2 = window[CropDataLayer<Dtype>::X2];
 			y2 = window[CropDataLayer<Dtype>::Y2];
-			if (max_jitter_ > 0){
+			if (this->phase_ == TRAIN && max_jitter_ > 0){
 				const unsigned int rand_index_h = PrefetchRand();
 				const unsigned int rand_index_w = PrefetchRand();
 				const unsigned int pos_index_h = PrefetchRand();
