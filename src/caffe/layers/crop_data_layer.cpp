@@ -447,6 +447,7 @@ void CropDataLayer<Dtype>::Forward_cpu(
   }
   this->prefetch_free_.push(batch);
 	fwd_count_ += batch->data_.num();
+	LOG(INFO) << "FWD COUNT: " << fwd_count_;
 	if (fwd_count_ == num_examples_)
 		fwd_count_ = 0;
 }
