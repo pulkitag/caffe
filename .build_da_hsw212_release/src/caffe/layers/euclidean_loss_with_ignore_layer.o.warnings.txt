@@ -1,8 +1,0 @@
-src/caffe/layers/euclidean_loss_with_ignore_layer.cpp: In instantiation of ‘void caffe::EuclideanLossWithIgnoreLayer<Dtype>::Forward_cpu(const std::vector<caffe::Blob<Dtype>*>&, const std::vector<caffe::Blob<Dtype>*>&) [with Dtype = float]’:
-src/caffe/layers/euclidean_loss_with_ignore_layer.cpp:148:1:   required from here
-src/caffe/layers/euclidean_loss_with_ignore_layer.cpp:51:7: warning: unused variable ‘count’ [-Wunused-variable]
-   int count  = bottom[0]->count();
-       ^
-src/caffe/layers/euclidean_loss_with_ignore_layer.cpp: In instantiation of ‘void caffe::EuclideanLossWithIgnoreLayer<Dtype>::Forward_cpu(const std::vector<caffe::Blob<Dtype>*>&, const std::vector<caffe::Blob<Dtype>*>&) [with Dtype = double]’:
-src/caffe/layers/euclidean_loss_with_ignore_layer.cpp:148:1:   required from here
-src/caffe/layers/euclidean_loss_with_ignore_layer.cpp:51:7: warning: unused variable ‘count’ [-Wunused-variable]

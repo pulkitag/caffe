@@ -1,7 +1,0 @@
-tools/leveldb_to_images.cpp: In function ‘int main(int, char**)’:
-tools/leveldb_to_images.cpp:61:16: warning: variable ‘label’ set but not used [-Wunused-but-set-variable]
-   int nr,nc,nd,label; 
-                ^
-tools/leveldb_to_images.cpp:98:4: warning: ‘maxCount’ may be used uninitialized in this function [-Wmaybe-uninitialized]
-    if (count >=maxCount){
-    ^

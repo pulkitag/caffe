@@ -1,5 +1,0 @@
-In file included from ./include/caffe/caffe.hpp:12:0,
-                 from tools/caffe.cpp:14:
-./include/caffe/net.hpp:204:14: warning: inline function ‘void caffe::Net<Dtype>::PrintLayerDebugInfo() const [with Dtype = float]’ used but never defined [enabled by default]
-  inline void PrintLayerDebugInfo() const;
-              ^

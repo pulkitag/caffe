@@ -1,9 +1,0 @@
-In file included from src/caffe/layers/prelu_layer.cpp:4:0:
-./include/caffe/filler.hpp: In instantiation of ‘void caffe::SequenceFiller<Dtype>::Fill(caffe::Blob<Dtype>*) [with Dtype = double]’:
-src/caffe/layers/prelu_layer.cpp:140:1:   required from here
-./include/caffe/filler.hpp:59:17: warning: unused variable ‘value’ [-Wunused-variable]
-     const Dtype value = this->filler_param_.value();
-                 ^
-./include/caffe/filler.hpp: In instantiation of ‘void caffe::SequenceFiller<Dtype>::Fill(caffe::Blob<Dtype>*) [with Dtype = float]’:
-src/caffe/layers/prelu_layer.cpp:140:1:   required from here
-./include/caffe/filler.hpp:59:17: warning: unused variable ‘value’ [-Wunused-variable]

@@ -1,5 +1,0 @@
-examples/cifar10/convert_cifar100_data.cpp: In function ‘void convert_dataset(const string&, const string&)’:
-examples/cifar10/convert_cifar100_data.cpp:60:69: warning: too many arguments for format [-Wformat-extra-args]
-     snprintf(str_buffer, kCIFARImageNBytes, "/train.bin", fileid + 1);
-                                                                     ^
-examples/cifar10/convert_cifar100_data.cpp:60:69: warning: too many arguments for format [-Wformat-extra-args]
