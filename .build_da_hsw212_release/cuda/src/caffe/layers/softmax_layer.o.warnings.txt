@@ -1,0 +1,8 @@
+/shared/apps/rhel-6.2/libs/glog-0.3.3/include/glog/logging.h(348): warning: using-declaration ignored -- it refers to the current namespace
+
+/shared/apps/rhel-6.2/libs/glog-0.3.3/include/glog/logging.h(352): warning: using-declaration ignored -- it refers to the current namespace
+
+/shared/apps/rhel-6.2/libs/glog-0.3.3/include/glog/logging.h(348): warning: using-declaration ignored -- it refers to the current namespace
+
+/shared/apps/rhel-6.2/libs/glog-0.3.3/include/glog/logging.h(352): warning: using-declaration ignored -- it refers to the current namespace
+
