@@ -24,8 +24,9 @@ void CropDataLayer<Dtype>::Forward_gpu(
   CUDA_CHECK(cudaStreamSynchronize(cudaStreamDefault));
   this->prefetch_free_.push(batch);
 	fwd_count_ += batch->data_.num();
-	if (fwd_count_ == num_examples_)
-		fwd_count_ = 0;
+	//LOG(INFO) << "GPU FWD COUNT: " << fwd_count_;
+	if (fwd_count_ >= num_examples_)
+		fwd_count_ = fwd_count_ % num_examples_;
 }
 
 INSTANTIATE_LAYER_GPU_FORWARD(CropDataLayer);
