@@ -23,6 +23,9 @@ void CropDataLayer<Dtype>::Forward_gpu(
 	//New thread will be created by GenericWindowData Layer
   CUDA_CHECK(cudaStreamSynchronize(cudaStreamDefault));
   this->prefetch_free_.push(batch);
+	fwd_count_ += batch->data_.num();
+	if (fwd_count_ == num_examples_)
+		fwd_count_ = 0;
 }
 
 INSTANTIATE_LAYER_GPU_FORWARD(CropDataLayer);

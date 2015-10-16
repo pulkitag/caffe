@@ -4,9 +4,9 @@ layer {
 	top:  "label"
 	type: "GenericWindowData"
 	generic_window_data_param {
-		source: "/data0/pulkitag/kitti/window-files/test_mxDiff-7_pose-sigMotion_nrmlz-zScoreScaleSeperate_randcrp_concat-fc6_nTe-10000.txt"
-		root_folder: "/data0/pulkitag/data_sets/kitti/odometry/dataset/sequences/asJpg/" 
-		crop_size : 227
+		source: "/data0/pulkitag/data_sets/streetview/exp/window-files/train_pose-euler-mxRot45_geo-dc-v1_crpSz192_nTr-1.00e+06.txt"
+		root_folder: "/data0/pulkitag/data_sets/streetview/raw/ssd105/Amir/WashingtonAligned/" 
+		crop_size : 101
 		batch_size: 5
 		context_pad: 0
 		random_crop: false
@@ -21,9 +21,9 @@ layer {
 	top:  "label"
 	type: "GenericWindowData"
 	generic_window_data_param {
-		source: "/data0/pulkitag/kitti/window-files/test_mxDiff-7_pose-sigMotion_nrmlz-zScoreScaleSeperate_randcrp_concat-fc6_nTe-10000.txt"
-		root_folder: "/data0/pulkitag/data_sets/kitti/odometry/dataset/sequences/imSz/asJpg/" 
-		crop_size : 227
+		source: "/data0/pulkitag/data_sets/streetview/exp/window-files/test_pose-euler-mxRot45_geo-dc-v1_crpSz192_nTe-1.00e+04.txt"
+		root_folder: "/data0/pulkitag/data_sets/streetview/raw/ssd105/Amir/WashingtonAligned/" 
+		crop_size : 101
 		batch_size: 5
 		context_pad: 0
 		random_crop: false

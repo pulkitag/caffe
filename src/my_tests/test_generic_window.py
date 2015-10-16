@@ -6,23 +6,27 @@ import caffe
 import os
 import scipy.misc as scm
 
-sFile =  "/data1/pulkitag/kitti/window-files/test_mxDiff-7_pose-sigMotion_nrmlz-zScoreScaleSeperate_imSz256_concat-fc6_nTe-10000.txt"
+#sFile =  "/data0/pulkitag/kitti/window-files/test_mxDiff-7_pose-sigMotion_nrmlz-zScoreScaleSeperate_imSz256_concat-fc6_nTe-10000.txt"
 #rootFolder = "/data1/pulkitag/data_sets/kitti/odometry/dataset/sequences/imSz256/" 
-rootFolder = "/data1/pulkitag/data_sets/kitti/odometry/dataset/sequences/asJpg/" 
+#rootFolder = "/data0/pulkitag/data_sets/kitti/odometry/dataset/sequences/asJpg/" 
 
-#rootFolder = "/data1/pulkitag/data_sets/pascal_3d/PASCAL3D+_release1.1/Images/"
-#sFile       = '/data1/pulkitag/data_sets/pascal_3d/my/window_file_val.txt'
+#Streetview
+sFile =  "/data0/pulkitag/data_sets/streetview/exp/window-files/train_pose-euler-mxRot45_geo-dc-v1_crpSz192_nTr-1.00e+06.txt"
+rootFolder = "/data0/pulkitag/data_sets/streetview/raw/ssd105/Amir/WashingtonAligned/" 
 
-def get_protofile(isGray=False, isSF=False):
-	protoDir = '/home/ubuntu/caffe-v2-3/src/my_tests/' 
-	#protoDir   = '/work4/pulkitag-code/pkgs/caffe-v2-3/src/my_tests/'
+def get_protofile(isGray=False, dataset='kitti'):
+	#protoDir = '/home/ubuntu/caffe-v2-3/src/my_tests/' 
+	protoDir   = '/work4/pulkitag-code/pkgs/caffe-v2-3/src/my_tests/'
 	if isGray:
 		protoFile = os.path.join(protoDir, 'generic_window_gray.prototxt')
 	else:
-		if isSF:
+		if dataset == 'sf':
 			protoFile   = os.path.join(protoDir, 'generic_window_sf.prototxt')
-		else:
+		elif dataset == 'kitti':
 			protoFile   = os.path.join(protoDir, 'generic_window.prototxt')
+		elif dataset == 'streetview':
+			protoFile   = os.path.join(protoDir, 'generic_window_streetview.prototxt')
+			
 	return protoFile
 
 
@@ -73,7 +77,7 @@ def read_window_file(fName=sFile):
 	return imNames, bbox, labels
 
 
-def plot_pairs(fig, im1, im2, titleStr=''):
+def plot_pairs(fig, im1, im2, titleStr='', figTitle=''):
 	plt.figure(fig.number)
 	ax1 = plt.subplot(1,2,1)
 	ax2 = plt.subplot(1,2,2)
@@ -82,9 +86,10 @@ def plot_pairs(fig, im1, im2, titleStr=''):
 	ax2.imshow(im2.astype(np.uint8))
 	ax2.axis('off')
 	plt.title(titleStr)
+	fig.suptitle(figTitle)
 	plt.show()
 
-def compare_windows(isGray=False, isSave=False, svIdx=None, svPath=None, isSF=False):
+def compare_windows(isGray=False, isSave=False, svIdx=None, svPath=None, dataset='streetview'):
 	figGt = plt.figure()  #Ground-Truth
 	figDt = plt.figure()	#Data
 	plt.ion()
@@ -94,14 +99,17 @@ def compare_windows(isGray=False, isSave=False, svIdx=None, svPath=None, isSF=Fa
 	imNamesGt, bboxGt, labelsGt = read_window_file()
 	N = labelsGt.shape[0]	
 
+	#Crop Ground Truth or not
+	isCropGt = False
+
 	#Setup the network. 
-	protoFile = get_protofile(isGray, isSF=isSF)
+	protoFile = get_protofile(isGray, dataset=dataset)
 	net       = caffe.Net(protoFile, caffe.TRAIN)
 	imCount = 0
 	cropPrms = {}
 	cropPrms['cropType'] = 'contPad'
 	cropPrms['imSz']     = 227
-	cropPrms['contPad']  = 16
+	cropPrms['contPad']  = 0
 	svCount = 0
 	for i in range(N):
 		allDat  = net.forward(['data','label'])
@@ -120,7 +128,11 @@ def compare_windows(isGray=False, isSave=False, svIdx=None, svPath=None, isSF=Fa
 				im2 = im2[:,:,[2,1,0]]
 
 			lb  = lblDat[b].squeeze()
-			lbStr = 'az: %f, el: %f, cl: %f' % (lb[0],lb[1],lb[2])	
+			if dataset in ['kitti', 'sf']:
+				lbStr = 'az: %f, el: %f, cl: %f' % (lb[0],lb[1],lb[2])
+			else:
+				lbStr = 'az: %f, el: %f' % (lb[0],lb[1])
+					
 		
 			if isSave:
 				if imCount in svIdx:
@@ -133,15 +145,24 @@ def compare_windows(isGray=False, isSave=False, svIdx=None, svPath=None, isSF=Fa
 						print 'Saved all images: %d' % svCount
 						return
 			else:
-				plot_pairs(figDt, im1, im2, lbStr) 
+				plot_pairs(figDt, im1, im2, lbStr, 'Layer Output') 
 				#Plot the gt data
 				imName1 = os.path.join(rootFolder, imNamesGt['im1'][imCount])
 				imName2 = os.path.join(rootFolder, imNamesGt['im2'][imCount])
-				im1   = ou.read_crop_im(imName1, bboxGt['im1'][imCount], **cropPrms)
-				im2   = ou.read_crop_im(imName2, bboxGt['im2'][imCount], **cropPrms)
+				print (imName1)
+				if isCropGt:
+					im1   = ou.read_crop_im(imName1, bboxGt['im1'][imCount], **cropPrms)
+					im2   = ou.read_crop_im(imName2, bboxGt['im2'][imCount], **cropPrms)
+				else:
+					im1   = plt.imread(imName1)
+					im2   = plt.imread(imName2)
+					
 				lb    = labelsGt[imCount]
-				lbStr = 'az: %f, el: %f, cl: %f' % (lb[0],lb[1],lb[2])	
-				plot_pairs(figGt, im1, im2, lbStr)
+				if dataset in ['kitti', 'sf']:
+					lbStr = 'az: %f, el: %f, cl: %f' % (lb[0],lb[1],lb[2])
+				else:
+					lbStr = 'az: %f, el: %f' % (lb[0],lb[1])
+				plot_pairs(figGt, im1, im2, lbStr, 'Ground Truth')
 				print imCount
 				raw_input("Enter")
 
@@ -157,7 +178,7 @@ def save_pairs():
 	cropPrms = {}
 	cropPrms['cropType'] = 'contPad'
 	cropPrms['imSz']     = 227
-	cropPrms['contPad']  = 16
+	cropPrms['contPad']  = 0
 
 	saveDir = '/data1/pulkitag/data_sets/pascal_3d/my/debug/'
 	saveDir1 = os.path.join(saveDir, 'im1')
