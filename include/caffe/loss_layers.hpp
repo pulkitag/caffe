@@ -526,6 +526,7 @@ class EuclideanLossWithIgnoreLayer : public LossLayer<Dtype> {
       const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom);
 
   Blob<Dtype> diff_;
+  Blob<Dtype> ones_;
 	bool is_normalize_;
 	int nc_;
 	int lCount_;
