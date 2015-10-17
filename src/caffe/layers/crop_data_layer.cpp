@@ -116,6 +116,7 @@ void CropDataLayer<Dtype>::DataLayerSetUp(const vector<Blob<Dtype>*>& bottom,
 	
 	//Initialize read_count_
 	read_count_ = 0;
+	fwd_count_  = 0;
 	LOG(INFO) << " #### I am INSIDE Crop, I am Ready: "
 						<< is_ready_;
 }
@@ -445,7 +446,10 @@ void CropDataLayer<Dtype>::Forward_cpu(
         top[1]->mutable_cpu_data());
   }
   this->prefetch_free_.push(batch);
-	//fwdCount_ += top[0]->num()
+	fwd_count_ += batch->data_.num();
+	//LOG(INFO) << "FWD COUNT: " << fwd_count_;
+	if (fwd_count_ >= num_examples_)
+		fwd_count_ = fwd_count_ % num_examples_;
 }
 
 

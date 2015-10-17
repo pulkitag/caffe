@@ -278,11 +278,11 @@ void GenericWindowDataLayer<Dtype>::load_batch(Batch<Dtype>* batch) {
 			//LOG(INFO) << "Resetting read_count";
 		}
 	}
-	
+	//LOG(INFO) << "GENERIC DATA read_count: " << read_count_;	
 	//Do a forward pass on the CropData layers
 	for (int i=0; i<img_group_size_; i++){
 		crop_data_layers_[i]->Forward(dummy_bottom, crop_tops_vec_[i]);
-		CHECK_EQ(read_count_, crop_data_layers_[i]->read_count_);
+		CHECK_EQ(read_count_, crop_data_layers_[i]->fwd_count_);
 	}
 
 	// Copy and interleave the data appropriately.
