@@ -1,0 +1,31 @@
+input: "pred"
+input_dim: 10
+input_dim: 31
+input_dim: 1
+input_dim: 1
+input: "label1"
+input_dim: 10
+input_dim: 31
+input_dim: 1
+input_dim: 1
+input: "label2"
+input_dim: 10
+input_dim: 32
+input_dim: 1
+input_dim: 1
+layer {
+  name: "loss"
+  type: "EuclideanLoss"
+  bottom: "pred"
+  bottom: "label1"
+  top: "loss"
+  loss_weight: 1.0
+}
+layer {
+  name: "loss-ig"
+  type: "EuclideanLossWithIgnore"
+  bottom: "pred"
+  bottom: "label2"
+  top: "loss-ig"
+  loss_weight: 1.0
+}

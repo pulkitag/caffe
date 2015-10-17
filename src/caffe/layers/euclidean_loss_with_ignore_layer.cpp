@@ -32,11 +32,11 @@ template <typename Dtype>
 void EuclideanLossWithIgnoreLayer<Dtype>::Reshape(
   const vector<Blob<Dtype>*>& bottom, const vector<Blob<Dtype>*>& top) {
   LossLayer<Dtype>::Reshape(bottom, top);
-	CHECK_EQ(bottom[0]->shape(0), bottom[1]->shape(1))
+	CHECK_EQ(bottom[0]->shape(0), bottom[1]->shape(0))
 				<< "Batch Size should be the same";
 	CHECK_EQ(bottom[0]->shape(1) + 1, bottom[1]->shape(1))
 				<< "The label sizes donot match";
-  CHECK_EQ(bottom[0]->count(1) + bottom[0]->shape(0), bottom[1]->count(1))
+  CHECK_EQ(bottom[0]->count() + bottom[0]->shape(0), bottom[1]->count())
       << "Inputs must have the same dimension.";
 
 	//Check that number of axes are the same
