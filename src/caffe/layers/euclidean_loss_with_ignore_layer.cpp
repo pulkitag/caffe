@@ -36,7 +36,13 @@ void EuclideanLossWithIgnoreLayer<Dtype>::Reshape(
 				<< "Batch Size should be the same";
 	CHECK_EQ(bottom[0]->shape(1) + 1, bottom[1]->shape(1))
 				<< "The label sizes donot match";
-  CHECK_EQ(bottom[0]->count() + bottom[0]->shape(0), bottom[1]->count())
+	int extraCount;
+	if (bottom[1]->num_axes() > 2)
+		extraCount = bottom[1]->count(2, bottom[1]->num_axes());
+	else
+		extraCount = 1;
+	extraCount = extraCount * bottom[0]->shape(0);
+  CHECK_EQ(bottom[0]->count() + extraCount, bottom[1]->count())
       << "Inputs must have the same dimension.";
 
 	//Check that number of axes are the same
@@ -52,7 +58,8 @@ void EuclideanLossWithIgnoreLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>
 	int N      = bottom[0]->shape(0);
 
 	//Number of elements in the batch
-	int bCount = bottom[0]->count(1, bottom[0]->num_axes());
+	int bCount  = bottom[0]->count(1, bottom[0]->num_axes());
+	int lbCount = bottom[1]->count(1, bottom[1]->num_axes());
 	lCount_    = 0;
 	Dtype loss = 0.0;
 	Dtype Z    = 0.0; //The normalization factor
@@ -62,7 +69,7 @@ void EuclideanLossWithIgnoreLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>
 	const Dtype* diffC  = diff_.cpu_data();
 	for (int i=0; i<N; i++){
 		Dtype bLoss = 0;
-		if (labels[bCount] == (Dtype)1){
+		if (labels[bCount] == Dtype(1)){
 			//Example needs to be considered
 			caffe_sub(bCount, preds, labels, diff);
 			bLoss =  caffe_cpu_dot(bCount, diffC, diffC);
@@ -71,12 +78,12 @@ void EuclideanLossWithIgnoreLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>
 			}else {
 				Z    = caffe_cpu_dot(bCount, labels, labels);
 			}
+			lCount_ += 1;
 		} 
 		preds   += bCount;
-		labels  += (bCount + 1);
+		labels  += lbCount;
 		diff    += bCount;
 		diffC   += bCount; 
-		lCount_ += 1;
 		if (is_normalize_){
 			if (Z > 0){
 				bLoss = bLoss / Z;
@@ -95,9 +102,11 @@ void EuclideanLossWithIgnoreLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*
     const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom) {
 	int count  = bottom[0]->count();
 	//Number of elements in the batch
-	int bCount = bottom[0]->count(1, bottom[0]->num_axes());
+	int bCount  = bottom[0]->count(1, bottom[0]->num_axes());
+	int lbCount = bottom[1]->count(1, bottom[1]->num_axes());
 	int N      = bottom[0]->shape(0);
 	if (lCount_ == Dtype(0)){
+		LOG(INFO) << "EuclideanLossWithIgnore was Silent for this batch";
 		return;
 	}
 	//Compute the gradients
@@ -105,16 +114,16 @@ void EuclideanLossWithIgnoreLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*
 		const Dtype sign = (i == 0) ? 1 : -1;
 		const Dtype alpha = sign * top[0]->cpu_diff()[0] / lCount_;
 		Dtype Z;
-		const Dtype* botData = bottom[nc_]->cpu_data();
+		const Dtype* botZData = bottom[nc_]->cpu_data();
+		Dtype* botDiff       = bottom[i]->mutable_cpu_diff(); 
 		const Dtype* labels  = bottom[1]->cpu_data();       
 		Dtype* diff          = diff_.mutable_cpu_data();
 		const Dtype* diffC   = diff_.cpu_data();
-		Dtype* botDiff       = bottom[nc_]->mutable_cpu_data(); 
 		if (propagate_down[i]) {
 			for (int n=0; n < N; ++n){
-				if (labels[bCount] == Dtype(1)) 
+				if (labels[bCount] == Dtype(1)){ 
 					if (is_normalize_){
-						Z = caffe_cpu_dot(bCount, botData, botData);
+						Z = caffe_cpu_dot(bCount, botZData, botZData);
 						if (Z>0){
 							caffe_scal(count, Z, diff);
 						}
@@ -126,21 +135,24 @@ void EuclideanLossWithIgnoreLayer<Dtype>::Backward_cpu(const vector<Blob<Dtype>*
 						diffC,               // a
 						Dtype(0),                           // beta
 						botDiff);  // b
+				}
+				labels += lbCount;
+				diff   += bCount;
+				diffC  += bCount;
+				if (nc_==0){
+					botZData += bCount;
+				}else{
+					botZData += lbCount;
+				}
+				if (i==0){
+					botDiff  += bCount;
+				}else {
+					botDiff  += lbCount; 
+				} 
 			}
-			labels += (bCount + 1);
-			diff   += bCount;
-		  diffC  += bCount;
-			if (i==0){
-				botData += bCount;
-				botDiff += bCount;
-			}else {
-				botData += (bCount+1);
-				botDiff += (bCount+1); 
-			} 
 		}
 	}
 }
-
 #ifdef CPU_ONLY
 STUB_GPU(EuclideanLossWithIgnoreLayer);
 #endif
