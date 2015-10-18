@@ -19,14 +19,21 @@ void EuclideanLossWithIgnoreLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>
 	Dtype loss = 0.0;
 	Dtype Z;  //The normalization factor
 	const Dtype* labels = bottom[1]->gpu_data();
+	const Dtype* labelsCpu = bottom[1]->cpu_data();
 	const Dtype* preds  = bottom[0]->gpu_data();
 	Dtype* diff         = diff_.mutable_gpu_data();
 	const Dtype* diffC  = diff_.gpu_data();
+	//LOG(INFO) << "CHECK-2";
+	//LOG(INFO) << "N: " << N <<", count: " << count <<", bCount: " << bCount;
+	//LOG(INFO) << bottom[1]->shape(0) << ", " << bottom[1]->shape(1);
 	for (int i=0; i<N; i++){
 		Dtype bLoss;
-		if (labels[bCount] == (Dtype)1){
+		//LOG(INFO) << "CHECK-2-0";
+		if (labelsCpu[bCount] == Dtype(1)){
 			//Example needs to be considered
-			caffe_sub(bCount, preds, labels, diff);
+			//LOG(INFO) << "CHECK-2-1";
+			caffe_gpu_sub(bCount, preds, labels, diff);
+			//LOG(INFO) << "CHECK-2-2";
 			caffe_gpu_dot(bCount, diffC, diffC, &bLoss);
 			if (nc_==0){
 				caffe_gpu_dot(bCount, preds, preds, &Z);
@@ -34,6 +41,7 @@ void EuclideanLossWithIgnoreLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>
 				caffe_gpu_dot(bCount, labels, labels, &Z);
 			}
 		} 
+		//LOG(INFO) << "CHECK-3";
 		preds   += bCount;
 		labels  += (bCount + 1);
 		diff    += bCount;
@@ -46,10 +54,12 @@ void EuclideanLossWithIgnoreLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>
 		}
 		loss = loss + bLoss;
 	}
+	//LOG(INFO) << "CHECK-4";
 	if (lCount_ > 0){
 		loss = loss / lCount_ / Dtype(2);
 	}
-	top[0]->mutable_gpu_data()[0] = loss;
+	//LOG(INFO) << "CHECK-5";
+	top[0]->mutable_cpu_data()[0] = loss;
 }
 
 template <typename Dtype>
@@ -65,20 +75,21 @@ void EuclideanLossWithIgnoreLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*
 	//Compute the gradients
 	for (int i = 0; i < 2; ++i) {
 		const Dtype sign = (i == 0) ? 1 : -1;
-		const Dtype alpha = sign * top[0]->gpu_diff()[0] / lCount_;
+		const Dtype alpha = sign * top[0]->cpu_diff()[0] / lCount_;
 		Dtype Z;
 		const Dtype* botData = bottom[nc_]->gpu_data();
-		const Dtype* labels  = bottom[1]->gpu_data();       
+		const Dtype* labels     = bottom[1]->gpu_data();       
+		const Dtype* labelsCpu  = bottom[1]->cpu_data();       
 		Dtype* diff          = diff_.mutable_gpu_data();
 		const Dtype* diffC   = diff_.gpu_data();
 		Dtype* botDiff       = bottom[nc_]->mutable_gpu_data(); 
 		if (propagate_down[i]) {
 			for (int n=0; n < N; ++n){
-				if (labels[bCount] == Dtype(1)) 
+				if (labelsCpu[bCount] == Dtype(1)) 
 					if (is_normalize_){
 						caffe_gpu_dot(bCount, botData, botData, &Z);
 						if (Z>0){
-							caffe_scal(count, Z, diff);
+							caffe_gpu_scale(count, Z, diffC, diff);
 						}
 					}
 

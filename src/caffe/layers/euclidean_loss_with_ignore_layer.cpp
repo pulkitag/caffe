@@ -46,9 +46,10 @@ void EuclideanLossWithIgnoreLayer<Dtype>::Reshape(
       << "Inputs must have the same dimension.";
 
 	//Check that number of axes are the same
-	CHECK_EQ(bottom[0]->num_axes(), bottom[1]->num_axes())
-				<<"Number of axes should match";
+	//CHECK_EQ(bottom[0]->num_axes(), bottom[1]->num_axes())
+	//			<<"Number of axes should match";
   diff_.ReshapeLike(*bottom[0]);
+	ones_.Reshape(1,1,1,1);
 }
 
 template <typename Dtype>
