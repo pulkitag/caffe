@@ -21,8 +21,8 @@ class EuclideanLossWithIgnoreLayerTest : public MultiDeviceTest<TypeParam> {
 
  protected:
   EuclideanLossWithIgnoreLayerTest()
-      : blob_bottom_data_(new Blob<Dtype>(20, 5, 2, 1)),
-        blob_bottom_label_(new Blob<Dtype>(20, 6, 2, 1)),
+      : blob_bottom_data_(new Blob<Dtype>(10, 5, 1, 1)),
+        blob_bottom_label_(new Blob<Dtype>(10, 6, 1, 1)),
         blob_top_loss_(new Blob<Dtype>()) {
     // fill the values
     FillerParameter filler_param;
@@ -50,9 +50,14 @@ class EuclideanLossWithIgnoreLayerTest : public MultiDeviceTest<TypeParam> {
 			std::cout << this->blob_bottom_data_->cpu_data()[i] << "\t";
 		}
 		std::cout << "\n";
-		std::cout << "Bottom Label \t";
-		for (int i=0; i<this->blob_bottom_label_->count(); i++){
-			std::cout << this->blob_bottom_label_->cpu_data()[i] << "\t";
+		*/
+		/*
+		std::cout << "Bottom Label \n";
+		for (int i=0; i<this->blob_bottom_label_->num(); i++){
+			for (int j=0; j<lbCount; j++){
+				std::cout << this->blob_bottom_label_->cpu_data()[i*lbCount + j] << "\t";
+			}
+			std::cout << "\n";
 		}
 		std::cout << "\n";
 		*/

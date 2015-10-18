@@ -96,6 +96,7 @@ void EuclideanLossWithIgnoreLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>
 		loss = loss / lCount_ / Dtype(2);
 	}
 	top[0]->mutable_cpu_data()[0] = loss;
+	LOG(INFO) << loss;
 }
 
 template <typename Dtype>
