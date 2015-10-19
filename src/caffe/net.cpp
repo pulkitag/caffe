@@ -1031,6 +1031,7 @@ void Net<Dtype>::ToHDF5(const string& filename, bool write_diff) const {
 template <typename Dtype>
 void Net<Dtype>::Update() {
   for (int i = 0; i < learnable_params_.size(); ++i) {
+		if (debug_info_) { UpdateDebugInfo(i);}
     learnable_params_[i]->Update();
   }
 }
