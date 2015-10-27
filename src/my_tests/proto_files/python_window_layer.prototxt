@@ -1,0 +1,12 @@
+name: 'PythonWindowExample'
+layer {
+	type: 'Python'
+	name: 'pair_data'
+	top: 'data'
+	top: 'label'
+	python_param {
+		module: 'python_window_data'
+		layer: 'PythonWindowDataParallelLayer'
+		param_str: "--batch_size 5 --source /data0/pulkitag/data_sets/streetview/exp/window-files/train_pose-euler-mxRot45_geo-dc-v1_crpSz192_nTr-1.00e+06.txt --root_folder /data0/pulkitag/data_sets/streetview/raw/ssd105/Amir/WashingtonAligned/"
+	}
+}

@@ -5,6 +5,7 @@ import pdb
 import caffe
 import os
 import scipy.misc as scm
+import time
 
 #sFile =  "/data0/pulkitag/kitti/window-files/test_mxDiff-7_pose-sigMotion_nrmlz-zScoreScaleSeperate_imSz256_concat-fc6_nTe-10000.txt"
 #rootFolder = "/data1/pulkitag/data_sets/kitti/odometry/dataset/sequences/imSz256/" 
@@ -25,7 +26,10 @@ def get_protofile(isGray=False, dataset='kitti'):
 		elif dataset == 'kitti':
 			protoFile   = os.path.join(protoDir, 'generic_window.prototxt')
 		elif dataset == 'streetview':
-			protoFile   = os.path.join(protoDir, 'generic_window_streetview.prototxt')
+			#protoFile   = os.path.join(protoDir, 'generic_window_streetview.prototxt')
+			print ('USING PYTHON WINDOW DATA LAYER')
+			protoFile   = os.path.join(protoDir, 'proto_files', 
+												'python_window_layer.prototxt')
 			
 	return protoFile
 
@@ -98,6 +102,7 @@ def compare_windows(isGray=False, isSave=False, svIdx=None, svPath=None, dataset
 	#Get ground truth data.
 	imNamesGt, bboxGt, labelsGt = read_window_file()
 	N = labelsGt.shape[0]	
+	N = 100
 
 	#Crop Ground Truth or not
 	isCropGt = False
@@ -116,6 +121,7 @@ def compare_windows(isGray=False, isSave=False, svIdx=None, svPath=None, dataset
 		imData  = allDat['data']
 		lblDat  = allDat['label']
 		batchSz = imData.shape[0]
+		#time.sleep(2)
 		for b in range(batchSz):
 			#Plot network data. 
 			if isGray:
