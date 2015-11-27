@@ -12,8 +12,9 @@ import time
 #rootFolder = "/data0/pulkitag/data_sets/kitti/odometry/dataset/sequences/asJpg/" 
 
 #Streetview
-sFile =  "/data0/pulkitag/data_sets/streetview/exp/window-files/train_pose-euler-mxRot45_geo-dc-v1_crpSz192_nTr-1.00e+06.txt"
-rootFolder = "/data0/pulkitag/data_sets/streetview/raw/ssd105/Amir/WashingtonAligned/" 
+#sFile =  "/data0/pulkitag/data_sets/streetview/exp/window-files/train_pose-euler-mxRot45_geo-dc-v1_crpSz192_nTr-1.00e+06.txt"
+sFile =  "/data0/pulkitag/data_sets/streetview/exp/window-files/test_ptch-wngtv-posFrac0.5_spDist100_spVer-v1_geodc-v2_geo-dc-v2_crpSz192_nTe-1.00e+04_rawImSz256.txt"
+rootFolder = "/data0/pulkitag/data_sets/streetview/proc/resize-im/im256/"
 
 def get_protofile(isGray=False, dataset='kitti'):
 	#protoDir = '/home/ubuntu/caffe-v2-3/src/my_tests/' 
@@ -137,7 +138,9 @@ def compare_windows(isGray=False, isSave=False, svIdx=None, svPath=None, dataset
 			if dataset in ['kitti', 'sf']:
 				lbStr = 'az: %f, el: %f, cl: %f' % (lb[0],lb[1],lb[2])
 			else:
-				lbStr = 'az: %f, el: %f' % (lb[0],lb[1])
+				#lbStr = 'az: %f, el: %f' % (lb[0],lb[1])
+				print lb
+				lbStr = 'isMatch: %f'  % lb
 					
 		
 			if isSave:
@@ -167,10 +170,13 @@ def compare_windows(isGray=False, isSave=False, svIdx=None, svPath=None, dataset
 				if dataset in ['kitti', 'sf']:
 					lbStr = 'az: %f, el: %f, cl: %f' % (lb[0],lb[1],lb[2])
 				else:
-					lbStr = 'az: %f, el: %f' % (lb[0],lb[1])
+					#lbStr = 'az: %f, el: %f' % (lb[0],lb[1])
+					lbStr = 'isMatch: %f'  % lb[0]
 				plot_pairs(figGt, im1, im2, lbStr, 'Ground Truth')
 				print imCount
-				raw_input("Enter")
+				ip = raw_input()
+				if ip=='q':
+					return
 
 			imCount += 1
 			if imCount==N:

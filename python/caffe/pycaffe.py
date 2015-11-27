@@ -219,7 +219,10 @@ def _Net_forward_backward_all(self, blobs=None, diffs=None, **kwargs):
         batch_blobs = self.forward(blobs=blobs, **fb)
         batch_diffs = self.backward(diffs=diffs, **bb)
         for out, out_blobs in batch_blobs.iteritems():
-            all_outs[out].extend(out_blobs)
+					#print (out, type(out_blobs), out_blobs.shape, out_blobs.size, out_blobs)
+					if out_blobs.shape == ():
+						out_blobs = out_blobs.reshape(1,)
+					all_outs[out].extend(out_blobs)
         for diff, out_diffs in batch_diffs.iteritems():
             all_diffs[diff].extend(out_diffs)
     # Package in ndarray.
