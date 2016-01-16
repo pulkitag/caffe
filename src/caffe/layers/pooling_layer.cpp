@@ -90,10 +90,18 @@ void PoolingLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
     kernel_h_ = bottom[0]->height();
     kernel_w_ = bottom[0]->width();
   }
-  pooled_height_ = static_cast<int>(ceil(static_cast<float>(
-      height_ + 2 * pad_h_ - kernel_h_) / stride_h_)) + 1;
-  pooled_width_ = static_cast<int>(ceil(static_cast<float>(
-      width_ + 2 * pad_w_ - kernel_w_) / stride_w_)) + 1;
+	if (this->layer_param_.pooling_param().round_below()){
+		pooled_height_ = static_cast<int>(floor(static_cast<float>(
+				height_ + 2 * pad_h_ - kernel_h_) / stride_h_)) + 1;
+		pooled_width_ = static_cast<int>(floor(static_cast<float>(
+				width_ + 2 * pad_w_ - kernel_w_) / stride_w_)) + 1;
+	}	
+	else{
+		pooled_height_ = static_cast<int>(ceil(static_cast<float>(
+				height_ + 2 * pad_h_ - kernel_h_) / stride_h_)) + 1;
+		pooled_width_ = static_cast<int>(ceil(static_cast<float>(
+				width_ + 2 * pad_w_ - kernel_w_) / stride_w_)) + 1;
+	}
   if (pad_h_ || pad_w_) {
     // If we have padding, ensure that the last pooling starts strictly
     // inside the image (instead of at the padding); otherwise clip the last.

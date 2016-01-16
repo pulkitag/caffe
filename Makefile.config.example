@@ -43,7 +43,7 @@ BLAS := atlas
 # BLAS_LIB := /path/to/your/blas
 
 # Homebrew puts openblas in a directory that is not on the standard search path
-# BLAS_INCLUDE := $(shell brew --prefix openblas)/include
+# BLAS_INCLUDE := $(shell brew --prefix openblas)/in
 # BLAS_LIB := $(shell brew --prefix openblas)/lib
 
 # This is required only if you will compile the matlab interface.

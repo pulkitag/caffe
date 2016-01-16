@@ -6,8 +6,28 @@
 #include "caffe/common.hpp"
 #include "caffe/util/math_functions.hpp"
 #include "caffe/util/rng.hpp"
+//****REMOVE THIS ALONG WITH KATERINA's BULLSHIT
+#include "opencv2/core/core.hpp"
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/imgproc/imgproc.hpp"
 
 namespace caffe {
+
+//KATERINA's POLLUTION --REMOVE AS SOON AS YOU CAN 
+// *******************************
+template <>
+cv::Mat converttoopencvimg<float>( float* singleimage, int height, int width ) {
+    cv::Mat cv_img(height, width, CV_32FC3, singleimage);
+    return cv_img;
+}
+
+template <>
+cv::Mat converttoopencvimg<double>( double* singleimage, int height, int width ) {
+  cv::Mat cv_img(height, width, CV_64FC3, singleimage);
+  return cv_img;
+}
+// **********************************
+
 
 template<>
 void caffe_cpu_gemm<float>(const CBLAS_TRANSPOSE TransA,

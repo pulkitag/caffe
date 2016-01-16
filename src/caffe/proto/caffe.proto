@@ -843,6 +843,9 @@ message PoolingParameter {
   // If global_pooling then it will pool over the size of the bottom by doing
   // kernel_h = bottom->height and kernel_w = bottom->width
   optional bool global_pooling = 12 [default = false];
+	
+	//Custom options
+	optional bool round_below = 1000 [default=false];
 }
 
 message PowerParameter {
@@ -1122,6 +1125,8 @@ message WindowDataParameter {
   optional bool cache_images = 12 [default = false];
   // append root_folder to locate images
   optional string root_folder = 13 [default = ""];
+	//Katerin's bullshit
+	 optional uint32 margin=16 [default = 10];	
 }
 
 message SPPParameter {

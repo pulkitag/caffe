@@ -12,6 +12,13 @@
 
 namespace caffe {
 
+//KATERINA's POLLUTION ..REMOVE ASAP
+//********
+template <typename Dtype>
+cv::Mat converttoopencvimg(Dtype* singleimage,  int height, int width );
+//*********
+
+
 // Caffe gemm provides a simpler interface to the gemm functions, with the
 // limitation that the data has to be contiguous in memory.
 template <typename Dtype>
