@@ -4,7 +4,7 @@
 #include "caffe/layer.hpp"
 #include "caffe/util/im2col.hpp"
 #include "caffe/util/math_functions.hpp"
-#include "caffe/common_layers.hpp"
+#include "caffe/layers/normalize_layer.hpp"
 
 
 namespace caffe {

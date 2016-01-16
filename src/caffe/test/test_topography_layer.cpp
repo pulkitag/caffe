@@ -6,7 +6,7 @@
 #include "caffe/blob.hpp"
 #include "caffe/common.hpp"
 #include "caffe/filler.hpp"
-#include "caffe/vision_layers.hpp"
+#include "caffe/layers/topography_layer.hpp"
 
 #include "caffe/util/math_functions.hpp"
 #include "caffe/util/filter_kernel.hpp"

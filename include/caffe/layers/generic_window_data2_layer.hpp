@@ -10,9 +10,13 @@
 #include "caffe/internal_thread.hpp"
 #include "caffe/layer.hpp"
 #include "caffe/layers/base_data_layer.hpp"
+#include "caffe/layers/crop_data_layer.hpp"
 #include "caffe/proto/caffe.pb.h"
 
 namespace caffe {
+
+template <typename Dtype>
+class CropDataLayer;
 
 template <typename Dtype>
 class GenericWindowData2Layer : public BasePrefetchingDataLayer<Dtype> {

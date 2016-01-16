@@ -4,7 +4,7 @@
 #include "caffe/layer.hpp"
 #include "caffe/util/imchannel2col.hpp"
 #include "caffe/util/math_functions.hpp"
-#include "caffe/layers/topography_layers.hpp"
+#include "caffe/layers/topography_layer.hpp"
 
 namespace caffe {
 

@@ -1,5 +1,5 @@
 #include <vector>
-#include "caffe/layers/crop_data_layers.hpp"
+#include "caffe/layers/generic_window_data_layer.hpp"
 
 namespace caffe {
 
