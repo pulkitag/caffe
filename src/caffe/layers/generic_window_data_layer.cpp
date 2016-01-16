@@ -12,7 +12,7 @@
 #include "opencv2/imgproc/imgproc.hpp"
 
 #include "caffe/common.hpp"
-#include "caffe/data_layers.hpp"
+#include "caffe/layers/generic_window_data_layer.hpp"
 #include "caffe/layer.hpp"
 #include "caffe/util/benchmark.hpp"
 #include "caffe/util/io.hpp"

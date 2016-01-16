@@ -2,7 +2,7 @@
 #include <vector>
 
 #include "caffe/layer.hpp"
-#include "caffe/neuron_layers.hpp"
+#include "caffe/layers/random_noise_layer.hpp"
 
 namespace caffe {
 
