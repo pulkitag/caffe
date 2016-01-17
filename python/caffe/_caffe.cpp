@@ -295,7 +295,8 @@ BOOST_PYTHON_MODULE(_caffe) {
           &Solver<Dtype>::Solve), SolveOverloads())
     .def("step", &Solver<Dtype>::Step)
     .def("restore", &Solver<Dtype>::Restore)
-    .def("snapshot", &Solver<Dtype>::Snapshot);
+    .def("snapshot", &Solver<Dtype>::Snapshot)
+		.def("copy_trained_layers_from_netfile", &Solver<Dtype>::CopyTrainedLayersFromNetFile);
 
   bp::class_<SGDSolver<Dtype>, bp::bases<Solver<Dtype> >,
     shared_ptr<SGDSolver<Dtype> >, boost::noncopyable>(

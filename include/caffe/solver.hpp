@@ -61,6 +61,9 @@ class Solver {
   // RestoreSolverStateFrom___ protected methods. You should implement these
   // methods to restore the state from the appropriate snapshot type.
   void Restore(const char* resume_file);
+	// CopyTrainedLayersFromNetFile copies the weights from the net_file
+	// into the net_ of the Solver	
+  void CopyTrainedLayersFromNetFile(const char* net_file);
   // The Solver::Snapshot function implements the basic snapshotting utility
   // that stores the learned net. You should implement the SnapshotSolverState()
   // function that produces a SolverState protocol buffer that needs to be

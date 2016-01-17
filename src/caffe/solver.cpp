@@ -483,6 +483,14 @@ void Solver<Dtype>::Restore(const char* state_file) {
   }
 }
 
+template <typename Dtype>
+void Solver<Dtype>::CopyTrainedLayersFromNetFile(const char* net_file) {
+  CHECK(Caffe::root_solver());
+	NetParameter net_param;
+	ReadNetParamsFromBinaryFileOrDie(net_file, &net_param);
+	net_->CopyTrainedLayersFrom(net_param);
+}
+
 INSTANTIATE_CLASS(Solver);
 
 }  // namespace caffe
