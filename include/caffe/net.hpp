@@ -294,9 +294,9 @@ class Net {
   vector<shared_ptr<Blob<Dtype> > > params_;
   vector<Blob<Dtype>*> learnable_params_;
 	//store the debug values so that it can readily be accessed
-	vector<vector<Dtype>> debug_param_vals_;
-	vector<vector<Dtype>> debug_top_vals_;
-	vector<vector<Dtype>> debug_param_diffs_;
+	vector<vector<Dtype> > debug_param_vals_;
+	vector<vector<Dtype> > debug_top_vals_;
+	vector<vector<Dtype> > debug_param_diffs_;
   /**
    * The mapping from params_ -> learnable_params_: we have
    * learnable_param_ids_.size() == params_.size(),
