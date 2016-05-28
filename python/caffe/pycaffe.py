@@ -222,6 +222,8 @@ def _Net_forward_backward_all(self, blobs=None, diffs=None, **kwargs):
 						out_blobs = out_blobs.reshape(1,)
 					all_outs[out].extend(out_blobs.copy())
         for diff, out_diffs in batch_diffs.iteritems():
+            if out_diffs.ndim == 0:
+              out_diffs = out_diffs.reshape((-1,))
             all_diffs[diff].extend(out_diffs.copy())
     # Package in ndarray.
     for out, diff in zip(all_outs, all_diffs):
